@@ -585,6 +585,70 @@ def test_agent_materialize_replace_newer_drops_prt2_when_tip_is_logical(tmp_path
         assert (cache / "other.prt.2").read_bytes() == b"keep-other"
 
 
+def test_agent_materialize_replace_newer_redownloads_when_content_hash_and_higher_n(
+    tmp_path, monkeypatch
+):
+    """Open/revert with tip content_hash must not keep a stale higher local .N.
+
+    Without replace_newer respecting content_hash, materialize reused .prt.2 and
+    Open showed the pre-revert material assignment.
+    """
+    import hashlib
+
+    root = tmp_path / "cache"
+    product_id = "proj-revert-hash"
+    cache = root / product_id
+    cache.mkdir(parents=True)
+    (cache / "support.prt").write_bytes(b"old-tip")
+    (cache / "support.prt.2").write_bytes(b"aluminum-local")
+    tip_bytes = b"no-material-restored"
+    tip_hash = hashlib.sha256(tip_bytes).hexdigest()
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+
+    class FakeResponse:
+        def __init__(self, body: bytes):
+            self.status_code = 200
+            self.content = body
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url, headers=None):
+            return FakeResponse(tip_bytes)
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    with TestClient(app) as client:
+        saved = client.post(
+            "/materialize",
+            json={
+                "pdm_url": "http://pdm.example:52113",
+                "object_id": "support-obj",
+                "product_id": product_id,
+                "relative_path": "support.prt",
+                "filename": "support.prt",
+                "disk_name": "support.prt",
+                "content_hash": tip_hash,
+                "file_size": len(tip_bytes),
+                "replace_newer": True,
+            },
+        )
+        assert saved.status_code == 200, saved.text
+        body = saved.json()
+        assert Path(body["path"]).read_bytes() == tip_bytes
+        assert body["disk_name"] == "support.prt"
+        assert "support.prt.2" in set(body.get("purged_newer") or [])
+        assert not (cache / "support.prt.2").exists()
+        assert (cache / "support.prt").read_bytes() == tip_bytes
+
+
 def test_agent_open_folder_uses_product_cache(tmp_path, monkeypatch):
     root = tmp_path / "cache"
     settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))

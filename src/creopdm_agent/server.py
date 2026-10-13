@@ -607,6 +607,7 @@ def _try_reuse_local_materialize(
     item: MaterializeItem,
     *,
     index: dict[str, dict[str, object]] | None = None,
+    replace_newer: bool = False,
 ) -> tuple[Path, str, str, int] | None:
     """Skip download when local tip is already good enough.
 
@@ -643,8 +644,15 @@ def _try_reuse_local_materialize(
         return None
     vault_save = CreoFileManager.save_number(disk_name, None)
     local_save = CreoFileManager.save_number(local.name, None)
-    # Higher local .N means checked-out work — keep it; do not redownload tip.
+    # Higher local .N is checkout work — keep it unless replace_newer (History
+    # revert / open-without-checkout must pull the vault tip, then trash .N).
     if local_save > vault_save:
+        if replace_newer:
+            logger.debug(
+                "Not reusing higher local save %s (replace_newer → redownload tip)",
+                local.name,
+            )
+            return None
         return local, logical, disk_name, local_size
     cache_index = index if index is not None else _load_cache_index(target_dir)
     try:
@@ -735,9 +743,12 @@ def _ensure_materialized(
     headers: dict[str, str],
     *,
     index: dict[str, dict[str, object]] | None = None,
+    replace_newer: bool = False,
 ) -> tuple[Path, str, str, int, bool]:
     """Return (path, logical, disk_name, bytes, downloaded)."""
-    reused = _try_reuse_local_materialize(target_dir, item, index=index)
+    reused = _try_reuse_local_materialize(
+        target_dir, item, index=index, replace_newer=replace_newer
+    )
     if reused is not None:
         return (*reused, False)
     path, logical, disk_name, nbytes = _download(client, base, item, target_dir, headers)
@@ -2572,7 +2583,13 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         try:
             with httpx.Client(timeout=120.0, follow_redirects=True) as client:
                 target, logical, disk_name, nbytes, downloaded = _ensure_materialized(
-                    client, base, primary, target_dir, headers, index=cache_index
+                    client,
+                    base,
+                    primary,
+                    target_dir,
+                    headers,
+                    index=cache_index,
+                    replace_newer=bool(payload.replace_newer),
                 )
                 if not downloaded:
                     skipped += 1
@@ -2580,7 +2597,13 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                     if not item.object_id and not (item.product_id and item.relative_path):
                         continue
                     _path, _logical, _disk, _n, dep_downloaded = _ensure_materialized(
-                        client, base, item, target_dir, headers, index=cache_index
+                        client,
+                        base,
+                        item,
+                        target_dir,
+                        headers,
+                        index=cache_index,
+                        replace_newer=bool(payload.replace_newer),
                     )
                     if dep_downloaded:
                         dependencies_written += 1

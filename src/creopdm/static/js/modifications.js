@@ -2238,12 +2238,23 @@ window.__creopdmModules.modifications = {
           try {
             const agent = await probeCreoAgent();
             if (agent) {
+              // Same prepare path as check-in rematerialize: content_hash + tip
+              // identity so replace_newer cannot keep a stale higher local .N.
+              const prepareResp = await fetch("/api/creo/open", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  object_id: objectId,
+                  launch: false,
+                  include_dependencies: false,
+                }),
+              });
+              if (!prepareResp.ok) {
+                throw new Error(await readError(prepareResp));
+              }
+              const prepared = await prepareResp.json();
               await materializeViaAgent({
-                object_id: objectId,
-                product_id: body.product_uuid || currentProductId() || null,
-                relative_path: body.relative_path || null,
-                filename: body.filename || null,
-                disk_name: body.filename || null,
+                ...prepared,
                 replace_newer: true,
                 dependencies: [],
               });

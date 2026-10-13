@@ -1717,6 +1717,10 @@ def test_history_revert_only_for_older_versions():
     assert revert_click.index("tryEraseModelsFromCreoSession") < revert_click.index(
         "materializeViaAgent"
     )
+    # Rematerialize via /api/creo/open prepare (content_hash) so replace_newer
+    # cannot keep a stale higher local .N with the pre-revert material.
+    assert "/api/creo/open" in revert_click
+    assert "launch: false" in revert_click
     assert "Version History" not in detail
     assert "File History" not in detail
     assert "subpanel-versions" not in detail

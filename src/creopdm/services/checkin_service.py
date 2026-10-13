@@ -113,6 +113,7 @@ class CheckinService:
         add_relative_paths: list[str] | None = None,
         *,
         allow_unchanged: bool = False,
+        source_path: Path | None = None,
     ) -> EngineeringObject:
         message = (comment or "").strip()
         if not message:
@@ -142,7 +143,17 @@ class CheckinService:
                     )
             if to_add:
                 self._add_workspace_files(session, product, to_add, message, obj.filename)
-            workspace_file = self._workspaces.locate_content(product, obj)
+            # Revert passes the restored logical tip so a leftover higher .N cannot
+            # win locate_content and re-commit the wrong bytes as the "revert".
+            if source_path is not None:
+                workspace_file = Path(source_path)
+                if not workspace_file.is_file():
+                    raise ValidationAppError(
+                        f"Restored vault tip missing for {obj.filename}.",
+                        details={"path": str(workspace_file)},
+                    )
+            else:
+                workspace_file = self._workspaces.locate_content(product, obj)
             content_hash = calculate_sha256(workspace_file)
             file_size = workspace_file.stat().st_size
             creo_release = creo_release_for(workspace_file, workspace_file.name)
@@ -400,9 +411,16 @@ class CheckinService:
             )
 
         # Revert always records the restored tip as a new version — never leave the
-        # user checked out with a "please check in" prompt.
+        # user checked out with a "please check in" prompt. Pass dest explicitly so
+        # a leftover higher Creo .N cannot win locate_content after a failed purge.
         try:
-            restored = self.checkin(session, object_uuid, comment, allow_unchanged=True)
+            restored = self.checkin(
+                session,
+                object_uuid,
+                comment,
+                allow_unchanged=True,
+                source_path=dest,
+            )
         except Exception:
             try:
                 self._checkouts.undo_checkout(session, object_uuid)

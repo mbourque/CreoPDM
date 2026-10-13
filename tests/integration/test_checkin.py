@@ -826,6 +826,36 @@ def test_revert_restores_logical_vault_tip(client, repo_parent, data_dir):
 
 
 @requires_git
+def test_revert_uses_restored_tip_when_higher_save_survives_purge(
+    client, repo_parent, data_dir, monkeypatch
+):
+    """If purge cannot drop a higher .N, revert must still check in restored tip bytes."""
+    product, obj = _create_part(client, repo_parent)
+    object_id = obj["uuid"]
+    _advance_to_iteration(client, object_id, 2, data_dir)
+    history = client.get(f"/api/objects/{object_id}/history").json()
+    older = history[-1]
+    vault = data_dir / "vaults" / product["uuid"]
+
+    def _keep_newer(self, product_arg, kept):
+        return []
+
+    monkeypatch.setattr(
+        "creopdm.services.workspace_service.WorkspaceService.purge_newer_creo_saves",
+        _keep_newer,
+    )
+    (vault / "shaft.prt.2").write_bytes(b"stale-aluminum-save")
+
+    reverted = client.post(
+        f"/api/objects/{object_id}/versions/{older['uuid']}/revert"
+    )
+    assert reverted.status_code == 200, reverted.text
+    body = reverted.json()
+    assert body["current_version"]["content_hash"] == older["content_hash"]
+    assert (vault / "shaft.prt").read_bytes() == b"v1-content"
+
+
+@requires_git
 def test_revert_records_even_when_tip_bytes_already_match(client, repo_parent, data_dir):
     """Revert must still create a history row when tip bytes already match the older version."""
     product = client.post("/api/products", json={"name": "Creo Rename"}).json()
