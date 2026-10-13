@@ -247,7 +247,22 @@ def normalize_toolkit_mass(block: dict[str, Any] | None) -> dict[str, Any] | Non
     return out
 
 
-def map_toolkit_collect_to_snapshot(payload: dict[str, Any] | None) -> dict[str, Any] | None:
+def _identity_file_name(identity: dict[str, Any] | None) -> str:
+    """Toolkit may use file_name, filename, fileName, or full_name."""
+    if not isinstance(identity, dict):
+        return ""
+    for key in ("file_name", "filename", "fileName", "full_name", "FullName"):
+        value = identity.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def map_toolkit_collect_to_snapshot(
+    payload: dict[str, Any] | None,
+    *,
+    fallback_filename: str = "",
+) -> dict[str, Any] | None:
     """Return a Creo.JS-gather-shaped snapshot, or None when identity is missing."""
     if not isinstance(payload, dict) or payload.get("ok") is False:
         return None
@@ -258,18 +273,32 @@ def map_toolkit_collect_to_snapshot(payload: dict[str, Any] | None) -> dict[str,
         identity = dict(identity_block["identity"])
     elif isinstance(payload.get("identity"), dict):
         identity = dict(payload["identity"])
+    elif identity_block and isinstance(identity_block, dict):
+        # Some Toolkit builds put tip fields on the domain root, not nested.
+        identity = {
+            k: v
+            for k, v in identity_block.items()
+            if k not in {"ok", "error", "partial", "partial_missing", "timings_ms"}
+        } or None
 
+    tip = (
+        str(fallback_filename or "").strip()
+        or str(payload.get("fileName") or payload.get("filename") or "").strip()
+    )
     if not identity:
-        return None
-    file_name = str(identity.get("file_name") or identity.get("full_name") or "").strip()
-    if not file_name:
-        # Prefer collect/fileName when identity lacks file_name.
-        tip = str(payload.get("fileName") or "").strip()
+        # Collect still asked for this tip — keep a minimal identity so other
+        # domains (features / mass) are not discarded for a naming quirk.
         if tip:
-            identity = {**identity, "file_name": tip}
-            file_name = tip
+            identity = {"file_name": tip}
+        else:
+            return None
+    file_name = _identity_file_name(identity)
+    if not file_name and tip:
+        identity = {**identity, "file_name": tip}
+        file_name = tip
     if not file_name:
         return None
+    identity = {**identity, "file_name": file_name}
 
     parameters_block = _ok_domain(payload, "parameters")
     parameters = _list_field(parameters_block, "parameters") or []

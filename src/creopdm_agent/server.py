@@ -3081,7 +3081,8 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         if disk_path:
             q.append(f"path={quote(disk_path)}")
         raw = _proxy_toolkit_get(f"/collect?{'&'.join(q)}", timeout=120.0)
-        snapshot = map_toolkit_collect_to_snapshot(raw)
+        # Always pass tip — Toolkit identity often omits file_name / uses filename.
+        snapshot = map_toolkit_collect_to_snapshot(raw, fallback_filename=tip)
         if not snapshot:
             raise HTTPException(
                 status_code=502,

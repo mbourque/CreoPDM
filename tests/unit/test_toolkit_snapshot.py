@@ -99,6 +99,51 @@ def test_map_rejects_missing_identity():
     assert map_toolkit_collect_to_snapshot({"ok": False}) is None
 
 
+def test_map_fills_file_name_from_filename_alias_and_fallback():
+    """Regression: Collect skips when Toolkit identity uses filename / omits tip."""
+    aliased = map_toolkit_collect_to_snapshot(
+        {
+            "ok": True,
+            "fileName": "wedge.prt",
+            "domains": {
+                "identity": {
+                    "ok": True,
+                    "identity": {"filename": "wedge.prt", "model_type": "PART"},
+                },
+                "parameters": {"ok": True, "parameters": []},
+            },
+        }
+    )
+    assert aliased is not None
+    assert aliased["identity"]["file_name"] == "wedge.prt"
+
+    via_fallback = map_toolkit_collect_to_snapshot(
+        {
+            "ok": True,
+            "domains": {
+                "identity": {"ok": True, "identity": {"model_type": "PART"}},
+                "parameters": {"ok": True, "parameters": []},
+            },
+        },
+        fallback_filename="600640041454.prt",
+    )
+    assert via_fallback is not None
+    assert via_fallback["identity"]["file_name"] == "600640041454.prt"
+
+    synthesized = map_toolkit_collect_to_snapshot(
+        {
+            "ok": True,
+            "domains": {
+                "parameters": {"ok": True, "parameters": [{"name": "A", "value": "1"}]},
+            },
+        },
+        fallback_filename="orphan.prt",
+    )
+    assert synthesized is not None
+    assert synthesized["identity"]["file_name"] == "orphan.prt"
+    assert synthesized["parameters"][0]["name"] == "A"
+
+
 def test_normalize_toolkit_mass_accepts_common_shapes():
     flat = normalize_toolkit_mass(
         {"ok": True, "fileName": "a.prt", "mass": 1.5, "volume": 2.0, "density": 0.1}
