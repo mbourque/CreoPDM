@@ -4709,6 +4709,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         parameters: Array.isArray(gatherSnapshot.parameters) ? gatherSnapshot.parameters : [],
         materials: gatherSnapshot.materials || null,
         units: gatherSnapshot.units || null,
+        mass: gatherSnapshot.mass || null,
         family_table: gatherSnapshot.family_table || null,
         bom: gatherSnapshot.bom || null,
         structure: gatherSnapshot.structure || null,
@@ -4745,6 +4746,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       : (gatherSnapshot?.relations && typeof gatherSnapshot.relations === "object"
         ? gatherSnapshot.relations
         : null);
+    const mass = ai.mass && typeof ai.mass === "object"
+      ? ai.mass
+      : (gatherSnapshot?.mass && typeof gatherSnapshot.mass === "object"
+        ? gatherSnapshot.mass
+        : null);
     return {
       schema_version: Number(ai.schema_version) || 1,
       identity: aiSnapshotIdentityFromGather(ai.identity) || ai.identity || null,
@@ -4753,6 +4759,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       parameters: Array.isArray(ai.parameters) ? ai.parameters : [],
       materials: ai.materials && typeof ai.materials === "object" ? ai.materials : null,
       units: ai.units && typeof ai.units === "object" ? ai.units : null,
+      mass,
       family_table: ai.family_table && typeof ai.family_table === "object" ? ai.family_table : null,
       bom,
       structure,

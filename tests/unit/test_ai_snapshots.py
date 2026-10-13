@@ -156,6 +156,34 @@ def test_computed_diff_reports_parameter_and_material_change():
     assert "Dimensions changed (same symbol): (none)" in diff
 
 
+def test_computed_diff_and_outline_include_mass_properties():
+    """Mass must appear in outlines and Computed differences when Toolkit captures it."""
+    from creopdm.ai_prompts import format_snapshot_compare_text
+
+    older = {
+        "identity": {"filename": "support.prt", "model_type": "PART"},
+        "features": [{"id": 1, "name": "RIGHT", "type": "DATUM_PLANE"}],
+        "units": {"length": "mm", "mass": "kg"},
+        "mass": {"mass": 1.0, "volume": 100.0, "density": 0.01},
+    }
+    newer = {
+        "identity": {"filename": "support.prt", "model_type": "PART"},
+        "features": [{"id": 1, "name": "RIGHT", "type": "DATUM_PLANE"}],
+        "units": {"length": "mm", "mass": "kg"},
+        "mass": {"mass": 1.25, "volume": 125.0, "density": 0.01},
+    }
+    outline = format_snapshot_compare_text(newer)
+    assert "Mass properties:" in outline
+    assert "mass: 1.25 kg" in outline
+    assert "volume: 125" in outline
+    diff = format_snapshot_compare_diff_text(older, newer)
+    assert "Mass properties changed:" in diff
+    assert "mass: 1 → 1.25" in diff
+    assert "volume: 100 → 125" in diff
+    same = format_snapshot_compare_diff_text(newer, dict(newer))
+    assert "Mass properties changed:" not in same
+
+
 def test_gather_ai_snapshot_contract_in_creo_js():
     text = BASE_HTML.read_text(encoding="utf-8")
     assert "function gatherAiModelSnapshot(" in text
@@ -337,6 +365,8 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "gatherSnapshot?.constraints" in body_fn
     assert "relations" in body_fn
     assert "gatherSnapshot?.relations" in body_fn
+    assert "gatherSnapshot?.mass" in body_fn or "gatherSnapshot.mass" in body_fn
+    assert "mass," in body_fn
     # Toolkit gather has no nested ai_snapshot — synthesize from flat fields.
     assert "Toolkit / flat gather" in body_fn
     assert "aiSnapshotIdentityFromGather" in script

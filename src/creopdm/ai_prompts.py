@@ -1719,6 +1719,10 @@ def format_snapshot_compare_diff_text(
     ):
         _extend_section(lines, _bullet_block(title, items))
 
+    mass_diff = _mass_diff_lines(older, newer)
+    if mass_diff:
+        _extend_section(lines, mass_diff)
+
     # SimpRep defs/active — keep out of Structure; force into Computed differences
     # so Ask AI cannot miss "NEW has Simplified representations, OLD does not."
     simp_diff = _simp_reps_diff_lines(older, newer)
@@ -1760,6 +1764,115 @@ def _material_current_label(snapshot: dict[str, Any]) -> str:
     if names:
         return ", ".join(names)
     return ""
+
+
+_MASS_COMPARE_KEYS = (
+    "mass",
+    "volume",
+    "density",
+    "surface_area",
+    "gravity_center",
+    "principal_moments",
+)
+
+
+def _mass_props(snapshot: dict[str, Any]) -> dict[str, Any] | None:
+    mass = snapshot.get("mass")
+    if not isinstance(mass, dict):
+        return None
+    out = {k: mass[k] for k in _MASS_COMPARE_KEYS if k in mass and mass[k] is not None}
+    return out or None
+
+
+def _format_mass_scalar(value: Any) -> str:
+    if isinstance(value, (list, tuple)):
+        parts: list[str] = []
+        for item in value:
+            try:
+                parts.append(f"{float(item):.9g}")
+            except (TypeError, ValueError):
+                parts.append(str(item).strip())
+        return "[" + ", ".join(parts) + "]"
+    try:
+        return f"{float(value):.9g}"
+    except (TypeError, ValueError):
+        return str(value).strip()
+
+
+def _mass_outline_lines(snapshot: dict[str, Any]) -> list[str]:
+    props = _mass_props(snapshot)
+    if not props:
+        return []
+    units = snapshot.get("units") if isinstance(snapshot.get("units"), dict) else {}
+    mass_unit = str((units or {}).get("mass") or "").strip()
+    lines = ["Mass properties:"]
+    for key in _MASS_COMPARE_KEYS:
+        if key not in props:
+            continue
+        label = key.replace("_", " ")
+        text = _format_mass_scalar(props[key])
+        if key == "mass" and mass_unit:
+            text = f"{text} {mass_unit}"
+        lines.append(f"- {label}: {text}")
+    return lines
+
+
+def _mass_compare_key(props: dict[str, Any] | None) -> str:
+    if not props:
+        return ""
+    bits: list[str] = []
+    for key in _MASS_COMPARE_KEYS:
+        if key not in props:
+            continue
+        bits.append(f"{key}={_format_mass_scalar(props[key])}")
+    return "|".join(bits)
+
+
+def _mass_diff_lines(
+    older: dict[str, Any],
+    newer: dict[str, Any],
+) -> list[str]:
+    """Mass in Computed differences when either side captured properties."""
+    old_props = _mass_props(older)
+    new_props = _mass_props(newer)
+    if not old_props and not new_props:
+        return []
+    if _mass_compare_key(old_props) == _mass_compare_key(new_props):
+        return []
+    if not old_props:
+        assert new_props is not None
+        return [
+            "Mass properties changed:",
+            "- (not captured) → " + "; ".join(
+                f"{k.replace('_', ' ')} {_format_mass_scalar(v)}"
+                for k, v in new_props.items()
+            ),
+        ]
+    if not new_props:
+        return [
+            "Mass properties changed:",
+            "- "
+            + "; ".join(
+                f"{k.replace('_', ' ')} {_format_mass_scalar(v)}"
+                for k, v in old_props.items()
+            )
+            + " → (not captured)",
+        ]
+    changed: list[str] = []
+    for key in _MASS_COMPARE_KEYS:
+        ov = old_props.get(key)
+        nv = new_props.get(key)
+        if ov is None and nv is None:
+            continue
+        if _format_mass_scalar(ov) != _format_mass_scalar(nv):
+            label = key.replace("_", " ")
+            changed.append(
+                f"- {label}: {_format_mass_scalar(ov) if ov is not None else '(none)'} → "
+                f"{_format_mass_scalar(nv) if nv is not None else '(none)'}"
+            )
+    if not changed:
+        return []
+    return ["Mass properties changed:", *changed]
 
 
 def _iter_compare_dimensions(dimensions: list[Any]) -> list[dict[str, Any]]:
@@ -2008,6 +2121,9 @@ def slim_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, Any]
             "current": materials.get("current"),
             "names": list(materials.get("names") or []),
         }
+    mass_props = _mass_props(snapshot)
+    if mass_props:
+        out["mass"] = dict(mass_props)
     capture = snapshot.get("capture")
     if isinstance(capture, dict):
         slim_cap: dict[str, Any] = {}
@@ -2218,6 +2334,10 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
                     lines.append(f"Material: {names[0]}")
                 else:
                     lines.append("Materials: " + ", ".join(names))
+        mass_lines = _mass_outline_lines(snapshot)
+        if mass_lines:
+            _blank_before_section(lines)
+            lines.extend(mass_lines)
 
     param_rows = _iter_compare_parameters(parameters, drawing=drawing)
     if param_rows or drawing:
