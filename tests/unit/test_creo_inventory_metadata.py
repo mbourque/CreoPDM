@@ -266,9 +266,10 @@ def test_object_detail_inventory_table_tolerates_missing_level():
     detail = (ROOT / "src" / "creopdm" / "templates" / "object_detail.html").read_text(
         encoding="utf-8"
     )
-    assert "feat.level|default(1)|int" in detail
-    assert "row.level|default(1)|int" in detail
+    assert "feat.level|default(1, true)|int" in detail
+    assert "row.level|default(1, true)|int" in detail
     assert "feat.level|int if feat.level is not none" not in detail
+    assert "{% if lvl < 1 %}" in detail
 
 
 def test_creo_inventory_wrapped_files_exist():

@@ -372,8 +372,9 @@
       </thead>
       <tbody>
         {% for feat in features %}
-        {# Missing level on legacy feature rows must not crash Details (Jinja Undefined). #}
-        {% set lvl = feat.level|default(1)|int %}
+        {# Missing/null level (Toolkit) must not become 0 → negative --inv-depth. #}
+        {% set lvl = feat.level|default(1, true)|int %}
+        {% if lvl < 1 %}{% set lvl = 1 %}{% endif %}
         <tr>
           <td class="inv-name" style="--inv-depth: {{ lvl - 1 }};">{% if lvl > 1 %}└ {% endif %}{{ feat.name }}</td>
           <td>{{ feat.id|default("", true) }}</td>
@@ -407,7 +408,8 @@
       </thead>
       <tbody>
         {% for row in structure %}
-        {% set lvl = row.level|default(1)|int %}
+        {% set lvl = row.level|default(1, true)|int %}
+        {% if lvl < 1 %}{% set lvl = 1 %}{% endif %}
         <tr>
           <td class="inv-name" style="--inv-depth: {{ lvl - 1 }};">{% if lvl > 1 %}└ {% endif %}{{ row.name }}</td>
           <td>{{ row.id|default("", true) }}</td>

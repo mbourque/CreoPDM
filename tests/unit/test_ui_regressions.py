@@ -1420,7 +1420,8 @@ def test_inventory_name_column_keeps_grid_left_padding():
     assert 'style="--inv-depth: {{ lvl - 1 }};"' in detail
     assert detail.count('style="--inv-depth: {{ lvl - 1 }};"') >= 2  # Features + Structure
     assert "padding-left: {{ (lvl - 1) * 1.25 }}rem" not in detail
-    assert "padding-left: calc(0.65rem + (var(--inv-depth, 0) * 1.25rem))" in css
+    assert "padding-left: calc(0.65rem + (max(0, var(--inv-depth, 0)) * 1.25rem))" in css
+    assert "Clamp depth" in css
     assert "never set padding-left: 0" in css
 
 

@@ -137,6 +137,29 @@ def normalize_toolkit_structure_rows(
     ]
 
 
+def normalize_toolkit_feature_rows(
+    rows: list[Any] | None,
+) -> list[dict[str, Any]] | None:
+    """Ensure feature/drawing inventory rows have level ≥ 1 for Details indent."""
+    if rows is None:
+        return None
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        item = dict(row)
+        level = item.get("level")
+        try:
+            level_n = int(level) if level is not None else 1
+        except (TypeError, ValueError):
+            level_n = 1
+        if level_n < 1:
+            level_n = 1
+        item["level"] = level_n
+        out.append(item)
+    return out
+
+
 _MASS_KEY_ALIASES = {
     "mass": "mass",
     "volume": "volume",
@@ -222,7 +245,9 @@ def map_toolkit_collect_to_snapshot(payload: dict[str, Any] | None) -> dict[str,
     parameters_block = _ok_domain(payload, "parameters")
     parameters = _list_field(parameters_block, "parameters") or []
 
-    features = _list_field(_ok_domain(payload, "features"), "features")
+    features = normalize_toolkit_feature_rows(
+        _list_field(_ok_domain(payload, "features"), "features")
+    )
     structure = normalize_toolkit_structure_rows(
         _list_field(
             _ok_domain(payload, "structure"),
@@ -239,13 +264,13 @@ def map_toolkit_collect_to_snapshot(payload: dict[str, Any] | None) -> dict[str,
     if drawing_block:
         draw_feats = _list_field(drawing_block, "features")
         if draw_feats is not None:
-            features = draw_feats
+            features = normalize_toolkit_feature_rows(draw_feats)
 
     mfg_block = _ok_domain(payload, "mfg")
     if mfg_block:
         mfg_feats = _list_field(mfg_block, "features")
         if mfg_feats is not None:
-            features = mfg_feats
+            features = normalize_toolkit_feature_rows(mfg_feats)
         models = normalize_toolkit_structure_rows(_list_field(mfg_block, "models"))
         if models is not None:
             structure = models
