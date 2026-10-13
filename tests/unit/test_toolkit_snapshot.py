@@ -6,6 +6,7 @@ from creopdm.toolkit_snapshot import (
     map_toolkit_collect_to_snapshot,
     normalize_toolkit_mass,
     normalize_toolkit_structure_row,
+    toolkit_snapshot_reject_reason,
 )
 
 
@@ -97,6 +98,16 @@ def test_map_drawing_and_mfg_use_domain_features():
 def test_map_rejects_missing_identity():
     assert map_toolkit_collect_to_snapshot({"ok": True, "domains": {}}) is None
     assert map_toolkit_collect_to_snapshot({"ok": False}) is None
+
+
+def test_toolkit_snapshot_reject_reason_surfaces_collect_error():
+    """Busy overlay must not always say missing identity/file_name."""
+    reason = toolkit_snapshot_reject_reason(
+        {"ok": False, "error": "could not retrieve shaft.prt (not found)"},
+        fallback_filename="shaft.prt",
+    )
+    assert reason.startswith("toolkit_collect_failed:")
+    assert "could not retrieve" in reason
 
 
 def test_map_fills_file_name_from_filename_alias_and_fallback():

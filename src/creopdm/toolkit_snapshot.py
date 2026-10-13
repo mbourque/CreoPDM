@@ -258,13 +258,49 @@ def _identity_file_name(identity: dict[str, Any] | None) -> str:
     return ""
 
 
+def toolkit_snapshot_reject_reason(
+    payload: dict[str, Any] | None,
+    *,
+    fallback_filename: str = "",
+) -> str:
+    """Short reason when map_toolkit_collect_to_snapshot returns None."""
+    tip = str(fallback_filename or "").strip()
+    if not isinstance(payload, dict):
+        return "toolkit_snapshot_unusable: empty Toolkit response"
+    if payload.get("ok") is False:
+        err = payload.get("error") or payload.get("message") or ""
+        domains = payload.get("domains")
+        if isinstance(domains, dict):
+            ident = domains.get("identity")
+            if isinstance(ident, dict) and ident.get("error"):
+                err = ident.get("error") or err
+        err_s = str(err or "").strip()
+        if err_s:
+            return f"toolkit_collect_failed: {err_s}"
+        return f"toolkit_collect_failed: ok=false ({tip or 'no tip'})"
+    identity_block = payload.get("domains")
+    if isinstance(identity_block, dict):
+        ident = identity_block.get("identity")
+        if isinstance(ident, dict) and ident.get("ok") is False:
+            err = str(ident.get("error") or ident.get("message") or "").strip()
+            if err:
+                return f"toolkit_identity_failed: {err}"
+            return "toolkit_identity_failed"
+    if not tip and not str(payload.get("fileName") or "").strip():
+        return "toolkit_snapshot_unusable: missing identity/file_name"
+    return "toolkit_snapshot_unusable: could not map collect payload"
+
+
 def map_toolkit_collect_to_snapshot(
     payload: dict[str, Any] | None,
     *,
     fallback_filename: str = "",
 ) -> dict[str, Any] | None:
     """Return a Creo.JS-gather-shaped snapshot, or None when identity is missing."""
-    if not isinstance(payload, dict) or payload.get("ok") is False:
+    if not isinstance(payload, dict):
+        return None
+    # Top-level ok:false usually means retrieve failed — nothing usable to map.
+    if payload.get("ok") is False:
         return None
 
     identity_block = _ok_domain(payload, "identity")

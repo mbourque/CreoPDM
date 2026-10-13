@@ -20,6 +20,7 @@ from creopdm.toolkit_snapshot import (
     DEFAULT_TOOLKIT_BASE_URL,
     domains_for_filename,
     map_toolkit_collect_to_snapshot,
+    toolkit_snapshot_reject_reason,
 )
 from creopdm_agent import __version__
 from creopdm_agent.config import AgentConfig
@@ -3086,7 +3087,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         if not snapshot:
             raise HTTPException(
                 status_code=502,
-                detail="toolkit_snapshot_unusable: missing identity/file_name",
+                detail=toolkit_snapshot_reject_reason(raw, fallback_filename=tip),
             )
         timings = raw.get("timings_ms") if isinstance(raw, dict) else None
         if isinstance(timings, dict) and timings:
