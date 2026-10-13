@@ -4701,7 +4701,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function aiSnapshotBodyFromGather(gatherSnapshot) {
     if (!gatherSnapshot || typeof gatherSnapshot !== "object") return null;
     let ai = gatherSnapshot.ai_snapshot;
-    // Toolkit gather is flat (no nested ai_snapshot) — synthesize for Ask AI / Collect.
+    // Toolkit / flat gather has no nested ai_snapshot — synthesize for Ask AI / Collect.
     if (!ai || typeof ai !== "object") {
       const identity = aiSnapshotIdentityFromGather(gatherSnapshot.identity);
       if (!identity) return null;

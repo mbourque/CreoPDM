@@ -708,7 +708,7 @@ def test_snapshot_tab_template_and_docs():
     assert "outline" in docs.lower()
     assert "not raw JSON" in docs or "not JSON" in docs
     assert "Ask AI for comment" in docs
-    assert "fresh gather" in docs
+    assert "fresh Toolkit gather" in docs or "fresh gather" in docs
     assert "prepare_snapshot_for_compare" in docs
     assert 'id="checkin-ask-ai"' in html
     assert "Title-case section openers" in script
@@ -1456,7 +1456,9 @@ def test_snapshot_compare_prompt_requires_saved_text():
     assert mass_merged["units"]["mass"] == "kg"
     mass_outline = format_snapshot_compare_text(mass_merged)
     assert "Mass properties:" in mass_outline
-    assert "mass: 1.64961176644 kg" in mass_outline
+    # Outline uses .9g rounding (same as Modifications Mass properties lines).
+    assert "mass: 1.64961177 kg" in mass_outline
+    assert "1.64961176644" not in mass_outline.split("Mass properties:", 1)[-1]
 
 
 @requires_git
