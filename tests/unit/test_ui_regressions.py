@@ -441,7 +441,7 @@ def test_product_state_badge_in_files_header():
 
 
 def test_metadata_gear_items_require_creo_session():
-    """Collect is creo-session-only; Rebuild Where Used is always on the gear (server)."""
+    """Rebuild metadata is creo-session-only; Rebuild Where Used is always on the gear (server)."""
     app_html = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     script = _app_js()
@@ -453,20 +453,19 @@ def test_metadata_gear_items_require_creo_session():
     assert 'data-requires-mutation=' not in app_html
     assert "creo-session-only" in app_html
     rebuild_btn = app_html.split('id="rebuild-where-used-btn"', 1)[0].rsplit("<button", 1)[-1]
-    collect_btn = app_html.split('id="collect-metadata-btn"', 1)[0].rsplit("<button", 1)[-1]
     rebuild_meta_btn = app_html.split('id="rebuild-metadata-btn"', 1)[0].rsplit("<button", 1)[-1]
     assert "creo-session-only" not in rebuild_btn
-    assert "creo-session-only" in collect_btn
     assert "creo-session-only" in rebuild_meta_btn
+    assert 'id="collect-metadata-btn"' not in app_html
     assert "productAllowsMutation" not in script
     assert "mutationActionAllowed" not in script
     assert "data-allows-mutation" in app_html
-    assert "Rebuild Where Used" in docs and "Collect all metadata" in docs
-    assert "Rebuild all metadata" in docs
+    assert "Rebuild Where Used" in docs and "**Rebuild metadata**" in docs
+    assert "Discard collected Creo metadata only" in docs
+    assert "not** product file rows" in docs or "**not** product file rows" in docs
     assert "no Creo.JS" in docs or "server vault scan" in docs or "Chrome/Edge too" in docs
     assert "lifecycle matrix" in docs.lower() or "not **in work**" in docs.lower() or "in review" in docs.lower()
-    # Collect blocks the UI like Add — progress on busy overlay, no mid-run soft-nav.
-    # Collect job body lives in metadata.js; Creo gather / materialize in creo_workspace.js.
+    # Collect loop blocks the UI like Add — progress on busy overlay, no mid-run soft-nav.
     meta_js = _metadata_js()
     ws_js = _creo_workspace_js()
     loop = _between(meta_js, "async function runMetadataCollectLoop(", "async function runCollectAllMetadata(")
@@ -476,13 +475,15 @@ def test_metadata_gear_items_require_creo_session():
     collect_all = _between(
         meta_js, "async function runCollectAllMetadata(", "async function runRebuildAllMetadata("
     )
-    assert "creo_metadata_captured" in collect_all
-    assert "already have metadata" in collect_all
-    assert "Rebuild all metadata" in collect_all
     assert "clear-creo-metadata" in collect_all
-    assert "rebuild: true" in collect_all or 'rebuild: true' in meta_js
+    assert "Discarding Creo metadata" in collect_all
+    util = (ROOT / "src" / "creopdm" / "services" / "utilities_service.py").read_text(
+        encoding="utf-8"
+    )
+    assert "Never deletes EngineeringObject" in util
     assert "confirmCollectMetadata(targets.length, already.length" in collect_all
     assert 'id="rebuild-metadata-btn"' in app_html
+    assert ">Rebuild metadata<" in app_html
     assert "runRebuildAllMetadata" in script
     push = _between(meta_js, "async function pushOneCreoMetadataTarget(", "async function flushPendingMetadataErase(")
     assert "No per-file JS timeout" in push

@@ -157,6 +157,7 @@ def test_released_product_hides_mutation_toolbar_keeps_delete(client, repo_paren
     assert 'id="purge-workspace-btn"' not in page.text
     assert 'id="remove-product-btn"' not in page.text
     assert 'id="collect-metadata-btn"' not in page.text
+    assert 'id="rebuild-metadata-btn"' not in page.text
     assert 'id="rebuild-where-used-btn"' not in page.text
     assert 'id="rename-product-btn"' not in page.text
     # Delete product stays available on locked products (purge vault + DB).

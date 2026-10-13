@@ -377,6 +377,9 @@ def test_strip_product_creo_metadata_clears_ai_snapshots(
             ).all()
         )
         assert snaps == []
+        # File row and tip version must still exist (metadata discard ≠ delete product).
+        assert db.get(EngineeringObject, obj.id) is not None
+        assert db.get(ObjectVersion, ver.id) is not None
 
 
 def test_rebuild_where_used_replaces_stale_edges(

@@ -1023,8 +1023,8 @@ def strip_product_creo_metadata(
 ) -> int:
     """Null collected Creo metadata (+ AI snapshots) for every version in the product.
 
-    Does not remove file rows or Where Used dependency edges. Caller owns auth /
-    product lock policy and commit.
+    Never deletes EngineeringObject / ObjectVersion / Dependency rows — only metadata
+    columns and Parameter / AI snapshot rows. Caller owns auth / commit.
     """
     from creopdm.models.ai_snapshot import ObjectVersionSnapshot
 
@@ -1036,6 +1036,7 @@ def strip_product_creo_metadata(
     if not object_ids:
         return 0
     with ctx.locks.acquire(product.uuid, timeout=60.0):
+        # Parameters + AI snaps only — do not delete(ObjectVersion) / delete(EngineeringObject).
         db.execute(delete(Parameter).where(Parameter.object_id.in_(object_ids)))
         db.execute(
             delete(ObjectVersionSnapshot).where(

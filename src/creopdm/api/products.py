@@ -527,7 +527,7 @@ def clear_product_creo_metadata_api(
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> ClearCreoMetadataResponse:
-    """Strip collected Creo metadata so gear Rebuild all metadata can Collect again."""
+    """Discard collected Creo metadata only (files / Where Used stay) for gear Rebuild metadata."""
     require_permission(request, ctx, PERMISSION_OBJECTS_METADATA)
     product = load_accessible_product(request, ctx, db, product_id)
     from creopdm.product_state import ensure_product_allows

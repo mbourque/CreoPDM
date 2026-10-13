@@ -268,8 +268,8 @@ def test_home_page(client):
     assert "creopdmMetadataCollect" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "resumeMetadataCollectIfNeeded" in meta_js
     assert "resumeMetadataCollectIfNeeded" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
-    assert "collect-metadata-btn" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "rebuild-metadata-btn" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
+    assert "collect-metadata-btn" not in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "cancel-metadata-collect-btn" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "resume-metadata-collect-btn" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "resume-metadata-collect-btn" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()

@@ -1979,14 +1979,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return m.resumeMetadataCollectIfNeeded(opts);
   }
 
-  $("#collect-metadata-btn")?.addEventListener("click", async () => {
-    closeProductSettings();
-    const productId = $("#collect-metadata-btn")?.dataset.product || currentProductId();
-    if (!productId) return;
-    const m = await initJobModule("metadata");
-    await m.runCollectAllMetadata(productId);
-  });
-
   $("#rebuild-metadata-btn")?.addEventListener("click", async () => {
     closeProductSettings();
     const productId = $("#rebuild-metadata-btn")?.dataset.product || currentProductId();
@@ -3443,7 +3435,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return (
       $("#rename-product-btn")?.dataset.product ||
       $("#delete-product-btn")?.dataset.product ||
-      $("#collect-metadata-btn")?.dataset.product ||
       $("#rebuild-metadata-btn")?.dataset.product ||
       $("#rebuild-where-used-btn")?.dataset.product ||
       $("#open-workspace-btn")?.dataset.product ||

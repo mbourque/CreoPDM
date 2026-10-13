@@ -88,12 +88,9 @@
             <button type="button" class="product-settings-item" role="menuitem" id="rebuild-where-used-btn"
                     data-product="{{ selected.uuid }}"
                     title="Index vault assemblies/drawings into Where Used links on the server (no Creo session required).">Rebuild Where Used</button>
-            <button type="button" class="product-settings-item creo-session-only" role="menuitem" id="collect-metadata-btn"
-                    data-product="{{ selected.uuid }}" hidden
-                    title="Capture metadata only for Creo tips that still need it (skips tips that already have Collect data for the current version).">Collect all metadata</button>
             <button type="button" class="product-settings-item creo-session-only" role="menuitem" id="rebuild-metadata-btn"
                     data-product="{{ selected.uuid }}" hidden
-                    title="Throw away collected Creo metadata for this product, then Collect every Creo tip again.">Rebuild all metadata</button>
+                    title="Discard collected Creo metadata only (files and Where Used stay), then capture metadata again for every Creo tip.">Rebuild metadata</button>
             {% endif %}
             {% if product_ui.show_delete_product %}
             <button type="button" class="product-settings-item is-danger" role="menuitem" id="delete-product-btn"
@@ -578,10 +575,10 @@
 
 <dialog id="collect-metadata-dialog" class="dialog">
   <form method="dialog" id="collect-metadata-form">
-    <h2>Collect Creo metadata</h2>
+    <h2>Rebuild metadata</h2>
     <p id="collect-metadata-lead"></p>
     <p class="warn-note" id="collect-metadata-warn" hidden></p>
-    <p class="muted small">Requires Creo’s embedded browser (Connected) plus creopdm-agent with Toolkit. Mass is collected for parts when Toolkit returns it. Cancel or Resume from the toolbar if it pauses.</p>
+    <p class="muted small">Discards collected Creo metadata only — product files, vault, and Where Used stay. Requires Creo’s embedded browser (Connected) plus creopdm-agent with Toolkit. Cancel or Resume from the toolbar if it pauses.</p>
     <div class="dialog-actions">
       <button type="button" class="btn" id="collect-metadata-cancel">Cancel</button>
       <button type="submit" class="btn btn-primary" id="collect-metadata-start">Start</button>
