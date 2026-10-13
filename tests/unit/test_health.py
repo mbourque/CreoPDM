@@ -155,7 +155,8 @@ def test_home_page(client):
     assert (Path("src/creopdm/static/icons/sldprt.svg").is_file())
     assert "vscode-icons" in open("src/creopdm/static/icons/ATTRIBUTION.txt", encoding="utf-8").read()
     assert 'alt="${label}" title="${label}"' in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
-    assert 'title="Open this file"' in open("src/creopdm/templates/app.html", encoding="utf-8").read()
+    # Filename open control: no native title tooltip (blocks thumbnail hover preview).
+    assert 'title="Open this file"' not in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "obj.type_label" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert ".name-with-icon" in open("src/creopdm/static/css/app.css", encoding="utf-8").read()
     assert (Path("src/creopdm/static/icons/part.png").is_file())

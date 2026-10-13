@@ -245,8 +245,7 @@
                 <button type="button" class="object-open" data-uuid="{{ obj.uuid }}"
                         data-content-hash="{{ obj.current_version.content_hash if obj.current_version else '' }}"
                         data-filename="{{ obj.filename }}"
-                        data-extension="{{ obj.extension }}"
-                        title="Open this file">{{ obj.filename }}</button>
+                        data-extension="{{ obj.extension }}">{{ obj.filename }}</button>
               </span>
               {% if entry.depth == 0 and obj.relative_path and obj.relative_path != obj.filename %}
               <div class="muted small">{{ obj.relative_path }}</div>
@@ -326,7 +325,7 @@
                   {% if q_icon %}
                   <img class="type-icon" src="/static/icons/{{ q_icon }}" alt="{{ q_label }}" title="{{ q_label }}" width="14" height="14" decoding="async">
                   {% endif %}
-                  <span class="object-open" role="link" tabindex="0" data-uuid="{{ item.uuid }}" title="Open this file">{{ item.filename }}</span>
+                  <span class="object-open" role="link" tabindex="0" data-uuid="{{ item.uuid }}" data-filename="{{ item.filename }}">{{ item.filename }}</span>
                 </span>
                 {% if item.newer_save %}
                 <div class="muted small">from {{ item.recorded_filename }}</div>
@@ -371,7 +370,7 @@
                   {% if q_icon %}
                   <img class="type-icon" src="/static/icons/{{ q_icon }}" alt="{{ q_label }}" title="{{ q_label }}" width="14" height="14" decoding="async">
                   {% endif %}
-                  <span class="object-open" role="link" tabindex="0" data-relative-path="{{ item.relative_path }}" title="Open this file">{{ item.filename }}</span>
+                  <span class="object-open" role="link" tabindex="0" data-relative-path="{{ item.relative_path }}" data-filename="{{ item.filename }}">{{ item.filename }}</span>
                 </span>
                 {% if item.relative_path and item.relative_path != item.filename %}
                 <div class="muted small">{{ item.relative_path }}</div>

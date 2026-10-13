@@ -2431,7 +2431,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               class="object-row"
               style="--depth: 0">
             <td title="${escapeHtml(filename)}">
-              <span class="name-with-icon">${icon}<button type="button" class="object-open" data-uuid="${escapeHtml(obj.uuid)}" title="Open this file">${escapeHtml(filename)}</button></span>
+              <span class="name-with-icon">${icon}<button type="button" class="object-open" data-uuid="${escapeHtml(obj.uuid)}" data-filename="${escapeHtml(filename)}">${escapeHtml(filename)}</button></span>
               ${pathLine}
             </td>
             <td title="${escapeHtml(rev)}">${escapeHtml(rev)}</td>
@@ -7339,7 +7339,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         link.setAttribute("role", "link");
         link.tabIndex = 0;
         link.textContent = filename;
-        link.title = "Open this file";
+        link.dataset.filename = filename;
         if (meta.uuid) link.dataset.uuid = meta.uuid;
         if (meta.relativePath) link.dataset.relativePath = meta.relativePath;
         wrap.appendChild(link);
