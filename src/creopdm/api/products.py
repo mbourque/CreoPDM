@@ -64,6 +64,7 @@ from creopdm.schemas.common import (
     PurgeFloorItem,
     PurgeWorkspacePathsRequest,
     QueueCheckinRequest,
+    ClearCreoMetadataResponse,
     WhereUsedIndexJobResponse,
     ZipImportJobResponse,
     WorkspaceContentResponse,
@@ -514,6 +515,30 @@ def synthesize_checkin_comment(
         len(result.summary or ""),
     )
     return result
+
+
+@router.post(
+    "/api/products/{product_id}/clear-creo-metadata",
+    response_model=ClearCreoMetadataResponse,
+)
+def clear_product_creo_metadata_api(
+    product_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> ClearCreoMetadataResponse:
+    """Strip collected Creo metadata so gear Rebuild all metadata can Collect again."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_METADATA)
+    product = load_accessible_product(request, ctx, db, product_id)
+    from creopdm.product_state import ensure_product_allows
+    from creopdm.services.utilities_service import strip_product_creo_metadata
+
+    ensure_product_allows(product, "edit_metadata", action="rebuild metadata")
+    cleared = strip_product_creo_metadata(
+        ctx, db, product, activity_action="rebuild_creo_metadata_clear"
+    )
+    db.commit()
+    return ClearCreoMetadataResponse(product_id=product.uuid, versions_cleared=cleared)
 
 
 @router.post(

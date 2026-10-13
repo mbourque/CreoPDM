@@ -39,6 +39,7 @@ MOVED_OUT_OF_APP = (
     "async function runMetadataCollectLoop(",
     "async function pushOneCreoMetadataTarget(",
     "async function runCollectAllMetadata(",
+    "async function runRebuildAllMetadata(",
     "function confirmCollectMetadata(",
     "async function awaitWhereUsedIndex(productId, { onProgress",
     "function watchWhereUsedIndex(",

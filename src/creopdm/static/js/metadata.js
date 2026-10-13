@@ -394,21 +394,35 @@ window.__creopdmModules.metadata = {
       window.setTimeout(tick, 800);
     }
 
-    function confirmCollectMetadata(total, alreadySkipped) {
+    function confirmCollectMetadata(total, alreadySkipped, options = {}) {
       const dialog = $("#collect-metadata-dialog");
       const form = $("#collect-metadata-form");
       const lead = $("#collect-metadata-lead");
       const warn = $("#collect-metadata-warn");
+      const title = dialog?.querySelector("h2");
+      const rebuild = Boolean(options && options.rebuild);
       const skipped = Math.max(0, Number(alreadySkipped) || 0);
       if (!(dialog instanceof HTMLDialogElement) || !form || !lead) {
-        return Promise.resolve(window.confirm(`Collect Creo metadata for ${total} model(s)?`));
+        const fallback = rebuild
+          ? `Clear metadata and collect again for ${total} model(s)?`
+          : `Collect Creo metadata for ${total} model(s)?`;
+        return Promise.resolve(window.confirm(fallback));
       }
-      lead.textContent =
-        `Capture parameters, materials, units, features, and BOM/structure for ${total} Creo model(s) that still need metadata. ` +
-        "Each model is collected via the Creo Toolkit (agent → Toolkit). Mass is stored for parts when Toolkit returns it."
-        + (skipped
-          ? ` Skipping ${skipped} tip(s) that already have metadata for the current version.`
-          : "");
+      if (title) {
+        title.textContent = rebuild ? "Rebuild all metadata" : "Collect Creo metadata";
+      }
+      if (rebuild) {
+        lead.textContent =
+          `Clear collected Creo metadata for this product, then capture parameters, materials, units, features, and BOM/structure again for all ${total} Creo model(s). ` +
+          "Each model is collected via the Creo Toolkit (agent → Toolkit). Mass is stored for parts when Toolkit returns it.";
+      } else {
+        lead.textContent =
+          `Capture parameters, materials, units, features, and BOM/structure for ${total} Creo model(s) that still need metadata. ` +
+          "Each model is collected via the Creo Toolkit (agent → Toolkit). Mass is stored for parts when Toolkit returns it."
+          + (skipped
+            ? ` Skipping ${skipped} tip(s) that already have metadata for the current version.`
+            : "");
+      }
       if (warn) {
         if (total > METADATA_COLLECT_WARN_THRESHOLD) {
           warn.hidden = false;
@@ -705,7 +719,8 @@ window.__creopdmModules.metadata = {
       }
     }
 
-    async function runCollectAllMetadata(productId) {
+    async function runCollectAllMetadata(productId, options = {}) {
+      const rebuild = Boolean(options && options.rebuild);
       if (metadataCollectJob.running) {
         showOk("Metadata collection is already running.");
         return;
@@ -725,11 +740,12 @@ window.__creopdmModules.metadata = {
       showOk("");
       const existing = loadMetadataCollectState();
       if (
-        existing &&
-        existing.status === "running" &&
-        existing.productId === productId &&
-        Array.isArray(existing.targets) &&
-        existing.targets.length
+        !rebuild
+        && existing
+        && existing.status === "running"
+        && existing.productId === productId
+        && Array.isArray(existing.targets)
+        && existing.targets.length
       ) {
         await runMetadataCollectLoop(existing);
         return;
@@ -741,29 +757,59 @@ window.__creopdmModules.metadata = {
           && String(row?.filename || "").trim()
           && isCreoMetadataCandidate(row.filename)
       );
-      // Skip tips that already have Collect identity/materials for this version.
+      // Collect skips tips that already have metadata; Rebuild collects every tip.
       const already = candidates.filter((row) => Boolean(row.creo_metadata_captured));
+      const sourceRows = rebuild
+        ? candidates
+        : candidates.filter((row) => !row.creo_metadata_captured);
       const targets = sortMetadataCollectTargets(
-        candidates
-          .filter((row) => !row.creo_metadata_captured)
-          .map((row) => ({
-            uuid: String(row.uuid || "").trim(),
-            filename: String(row.filename || "").trim(),
-            path: "",
-            relativePath: String(row.relative_path || "").trim(),
-            versionId: String(row.current_version?.uuid || row.version_id || "").trim(),
-          }))
+        sourceRows.map((row) => ({
+          uuid: String(row.uuid || "").trim(),
+          filename: String(row.filename || "").trim(),
+          path: "",
+          relativePath: String(row.relative_path || "").trim(),
+          versionId: String(row.current_version?.uuid || row.version_id || "").trim(),
+        }))
       );
       if (!targets.length) {
         showOk(
-          already.length
-            ? `All ${already.length} Creo model(s) already have metadata for the current tip — nothing to collect.`
+          !rebuild && already.length
+            ? `All ${already.length} Creo model(s) already have metadata for the current tip — nothing to collect. Use Rebuild all metadata to clear and collect again.`
             : "No Creo parts, assemblies, or drawings to capture."
         );
         return;
       }
-      const okToStart = await confirmCollectMetadata(targets.length, already.length);
+      const okToStart = await confirmCollectMetadata(targets.length, already.length, {
+        rebuild,
+      });
       if (!okToStart) return;
+
+      if (rebuild) {
+        setBusy("Clearing Creo metadata…");
+        try {
+          const clearResponse = await fetch(
+            `/api/products/${encodeURIComponent(productId)}/clear-creo-metadata`,
+            { method: "POST" }
+          );
+          if (!clearResponse.ok) {
+            showError(
+              $("#toolbar-error"),
+              `Could not clear metadata: ${await readError(clearResponse)}`
+            );
+            return;
+          }
+        } catch (err) {
+          showError(
+            $("#toolbar-error"),
+            `Could not clear metadata: ${err?.message || err || "request failed"}`
+          );
+          return;
+        } finally {
+          clearBusy();
+        }
+        // Drop a paused Collect so we do not resume a stale skip-list mid-rebuild.
+        saveMetadataCollectState(null);
+      }
 
       const state = {
         productId,
@@ -777,6 +823,10 @@ window.__creopdmModules.metadata = {
       };
       saveMetadataCollectState(state);
       await runMetadataCollectLoop(state);
+    }
+
+    async function runRebuildAllMetadata(productId) {
+      return runCollectAllMetadata(productId, { rebuild: true });
     }
 
     async function resumeMetadataCollectIfNeeded(opts = {}) {
@@ -821,6 +871,7 @@ window.__creopdmModules.metadata = {
     mod.watchWhereUsedIndex = watchWhereUsedIndex;
     mod.runUtilitiesRebuildWithWhereUsed = runUtilitiesRebuildWithWhereUsed;
     mod.runCollectAllMetadata = runCollectAllMetadata;
+    mod.runRebuildAllMetadata = runRebuildAllMetadata;
     mod.resumeMetadataCollectIfNeeded = resumeMetadataCollectIfNeeded;
     mod.pushOneCreoMetadataTarget = pushOneCreoMetadataTarget;
     mod.metadataBusyText = metadataBusyText;

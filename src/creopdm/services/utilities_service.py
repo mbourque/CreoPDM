@@ -1014,26 +1014,34 @@ def _count_active_checkouts(db: Session, product_id: int) -> int:
     )
 
 
-def clear_product_creo_metadata(
+def strip_product_creo_metadata(
     ctx: AppContext,
     db: Session,
+    product: Product,
     *,
-    product_uuid: str,
-    confirm_password: str,
-) -> tuple[Product, int]:
-    """Strip collected Creo metadata from all versions for one product (DB only)."""
-    product = _confirm_and_load_product_for_repair(
-        ctx, db, product_uuid=product_uuid, confirm_password=confirm_password
-    )
+    activity_action: str = "clear_creo_metadata",
+) -> int:
+    """Null collected Creo metadata (+ AI snapshots) for every version in the product.
+
+    Does not remove file rows or Where Used dependency edges. Caller owns auth /
+    product lock policy and commit.
+    """
+    from creopdm.models.ai_snapshot import ObjectVersionSnapshot
+
     object_ids = list(
         db.scalars(
             select(EngineeringObject.id).where(EngineeringObject.product_id == product.id)
         ).all()
     )
     if not object_ids:
-        return product, 0
+        return 0
     with ctx.locks.acquire(product.uuid, timeout=60.0):
         db.execute(delete(Parameter).where(Parameter.object_id.in_(object_ids)))
+        db.execute(
+            delete(ObjectVersionSnapshot).where(
+                ObjectVersionSnapshot.object_id.in_(object_ids)
+            )
+        )
         result = db.execute(
             update(ObjectVersion)
             .where(ObjectVersion.object_id.in_(object_ids))
@@ -1056,11 +1064,26 @@ def clear_product_creo_metadata(
             object_id=None,
             details={
                 "product": product.name,
-                "action": "clear_creo_metadata",
+                "action": activity_action,
                 "versions_cleared": cleared,
             },
         )
         db.flush()
+    return cleared
+
+
+def clear_product_creo_metadata(
+    ctx: AppContext,
+    db: Session,
+    *,
+    product_uuid: str,
+    confirm_password: str,
+) -> tuple[Product, int]:
+    """Utilities path: password re-auth, then strip collected Creo metadata."""
+    product = _confirm_and_load_product_for_repair(
+        ctx, db, product_uuid=product_uuid, confirm_password=confirm_password
+    )
+    cleared = strip_product_creo_metadata(ctx, db, product)
     return product, cleared
 
 

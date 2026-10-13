@@ -217,9 +217,9 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     assert "top.asm" in text
     assert "pin.prt" in text
     assert "bom-tree-root" in text
-    assert f'data-uuid="{shaft["uuid"]}"' in text
     assert 'class="bom-name"' in text
     assert f'/products/{product["uuid"]}/objects/{shaft["uuid"]}' in text
+    assert f'data-uuid="{shaft["uuid"]}"' not in text
     assert 'class="object-open bom-name"' not in text
     assert 'class="object-open mono bom-name"' not in text
 
@@ -490,7 +490,7 @@ def test_rebuild_where_used_writes_dependency_edges(client, repo_parent, data_di
 
 @requires_git
 def test_metadata_menu_items_are_creo_session_only(client, repo_parent):
-    """Collect needs Creo.JS; Rebuild Where Used is server-side (visible without Creo)."""
+    """Collect/Rebuild metadata need Creo.JS; Rebuild Where Used is server-side."""
     import re
 
     product = _create_product(client, repo_parent)
@@ -498,11 +498,15 @@ def test_metadata_menu_items_are_creo_session_only(client, repo_parent):
     assert page.status_code == 200, page.text
     assert 'data-allows-mutation="1"' in page.text
     collect = re.search(r"<button[^>]*id=\"collect-metadata-btn\"[^>]*>", page.text)
+    rebuild_meta = re.search(r"<button[^>]*id=\"rebuild-metadata-btn\"[^>]*>", page.text)
     rebuild = re.search(r"<button[^>]*id=\"rebuild-where-used-btn\"[^>]*>", page.text)
     assert collect, page.text
+    assert rebuild_meta, page.text
     assert rebuild, page.text
     assert "creo-session-only" in collect.group(0)
     assert "hidden" in collect.group(0)
+    assert "creo-session-only" in rebuild_meta.group(0)
+    assert "hidden" in rebuild_meta.group(0)
     assert "creo-session-only" not in rebuild.group(0)
     assert " hidden" not in rebuild.group(0) and not rebuild.group(0).endswith(" hidden>")
     assert 'id="set-creo-dir-btn"' in page.text

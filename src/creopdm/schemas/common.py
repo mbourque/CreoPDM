@@ -1084,6 +1084,13 @@ class WhereUsedIndexJobResponse(BaseModel):
     finished_at: float | None = None
 
 
+class ClearCreoMetadataResponse(BaseModel):
+    """Product gear / API: strip collected Creo metadata so Collect can run again."""
+
+    product_id: str
+    versions_cleared: int = 0
+
+
 class ZipImportJobResponse(BaseModel):
     """Progress for Add ▾ → Compressed data… (zip upload / extract / import)."""
 

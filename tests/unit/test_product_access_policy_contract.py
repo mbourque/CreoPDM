@@ -174,6 +174,8 @@ def test_rebuild_where_used_and_from_disk_call_ensure():
     assert 'ensure_product_allows(product, "edit_metadata", action="rebuild Where Used")' in (
         products_api
     )
+    assert 'ensure_product_allows(product, "edit_metadata", action="rebuild metadata")' in products_api
+    assert "/clear-creo-metadata" in products_api
     assert 'ensure_product_allows(product, "edit_metadata", action="rebuild Where Used")' in meta
     from_disk = products_api.split("def import_from_disk(", 1)[1].split(
         "\ndef ", 1

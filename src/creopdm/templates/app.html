@@ -90,7 +90,10 @@
                     title="Index vault assemblies/drawings into Where Used links on the server (no Creo session required).">Rebuild Where Used</button>
             <button type="button" class="product-settings-item creo-session-only" role="menuitem" id="collect-metadata-btn"
                     data-product="{{ selected.uuid }}" hidden
-                    title="Open each Creo model in session and capture parameters, materials, BOM, and related metadata.">Collect all metadata</button>
+                    title="Capture metadata only for Creo tips that still need it (skips tips that already have Collect data for the current version).">Collect all metadata</button>
+            <button type="button" class="product-settings-item creo-session-only" role="menuitem" id="rebuild-metadata-btn"
+                    data-product="{{ selected.uuid }}" hidden
+                    title="Throw away collected Creo metadata for this product, then Collect every Creo tip again.">Rebuild all metadata</button>
             {% endif %}
             {% if product_ui.show_delete_product %}
             <button type="button" class="product-settings-item is-danger" role="menuitem" id="delete-product-btn"

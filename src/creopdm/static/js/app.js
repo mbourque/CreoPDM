@@ -1987,6 +1987,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     await m.runCollectAllMetadata(productId);
   });
 
+  $("#rebuild-metadata-btn")?.addEventListener("click", async () => {
+    closeProductSettings();
+    const productId = $("#rebuild-metadata-btn")?.dataset.product || currentProductId();
+    if (!productId) return;
+    const m = await initJobModule("metadata");
+    await m.runRebuildAllMetadata(productId);
+  });
+
   resumeMetadataCollectIfNeeded();
   function scheduleProductLifecycleReconcile() {
     const pid = currentProductId();
@@ -3436,6 +3444,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       $("#rename-product-btn")?.dataset.product ||
       $("#delete-product-btn")?.dataset.product ||
       $("#collect-metadata-btn")?.dataset.product ||
+      $("#rebuild-metadata-btn")?.dataset.product ||
       $("#rebuild-where-used-btn")?.dataset.product ||
       $("#open-workspace-btn")?.dataset.product ||
       $("#checkin-btn")?.dataset.product ||

@@ -454,12 +454,15 @@ def test_metadata_gear_items_require_creo_session():
     assert "creo-session-only" in app_html
     rebuild_btn = app_html.split('id="rebuild-where-used-btn"', 1)[0].rsplit("<button", 1)[-1]
     collect_btn = app_html.split('id="collect-metadata-btn"', 1)[0].rsplit("<button", 1)[-1]
+    rebuild_meta_btn = app_html.split('id="rebuild-metadata-btn"', 1)[0].rsplit("<button", 1)[-1]
     assert "creo-session-only" not in rebuild_btn
     assert "creo-session-only" in collect_btn
+    assert "creo-session-only" in rebuild_meta_btn
     assert "productAllowsMutation" not in script
     assert "mutationActionAllowed" not in script
     assert "data-allows-mutation" in app_html
     assert "Rebuild Where Used" in docs and "Collect all metadata" in docs
+    assert "Rebuild all metadata" in docs
     assert "no Creo.JS" in docs or "server vault scan" in docs or "Chrome/Edge too" in docs
     assert "lifecycle matrix" in docs.lower() or "not **in work**" in docs.lower() or "in review" in docs.lower()
     # Collect blocks the UI like Add — progress on busy overlay, no mid-run soft-nav.
@@ -471,11 +474,16 @@ def test_metadata_gear_items_require_creo_session():
     assert "setBusyMessage(message)" in loop
     assert "clearBusy()" in loop
     collect_all = _between(
-        meta_js, "async function runCollectAllMetadata(", "async function resumeMetadataCollectIfNeeded("
+        meta_js, "async function runCollectAllMetadata(", "async function runRebuildAllMetadata("
     )
     assert "creo_metadata_captured" in collect_all
     assert "already have metadata" in collect_all
-    assert "confirmCollectMetadata(targets.length, already.length)" in collect_all
+    assert "Rebuild all metadata" in collect_all
+    assert "clear-creo-metadata" in collect_all
+    assert "rebuild: true" in collect_all or 'rebuild: true' in meta_js
+    assert "confirmCollectMetadata(targets.length, already.length" in collect_all
+    assert 'id="rebuild-metadata-btn"' in app_html
+    assert "runRebuildAllMetadata" in script
     push = _between(meta_js, "async function pushOneCreoMetadataTarget(", "async function flushPendingMetadataErase(")
     assert "No per-file JS timeout" in push
     assert "Promise.race" not in push

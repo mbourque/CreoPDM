@@ -305,6 +305,80 @@ def test_clear_metadata_keeps_file_rows(data_dir, identity: StaticUserProvider):
         assert params == []
 
 
+def test_strip_product_creo_metadata_clears_ai_snapshots(
+    data_dir, identity: StaticUserProvider
+):
+    """Rebuild/clear metadata must drop tip AI snapshots so Modifications re-captures."""
+    from creopdm.models.ai_snapshot import ObjectVersionSnapshot
+    from creopdm.services.utilities_service import strip_product_creo_metadata
+
+    ctx = build_context(ConfigManager(), users=identity)
+    with ctx.session_factory() as db:
+        product = Product(
+            uuid=str(uuid.uuid4()),
+            name="Snap Clear",
+            vault_folder="snap-clear",
+            repository_path=str(ctx.config.vaults_dir / "snap-clear"),
+            default_branch="main",
+        )
+        db.add(product)
+        db.flush()
+        obj = EngineeringObject(
+            uuid=str(uuid.uuid4()),
+            product_id=product.id,
+            name="bracket",
+            filename="bracket.prt",
+            extension="prt",
+            object_type="CREO_PART",
+            relative_path="bracket.prt",
+        )
+        db.add(obj)
+        db.flush()
+        ver = ObjectVersion(
+            uuid=str(uuid.uuid4()),
+            object_id=obj.id,
+            revision="A",
+            iteration=1,
+            filename="bracket.prt",
+            relative_path="bracket.prt",
+            identity_json='{"file_name":"bracket.prt"}',
+            features_json='[]',
+            git_commit_hash="b" * 40,
+            content_hash="d" * 64,
+            file_size=10,
+            created_by="tester",
+            comment="tip",
+        )
+        db.add(ver)
+        db.flush()
+        obj.current_version_id = ver.id
+        db.add(
+            ObjectVersionSnapshot(
+                uuid=str(uuid.uuid4()),
+                object_id=obj.id,
+                version_id=ver.id,
+                schema_version=1,
+                snapshot_json='{"identity":{}}',
+            )
+        )
+        db.commit()
+
+        cleared = strip_product_creo_metadata(ctx, db, product)
+        db.commit()
+        assert cleared == 1
+        tip = db.get(ObjectVersion, ver.id)
+        assert tip is not None
+        assert tip.identity_json is None
+        snaps = list(
+            db.scalars(
+                select(ObjectVersionSnapshot).where(
+                    ObjectVersionSnapshot.object_id == obj.id
+                )
+            ).all()
+        )
+        assert snaps == []
+
+
 def test_rebuild_where_used_replaces_stale_edges(
     data_dir, identity: StaticUserProvider
 ):
