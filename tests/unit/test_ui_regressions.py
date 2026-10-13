@@ -498,6 +498,9 @@ def test_metadata_gear_items_require_creo_session():
     assert "harness_not_openable_in_isolation" in loop
     assert 'reason: harness ? "harness"' in meta_js
     assert "attachCollectLocalPaths" in loop
+    assert "materializeCheckedOutToAgentCache(ids" in loop
+    assert "Updating local workspace…" in loop
+    assert "Empty local workspace" in loop
     assert "async function attachCollectLocalPaths(" in ws_js
     assert "Checking local workspace tips…" in ws_js
     assert "flushPendingMetadataErase" in loop

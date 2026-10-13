@@ -29,6 +29,7 @@ window.__creopdmModules.metadata = {
     const looksLikeLocalWindowsPath = shell.looksLikeLocalWindowsPath;
     const prepareLocalPathForMetadata = shell.prepareLocalPathForMetadata;
     const attachCollectLocalPaths = shell.attachCollectLocalPaths;
+    const materializeCheckedOutToAgentCache = shell.materializeCheckedOutToAgentCache;
     const gatherCreoMetadataForFilename = shell.gatherCreoMetadataForFilename;
     const postAiSnapshotFromGather = shell.postAiSnapshotFromGather;
     const reconcileProductLifecycleChrome = shell.reconcileProductLifecycleChrome;
@@ -607,7 +608,38 @@ window.__creopdmModules.metadata = {
           targets.splice(0, targets.length, ...sorted);
           state.targets = targets;
         }
-        if (state.productId) {
+        // Empty local workspace (or after Remove from Workspace): attachCollect alone
+        // finds nothing — rematerialize vault tips once (zip for 2+), then resolve paths.
+        // Same warm as Add → Collect. Resume mid-job skips this (paths already known).
+        if (index === 0 && state.productId && typeof materializeCheckedOutToAgentCache === "function") {
+          targets.forEach((target) => {
+            target.path = "";
+          });
+          const ids = targets.map((target) => target.uuid).filter(Boolean);
+          if (ids.length) {
+            setBusyMessage(
+              ids.length === 1
+                ? "Updating local workspace…"
+                : `Updating local workspace… 0 of ${ids.length}`
+            );
+            try {
+              await materializeCheckedOutToAgentCache(ids, (done, total) => {
+                if (metadataCollectJob.cancel) return;
+                if (total <= 1) return;
+                setBusyMessage(`Updating local workspace… ${done} of ${total}`);
+                publishBusyMessage(`Updating local workspace… ${done} of ${total}`);
+              });
+            } catch {
+              /* per-tip prepareLocalPathForMetadata still works */
+            }
+            if (metadataCollectJob.cancel) {
+              /* fall through to cancelled toast */
+            } else {
+              setBusyMessage("Checking local workspace tips…");
+              await attachCollectLocalPaths(state.productId, targets);
+            }
+          }
+        } else if (state.productId) {
           setBusyMessage("Checking local workspace tips…");
           await attachCollectLocalPaths(state.productId, targets);
         }
