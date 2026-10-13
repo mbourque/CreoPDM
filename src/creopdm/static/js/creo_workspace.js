@@ -289,9 +289,32 @@ window.__creopdmModules.creo_workspace = {
       );
       let saved = 0;
       if (!targets.length || !canGatherCreoMetadata()) return saved;
-      // Add / Check In / Collect: resolve local tip paths once (same as Collect all).
+      // Add uploads to the vault only — it does not fill the product agent cache.
+      // Collect must use cleaned vault tips (not the pick-folder source), so rematerialize
+      // once, then resolve paths from the cache (same warm as Collect all).
       if (!sessionOnly) {
         const productId = String(opts.productId || currentProductId() || "").trim();
+        targets.forEach((target) => {
+          target.path = "";
+        });
+        const ids = targets.map((target) => target.uuid).filter(Boolean);
+        if (ids.length) {
+          if (showProgress) {
+            publishBusyMessage(
+              ids.length === 1
+                ? "Updating local workspace…"
+                : `Updating local workspace… 0 of ${ids.length}`
+            );
+          }
+          try {
+            await materializeCheckedOutToAgentCache(ids, (done, total) => {
+              if (!showProgress || total <= 1) return;
+              publishBusyMessage(`Updating local workspace… ${done} of ${total}`);
+            });
+          } catch {
+            /* per-tip prepareLocalPathForMetadata still works */
+          }
+        }
         if (productId) {
           if (showProgress) {
             publishBusyMessage("Checking local workspace tips…");

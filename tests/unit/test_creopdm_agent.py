@@ -1887,6 +1887,10 @@ def test_agent_add_paths_posts_multipart_to_pdm(tmp_path, monkeypatch):
     assert response.status_code == 200, response.text
     body = response.json()
     assert {item["uuid"] for item in body["ok"]} == {"u1", "u2"}
+    # Source paths are returned for diagnostics; Collect rematerializes vault tips instead.
+    by_uuid = {item["uuid"]: item for item in body["ok"]}
+    assert Path(by_uuid["u1"]["path"]) == pin
+    assert Path(by_uuid["u2"]["path"]) == shaft
     assert len(posts) == 1
     assert "from-uploads" in posts[0]["url"]
     assert posts[0]["headers"].get("Authorization") == "Bearer tok"

@@ -547,6 +547,9 @@ def test_metadata_gear_items_require_creo_session():
     assert "sortMetadataCollectTargets(" in push_items
     assert "prepareLocalPathForMetadata(target.uuid, target.filename)" in push_items
     assert "attachCollectLocalPaths(productId, targets)" in push_items
+    assert "materializeCheckedOutToAgentCache(ids" in push_items
+    assert "Updating local workspace…" in push_items
+    assert "does not fill the product agent cache" in push_items
     # Open: session-only gather; Add/Check In: path-first (no empty-session probe).
     assert "sessionOnly || sessionWaitRounds > 0" in push_items
     assert 'gatherCreoMetadataForFilename(target.filename, "", {' in push_items

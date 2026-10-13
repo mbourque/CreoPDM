@@ -212,7 +212,9 @@ def test_add_runs_where_used_under_busy_overlay_then_reloads_once():
         encoding="utf-8"
     )
     assert "attachCollectLocalPaths(productId, targets)" in ws_js
+    assert "materializeCheckedOutToAgentCache(ids" in ws_js
     assert "Checking local workspace tips…" in ws_js
+    assert "does not fill the product agent cache" in ws_js
     docs = (root / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "keep the busy overlay and run **Where Used** indexing there" in docs
     assert "never clear the overlay and return to Files before indexing finishes" in docs

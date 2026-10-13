@@ -441,6 +441,9 @@ class BatchAddItem(BaseModel):
     uuid: str = ""
     filename: str = ""
     status: str = ""
+    # Absolute source on this PC — Collect uses path= without vault rematerialize.
+    path: str = ""
+    relative_path: str = ""
     code: str = ""
     message: str = ""
 
@@ -2081,12 +2084,25 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                             )
                         )
                     continue
+                # Map vault relative → absolute source so Collect can Toolkit path=
+                # without downloading into the agent product cache first.
+                by_rel = {rel.replace("\\", "/").lstrip("/").lower(): path for path, rel in chunk}
+                by_name: dict[str, Path] = {}
+                for path, _rel in chunk:
+                    by_name.setdefault(path.name.lower(), path)
                 for item in body.get("ok") or []:
+                    rel = str(item.get("relative_path") or "").replace("\\", "/").strip().lstrip("/")
+                    abs_path = by_rel.get(rel.lower()) if rel else None
+                    if abs_path is None:
+                        tip = str(item.get("filename") or "").strip()
+                        abs_path = by_name.get(tip.lower()) if tip else None
                     ok.append(
                         BatchAddItem(
                             uuid=str(item.get("uuid") or ""),
                             filename=str(item.get("filename") or ""),
                             status=str(item.get("status") or "added"),
+                            path=str(abs_path) if abs_path is not None else "",
+                            relative_path=rel or str(item.get("relative_path") or ""),
                         )
                     )
                 for item in body.get("failed") or []:
