@@ -12,8 +12,8 @@ The user message has labeled blocks:
 Never swap OLD and NEW. Never claim a revision is missing when both outlines are present.
 
 Prefer Computed differences when present; do not contradict it.
-Every Computed differences section that is not "(none)" must appear in your comment — including Components removed, Components added, Components quantity changed, Features removed/added, Dimensions removed/changed/added, Simplified representations, Assembly constraints, and Relations.
-Do not stop after the simplified-reps, constraints, or relations sentence if other sections list real changes.
+Every Computed differences section that is not "(none)" must appear in your comment — including Components removed, Components added, Components quantity changed, Features removed/added, Dimensions removed/changed/added, Material changed, Parameters removed/changed/added, Mass properties, Simplified representations, Assembly constraints, and Relations.
+Do not stop after the simplified-reps, constraints, relations, or material sentence if other sections list real changes.
 
 Never say “snapshot,” “block,” “capture,” “recorded,” or “metadata.” Prefer everyday wording (added, removed, changed, active, increased, decreased).
 
@@ -70,7 +70,22 @@ Dimensions:
 - Quote exact outline forms with owners when present.
 - Do not invent physical meaning (“thickness”) unless that word is the symbol or appears in a parameter/description.
 
-Material / Parameters: compare Material: and Parameters:; ignore empty BUW_*/MC_* noise.
+Material / Parameters:
+- Prefer Computed differences Material changed and Parameters lines when present.
+- PTC_SYSTEM_MTRL_PROPS is Creo’s default/system material placeholder, not a real alloy assignment.
+  - Named material → PTC_SYSTEM_MTRL_PROPS (or Material → (none)): say the assigned material was cleared / removed (e.g. “Cleared the assigned material (was STAINLESS_STEEL_AUSTENITIC).”).
+  - PTC_SYSTEM_MTRL_PROPS (or none) → named material: say the material was assigned / set to that name.
+  - Named → different named: say it changed from A to B.
+- Do not say the material was “updated to PTC_SYSTEM_MTRL_PROPS” as if that were a chosen engineering material.
+- PTC_MASTER_MATERIAL, PTC_REPORTED_MATERIAL, and PTC_MATERIAL_NAME travel with the material assignment. Fold them into the same material sentence — do not list them as separate parameter trivia when Material changed already covers the story (including when those params are removed because the material was cleared).
+- Ignore empty BUW_*/MC_* noise and other bookkeeping parameters.
+
+Mass properties:
+- Prefer Mass properties lines in Computed differences when present.
+- Same geometry with a real density/material change often changes mass, volume, density, etc. — report the meaningful mass/density change in plain language when both sides have values.
+- OLD has mass values and NEW is “(not captured)” → say mass properties were removed (one short phrase). Do not invent zero mass or list the old numbers.
+- NEW gained mass values that OLD lacked → say mass properties were added / captured.
+- Never invent mass, density, or COG numbers that are not in the outlines or Computed differences.
 
 Simplified representations (assemblies):
 - Prefer the Simplified representations lines in Computed differences when present.
@@ -105,19 +120,22 @@ Hard bans:
 - Never claim “no significant dimension changes” if any dimension value or tolerance differs.
 - Never mention chamfer, round, hole, extrude, or any other type unless that exact change is in Features removed/added (or the matching OLD/NEW feature lines).
 - Never invent “SIMP_REP_SUPPRESSED removed” or “components now fully included” narratives.
+- Never treat PTC_SYSTEM_MTRL_PROPS as a real material choice, or invent zero-mass / wiped-solid wording when mass is “(not captured)” — say mass properties were removed.
 - Never omit a non-(none) Computed differences section.
-- Only if nothing real changed after the full SOLID compare (components, features, patterns, dimensions, material/parameters, simplified representations, assembly constraints, and relations when present): “No model changes detected in features, dimensions, parameters, simplified representations, assembly constraints, or relations.”
-- If the only real diff is simplified representations, active SimpRep, assembly constraints, or relations, write that — do not use the “no model changes” line.
+- Only if nothing real changed after the full SOLID compare (components, features, patterns, dimensions, material/parameters, mass when both sides captured, simplified representations, assembly constraints, and relations when present): “No model changes detected in features, dimensions, parameters, mass, simplified representations, assembly constraints, or relations.”
+- If the only real diff is material/mass, simplified representations, active SimpRep, assembly constraints, or relations, write that — do not use the “no model changes” line.
 
 Compose when applicable (this order), only steps with real diffs:
 1. Components removed / added / quantity changed (from Computed differences)
 2. Feature removals/additions/renames (exact outline labels)
 3. Pattern add/delete
 4. Remaining same-symbol dimension value/tolerance changes
-5. Material or meaningful parameter changes
-6. Simplified representation adds/removes/active changes (assemblies) — say “added” when they appear only on NEW
-7. Assembly constraint / placement changes (assemblies) — skip when Computed differences says Not captured
-8. Relations / post-regeneration / feature relations — skip when Computed differences says Not captured
+5. Material clear/assign/change (fold PTC_* material params into that sentence)
+6. Mass properties changed (including “mass properties were removed” when NEW is not captured)
+7. Other meaningful parameter changes (not the material PTC_* trio already covered)
+8. Simplified representation adds/removes/active changes (assemblies) — say “added” when they appear only on NEW
+9. Assembly constraint / placement changes (assemblies) — skip when Computed differences says Not captured
+10. Relations / post-regeneration / feature relations — skip when Computed differences says Not captured
 
 === Writing rules (both) ===
 Use verbs such as reduced, increased, decreased, removed, deleted, added.
@@ -133,6 +151,8 @@ Before returning, verify:
 - No invented Extrude/feature removal when Features lists match and Computed differences does not list Features removed.
 - Every real Features removed/added and PATTERN add/delete that matters is mentioned.
 - No long bare dim lists standing in for a removed feature.
+- Material → PTC_SYSTEM_MTRL_PROPS is phrased as cleared/removed, not “updated to system props.”
+- Mass → (not captured) is phrased as mass properties were removed (not zero mass).
 - No copied sample sentences from this prompt.
 - If NEW gained simplified representations that OLD lacked, the comment says they were added (not that suppressed status was removed).
 - OLD is previous; NEW is current.

@@ -2858,11 +2858,15 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         filename: str = "",
         domains: str = "",
         path: str = "",
+        keep: str = "1",
     ) -> dict[str, object]:
         """Collect via Toolkit and map to a Creo.JS gather-shaped snapshot.
 
         No Creo.JS fallback here — if Toolkit is down or identity is missing, 502.
         Optional ``path`` is forwarded so Toolkit can silent-Retrieve (no window).
+        Default ``keep=1`` skips erase after collect so later tips / re-collects can
+        reuse the in-session model (Toolkit retrieves once per /collect either way).
+        Pass ``keep=0`` to restore erase-after for that request.
         """
         tip = (filename or "").strip()
         disk_path = (path or "").strip()
@@ -2872,7 +2876,12 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                 status_code=400,
                 detail="Pass filename=… or domains=… for Toolkit collect.",
             )
-        q: list[str] = [f"domains={quote(domain_list, safe=',')}"]
+        # Toolkit: keep=1 → leave undisplayed in session; default erase reloads next call.
+        keep_flag = "0" if str(keep or "").strip() in {"0", "false", "False", "no"} else "1"
+        q: list[str] = [
+            f"domains={quote(domain_list, safe=',')}",
+            f"keep={keep_flag}",
+        ]
         if tip:
             q.append(f"fileName={quote(tip)}")
         if disk_path:
@@ -2884,12 +2893,22 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                 status_code=502,
                 detail="toolkit_snapshot_unusable: missing identity/file_name",
             )
+        timings = raw.get("timings_ms") if isinstance(raw, dict) else None
+        if isinstance(timings, dict) and timings:
+            logger.info(
+                "Toolkit collect %s keep=%s timings_ms=%s",
+                tip or "(no fileName)",
+                keep_flag,
+                timings,
+            )
         return {
             "ok": True,
             "filename": tip or str(snapshot.get("identity", {}).get("file_name") or ""),
             "domains": domain_list,
+            "keep": keep_flag,
             "snapshot": snapshot,
             "toolkit_ok": bool(raw.get("ok", True)),
+            "timings_ms": timings if isinstance(timings, dict) else None,
         }
 
     return app

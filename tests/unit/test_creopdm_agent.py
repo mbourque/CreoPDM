@@ -2272,7 +2272,11 @@ def test_agent_toolkit_health_and_snapshot_proxy(tmp_path, monkeypatch):
         assert payload["snapshot"]["features"][0]["name"] == "EXTRUDE"
         assert payload["snapshot"]["_pdm_source"] == "toolkit"
         assert "mass" in payload["domains"]
-        assert any("/collect?" in u for u in seen)
+        assert payload.get("keep") == "1"
+        collect_urls = [u for u in seen if "/collect?" in u]
+        assert collect_urls
+        assert "keep=1" in collect_urls[-1]
+        assert "domains=" in collect_urls[-1]
 
 
 def test_agent_toolkit_unavailable_returns_502(tmp_path, monkeypatch):
