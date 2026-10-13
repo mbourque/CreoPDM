@@ -64,9 +64,9 @@ def _snapshot_with_bom_fallback(
     version: ObjectVersion,
 ) -> dict[str, Any] | None:
     """
-    Older AI snapshots omit Structure/BOM (Features skip components).
-    Fall back to the version's bom_json / features_json structure so Compare
-    Revisions can trust Structure.
+    Older AI snapshots omit Structure/BOM (Features skip components) and mass.
+    Fall back to the version's bom_json / features_json / mass_json / units_json
+    so Modifications outlines match Details (Mass tab, Structure).
     """
     if not isinstance(snapshot, dict):
         return snapshot
@@ -109,6 +109,32 @@ def _snapshot_with_bom_fallback(
             changed = True
         if need_rels and isinstance(rels, dict) and rels:
             merged["relations"] = rels
+            changed = True
+    # Mass lives on version.mass_json (Details Mass tab) but older AI snaps omitted it.
+    need_mass = not (
+        isinstance(merged.get("mass"), dict)
+        and any(
+            merged["mass"].get(k) is not None
+            for k in (
+                "mass",
+                "volume",
+                "density",
+                "surface_area",
+                "gravity_center",
+                "principal_moments",
+            )
+        )
+    )
+    if need_mass:
+        fallback_mass = _loads(getattr(version, "mass_json", None))
+        if isinstance(fallback_mass, dict) and fallback_mass:
+            merged["mass"] = dict(fallback_mass)
+            changed = True
+    need_units = not (isinstance(merged.get("units"), dict) and merged.get("units"))
+    if need_units:
+        fallback_units = _loads(getattr(version, "units_json", None))
+        if isinstance(fallback_units, dict) and fallback_units:
+            merged["units"] = dict(fallback_units)
             changed = True
     return merged if changed else snapshot
 

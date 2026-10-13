@@ -1432,6 +1432,32 @@ def test_snapshot_compare_prompt_requires_saved_text():
     assert merged.get("bom")
     assert "GONE.prt" in format_snapshot_compare_text(merged)
 
+    class _VerMass:
+        bom_json = None
+        features_json = None
+        mass_json = (
+            '{"mass":1.64961176644,"volume":608712.828946,"density":2.71e-06,'
+            '"surface_area":63825.1309326,'
+            '"gravity_center":[100.016671279,108.014828134,0],'
+            '"principal_moments":[2303.08461063,3336.13740432,4942.82113157]}'
+        )
+        units_json = '{"length":"mm","mass":"kg"}'
+
+    mass_merged = _snapshot_with_bom_fallback(
+        {
+            "identity": {"filename": "support.prt", "model_type": "PART"},
+            "features": [{"id": 1, "name": "RIGHT", "type": "DATUM_PLANE"}],
+            "materials": {"current": "ALUMINUM_WROUGHT"},
+        },
+        _VerMass(),  # type: ignore[arg-type]
+    )
+    assert mass_merged is not None
+    assert mass_merged["mass"]["mass"] == 1.64961176644
+    assert mass_merged["units"]["mass"] == "kg"
+    mass_outline = format_snapshot_compare_text(mass_merged)
+    assert "Mass properties:" in mass_outline
+    assert "mass: 1.64961176644 kg" in mass_outline
+
 
 @requires_git
 def test_ai_snapshot_api_upsert_list_and_detail_tab(client, repo_parent, tmp_path):
