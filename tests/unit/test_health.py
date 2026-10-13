@@ -260,14 +260,17 @@ def test_home_page(client):
     assert "eraseUndisplayedModelsQuiet" in text
     assert "Do not RetrieveModel by bare name" in text
     meta_js = open("src/creopdm/static/js/metadata.js", encoding="utf-8").read()
+    app_js = open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "watchWhereUsedIndex" in meta_js
     assert "runCollectAllMetadata" in meta_js
     assert "runRebuildAllMetadata" in meta_js
-    assert "runCollectAllMetadata" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
-    assert "runRebuildAllMetadata" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
-    assert "creopdmMetadataCollect" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    # Collect body is lazy in metadata.js; shell only resumes / rebuilds via initJobModule.
+    assert "runCollectAllMetadata" not in app_js
+    assert 'initJobModule("metadata")' in app_js
+    assert "runRebuildAllMetadata" in app_js
+    assert "creopdmMetadataCollect" in app_js
     assert "resumeMetadataCollectIfNeeded" in meta_js
-    assert "resumeMetadataCollectIfNeeded" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "resumeMetadataCollectIfNeeded" in app_js
     assert "rebuild-metadata-btn" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "collect-metadata-btn" not in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "cancel-metadata-collect-btn" in open("src/creopdm/templates/app.html", encoding="utf-8").read()

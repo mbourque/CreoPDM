@@ -461,7 +461,9 @@ def test_metadata_gear_items_require_creo_session():
     assert "mutationActionAllowed" not in script
     assert "data-allows-mutation" in app_html
     assert "Rebuild Where Used" in docs and "**Rebuild metadata**" in docs
-    assert "Discard collected Creo metadata only" in docs
+    # Docs: "discard collected Creo metadata only" (bold markers may wrap the phrase).
+    docs_l = docs.lower()
+    assert "discard collected" in docs_l and "metadata only" in docs_l
     assert "not** product file rows" in docs or "**not** product file rows" in docs
     assert "no Creo.JS" in docs or "server vault scan" in docs or "Chrome/Edge too" in docs
     assert "lifecycle matrix" in docs.lower() or "not **in work**" in docs.lower() or "in review" in docs.lower()
