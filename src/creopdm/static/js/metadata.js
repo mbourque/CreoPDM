@@ -408,7 +408,7 @@ window.__creopdmModules.metadata = {
       }
       lead.textContent =
         `Capture parameters, materials, units, features, and BOM/structure for ${total} Creo model(s) in this product. ` +
-        "Each model is retrieved in the Creo session when needed. Mass properties are not collected (unsupported in silent Collect).";
+        "Each model is collected via the Creo Toolkit (agent → Toolkit). Mass is stored for parts when Toolkit returns it.";
       if (warn) {
         if (total > METADATA_COLLECT_WARN_THRESHOLD) {
           warn.hidden = false;
@@ -483,7 +483,9 @@ window.__creopdmModules.metadata = {
           dependencies: Array.isArray(snapshot.dependencies) ? snapshot.dependencies : [],
           bom: snapshot.bom || null,
           units: snapshot.units || null,
-          // Mass unsupported in silent Collect — omit so existing mass_json is preserved.
+          // Toolkit can return mass; omit when absent so existing mass_json is preserved.
+          mass:
+            snapshot.mass && typeof snapshot.mass === "object" ? snapshot.mass : null,
           family_table: snapshot.family_table || null,
           features: Array.isArray(snapshot.features) && snapshot.features.length
             ? snapshot.features
@@ -499,6 +501,7 @@ window.__creopdmModules.metadata = {
             ? snapshot.relations
             : null,
         };
+        if (!body.mass) delete body.mass;
         try {
           const response = await fetch(`/api/objects/${encodeURIComponent(target.uuid)}/creo-metadata`, {
             method: "POST",

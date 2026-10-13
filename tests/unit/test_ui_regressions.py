@@ -485,7 +485,7 @@ def test_metadata_gear_items_require_creo_session():
     assert "sortMetadataCollectTargets(" in loop
     assert "parts first, assemblies next, drawings last" in docs
     prepare_meta = _between(
-        ws_js, "async function prepareLocalPathForMetadata(", "async function gatherCreoMetadataForFilename("
+        ws_js, "async function prepareLocalPathForMetadata(", "async function gatherViaToolkitAgent("
     )
     assert "metadataNeedsOpenDependencies(filename)" in prepare_meta
     assert "include_dependencies: includeDependencies" in prepare_meta
@@ -494,10 +494,17 @@ def test_metadata_gear_items_require_creo_session():
     assert 'logical.endsWith(".drw")' in script
     assert "not in this directory" in script
     gather_meta = _between(
+        ws_js, "async function gatherViaToolkitAgent(", "async function gatherCreoMetadataForFilename("
+    )
+    assert "/toolkit/health" in gather_meta
+    assert "/toolkit/snapshot" in gather_meta
+    assert "toolkit_agent_offline" in gather_meta
+    assert "gatherModelMetadata" not in gather_meta
+    gather_entry = _between(
         ws_js, "async function gatherCreoMetadataForFilename(", "async function pushCreoMetadataForItems("
     )
-    assert "opts.featureNames !== false" in gather_meta
-    assert "Boolean(opts.featureNames)" not in gather_meta
+    assert "gatherViaToolkitAgent(" in gather_entry
+    assert "gatherModelMetadata" not in gather_entry
     assert "beforeunload" in script
     soft = _between(script, "function softNavigate(", "function leavePage(")
     assert "metadataCollectJob.running" in soft
@@ -1337,7 +1344,7 @@ def test_open_model_uses_nested_cache_folder():
     meta = _between(
         _creo_workspace_js(),
         "async function prepareLocalPathForMetadata(",
-        "async function gatherCreoMetadataForFilename(",
+        "async function gatherViaToolkitAgent(",
     )
     assert "openSpec.path" in meta
     assert "looksLikeLocalWindowsPath(materialized)" in meta

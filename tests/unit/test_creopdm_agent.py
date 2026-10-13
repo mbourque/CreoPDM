@@ -2116,3 +2116,124 @@ def test_agent_import_zip_rejects_oversize(tmp_path, monkeypatch):
         )
         assert response.status_code == 400, response.text
         assert "2 GB" in response.json()["detail"]
+
+
+def test_agent_toolkit_health_and_snapshot_proxy(tmp_path, monkeypatch):
+    """Agent proxies Toolkit 8767; snapshot maps to gather shape (no Creo.JS)."""
+    root = tmp_path / "cache"
+    root.mkdir()
+    settings = AgentConfig(
+        host="127.0.0.1",
+        port=8766,
+        local_root=str(root),
+        toolkit_base_url="http://127.0.0.1:8767",
+    )
+    app = create_agent_app(settings)
+    seen: list[str] = []
+
+    class FakeResponse:
+        def __init__(self, status_code: int, body: dict):
+            self.status_code = status_code
+            self._body = body
+
+        def json(self):
+            return self._body
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url, headers=None):
+            seen.append(url)
+            if url.rstrip("/").endswith("/health"):
+                return FakeResponse(
+                    200,
+                    {
+                        "ok": True,
+                        "service": "creopdm-toolkit",
+                        "model": {"fileName": "wedge.prt", "type": "PART"},
+                    },
+                )
+            if "/collect?" in url:
+                return FakeResponse(
+                    200,
+                    {
+                        "ok": True,
+                        "fileName": "wedge.prt",
+                        "domains": {
+                            "identity": {
+                                "ok": True,
+                                "identity": {
+                                    "file_name": "wedge.prt",
+                                    "model_type": "PART",
+                                },
+                            },
+                            "parameters": {"ok": True, "parameters": []},
+                            "features": {
+                                "ok": True,
+                                "features": [{"id": "f:1", "name": "EXTRUDE"}],
+                            },
+                            "materials": {"ok": True, "materials": {"name": "STEEL"}},
+                            "mass": {"ok": True, "mass": {"volume": 1.0}},
+                            "units": {"ok": True, "units": {"length": "mm"}},
+                        },
+                    },
+                )
+            return FakeResponse(404, {"ok": False, "error": "not found"})
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    with TestClient(app) as client:
+        health = client.get("/health")
+        assert health.status_code == 200
+        assert health.json()["toolkit_base_url"] == "http://127.0.0.1:8767"
+
+        toolkit_health = client.get("/toolkit/health")
+        assert toolkit_health.status_code == 200, toolkit_health.text
+        body = toolkit_health.json()
+        assert body["ok"] is True
+        assert body["toolkit"]["model"]["fileName"] == "wedge.prt"
+        assert any(u.endswith("/health") for u in seen)
+
+        snap = client.get("/toolkit/snapshot", params={"filename": "wedge.prt"})
+        assert snap.status_code == 200, snap.text
+        payload = snap.json()
+        assert payload["ok"] is True
+        assert payload["snapshot"]["identity"]["file_name"] == "wedge.prt"
+        assert payload["snapshot"]["features"][0]["name"] == "EXTRUDE"
+        assert payload["snapshot"]["_pdm_source"] == "toolkit"
+        assert "mass" in payload["domains"]
+        assert any("/collect?" in u for u in seen)
+
+
+def test_agent_toolkit_unavailable_returns_502(tmp_path, monkeypatch):
+    root = tmp_path / "cache"
+    root.mkdir()
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+
+    class BoomClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url, headers=None):
+            import httpx
+
+            raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", BoomClient)
+    with TestClient(app) as client:
+        response = client.get("/toolkit/health")
+        assert response.status_code == 502
+        assert "toolkit_unavailable" in response.json()["detail"]

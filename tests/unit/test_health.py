@@ -291,7 +291,10 @@ def test_home_page(client):
     assert "gather_debug" not in open("src/creopdm/schemas/common.py", encoding="utf-8").read()
     assert "Creo metadata gather debug" not in open("src/creopdm/api/objects.py", encoding="utf-8").read()
     assert "summarizeGatherDebugGaps" not in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
-    assert "Mass properties are not collected" in meta_js
+    assert "Mass is stored for parts when Toolkit returns it" in meta_js
+    assert "No mass properties on this version yet" in open(
+        "src/creopdm/templates/object_detail.html", encoding="utf-8"
+    ).read()
     assert "creoExternalBridge" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "Session offline" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "function checkCreoAvailable" in open("src/creopdm/static/vendor/creojs.js", encoding="utf-8").read()

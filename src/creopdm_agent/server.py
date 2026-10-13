@@ -16,6 +16,11 @@ from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 from starlette.responses import JSONResponse, Response
 
+from creopdm.toolkit_snapshot import (
+    DEFAULT_TOOLKIT_BASE_URL,
+    domains_for_filename,
+    map_toolkit_collect_to_snapshot,
+)
 from creopdm_agent import __version__
 from creopdm_agent.config import AgentConfig
 from creopdm_agent.trash import clear_directory_contents, move_to_trash
@@ -1248,6 +1253,38 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                         response.headers[key] = value
         return response
 
+    def _toolkit_base() -> str:
+        return (settings.toolkit_base_url or DEFAULT_TOOLKIT_BASE_URL).rstrip("/")
+
+    def _proxy_toolkit_get(path: str, *, timeout: float) -> dict[str, object]:
+        """GET Toolkit HTTP collector; surface failures clearly (no silent empty)."""
+        base = _toolkit_base()
+        url = f"{base}{path}"
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                response = client.get(url)
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"toolkit_unavailable: {exc}",
+            ) from exc
+        try:
+            body = response.json()
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"toolkit_bad_json: HTTP {response.status_code}",
+            ) from exc
+        if response.status_code >= 400:
+            detail = body.get("error") if isinstance(body, dict) else None
+            raise HTTPException(
+                status_code=502,
+                detail=f"toolkit_http_{response.status_code}: {detail or body}",
+            )
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=502, detail="toolkit_bad_json: not an object")
+        return body
+
     @app.get("/health")
     def health() -> dict[str, object]:
         return {
@@ -1257,6 +1294,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             "pdm_url": settings.pdm_url or None,
             "local_root": str(root),
             "port": settings.port,
+            "toolkit_base_url": _toolkit_base(),
             "health_interval_seconds": int(settings.health_interval_seconds or 0),
             "status_poll_interval_seconds": int(settings.status_poll_interval_seconds or 0),
         }
@@ -2774,5 +2812,51 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         except OSError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
         return OpenLocalResponse(path=str(target), mode=mode)
+
+    @app.get("/toolkit/health")
+    def toolkit_health() -> dict[str, object]:
+        """Proxy Creo Toolkit collector /health (same PC as Creo)."""
+        body = _proxy_toolkit_get("/health", timeout=5.0)
+        return {
+            "ok": bool(body.get("ok", True)),
+            "toolkit_base_url": _toolkit_base(),
+            "toolkit": body,
+        }
+
+    @app.get("/toolkit/collect")
+    def toolkit_collect(domains: str = "") -> dict[str, object]:
+        """Proxy Toolkit /collect?domains=… (raw JSON)."""
+        query = (domains or "").strip()
+        path = "/collect" if not query else f"/collect?domains={quote(query, safe=',')}"
+        return _proxy_toolkit_get(path, timeout=120.0)
+
+    @app.get("/toolkit/snapshot")
+    def toolkit_snapshot(filename: str = "", domains: str = "") -> dict[str, object]:
+        """Collect via Toolkit and map to a Creo.JS gather-shaped snapshot.
+
+        No Creo.JS fallback here — if Toolkit is down or identity is missing, 502.
+        """
+        tip = (filename or "").strip()
+        domain_list = (domains or "").strip() or (domains_for_filename(tip) if tip else "")
+        if not domain_list:
+            raise HTTPException(
+                status_code=400,
+                detail="Pass filename=… or domains=… for Toolkit collect.",
+            )
+        path = f"/collect?domains={quote(domain_list, safe=',')}"
+        raw = _proxy_toolkit_get(path, timeout=120.0)
+        snapshot = map_toolkit_collect_to_snapshot(raw)
+        if not snapshot:
+            raise HTTPException(
+                status_code=502,
+                detail="toolkit_snapshot_unusable: missing identity/file_name",
+            )
+        return {
+            "ok": True,
+            "filename": tip or str(snapshot.get("identity", {}).get("file_name") or ""),
+            "domains": domain_list,
+            "snapshot": snapshot,
+            "toolkit_ok": bool(raw.get("ok", True)),
+        }
 
     return app

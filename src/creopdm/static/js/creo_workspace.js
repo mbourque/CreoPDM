@@ -86,50 +86,134 @@ window.__creopdmModules.creo_workspace = {
       }
     }
 
-    async function gatherCreoMetadataForFilename(filename, filePath, options) {
-      if (!canGatherCreoMetadata() || !filename) return null;
-      const opts = options && typeof options === "object" ? options : {};
-      const deferErase = Boolean(opts.deferErase);
-      // Default on — Boolean(undefined) was false and wiped Collect/Open names.
-      const featureNames = opts.featureNames !== false;
-      const preferDisk = opts.preferDisk === true;
-      const pendingErase = Array.isArray(opts.pendingErase) ? opts.pendingErase : null;
+    function logicalCreoTipName(name) {
+      const raw = String(name || "").trim();
+      if (!raw) return "";
+      const numbered = raw.match(/^(.*)\.(\d+)$/i);
+      return (numbered ? numbered[1] : raw).toLowerCase();
+    }
+
+    async function readToolkitAgentError(response, fallback) {
+      let detail = fallback || `HTTP ${response.status}`;
       try {
-        await whenCreoJSReady();
-        if (typeof window.CreoJS.gatherModelMetadata !== "function") return null;
-        const snapshot = await window.CreoJS.gatherModelMetadata(filename, filePath || "", {
-          featureNames,
-          preferDisk: preferDisk && !!filePath,
+        const err = await response.json();
+        detail = String(err?.detail || err?.error || detail);
+      } catch {
+        /* ignore */
+      }
+      return detail;
+    }
+
+    /**
+     * Toolkit inventory via creopdm-agent → 8767. No Creo.JS inventory fallback —
+     * failures return __error so Collect/Open can show Toolkit did not work.
+     * Creo.JS may still open/Retrieve the tip into session when filePath is set.
+     */
+    async function gatherViaToolkitAgent(filename, filePath) {
+      const tip = String(filename || "").trim();
+      if (!tip) {
+        return { __error: "toolkit_bad_filename", __detail: "Missing filename." };
+      }
+      const agentOnline = await probeCreoAgent();
+      if (!agentOnline) {
+        return {
+          __error: "toolkit_agent_offline",
+          __detail: "creopdm-agent is offline (need /toolkit proxy).",
+        };
+      }
+      const base = agentBase();
+      try {
+        const healthResp = await fetch(`${base}/toolkit/health`, {
+          headers: agentAuthHeaders(),
+          signal: abortSignalAfter(5000),
         });
-        if (!snapshot || typeof snapshot !== "object") return null;
-        if (typeof snapshot === "string" && snapshot.startsWith("CREOPDM_ERROR:")) return null;
-        if (snapshot.__error) {
+        if (!healthResp.ok) {
           return {
-            __error: String(snapshot.__error || "gather_failed"),
-            __detail: String(snapshot.__detail || ""),
+            __error: "toolkit_health_failed",
+            __detail: await readToolkitAgentError(healthResp, `HTTP ${healthResp.status}`),
           };
         }
-        const eraseKeys = Array.isArray(snapshot._pdm_erase_keys)
-          ? snapshot._pdm_erase_keys.filter((name) => typeof name === "string" && name.trim())
-          : [];
-        delete snapshot._pdm_erase_keys;
-        // PTC defers Erase until Creo regains control — must be a separate Creo.JS turn.
-        // Collect batches erases (deferErase) so 935 models are not 935 Erase turns.
-        if (eraseKeys.length) {
-          if (deferErase && pendingErase) {
-            eraseKeys.forEach((key) => pendingErase.push(key));
-          } else if (typeof window.CreoJS.eraseSessionModelsByNames === "function") {
+        const healthBody = await healthResp.json();
+        if (!healthBody || healthBody.ok === false) {
+          return {
+            __error: "toolkit_health_failed",
+            __detail: "Toolkit /health via agent was not ok.",
+          };
+        }
+        const activeName = String(
+          healthBody?.toolkit?.model?.fileName || healthBody?.toolkit?.fileName || ""
+        ).trim();
+        const want = logicalCreoTipName(tip);
+        const have = logicalCreoTipName(activeName);
+        if (have && want && have !== want) {
+          // Open into session only — not Creo.JS inventory gather.
+          const path = String(filePath || "").trim();
+          if (path && typeof window.CreoJS?.openModel === "function") {
             try {
-              await window.CreoJS.eraseSessionModelsByNames(eraseKeys, { allowUndisplayed: false });
-            } catch {
-              /* best-effort session cleanup */
+              await whenCreoJSReady();
+              const slash = Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/"));
+              const directory = slash >= 0 ? path.slice(0, slash) : "";
+              const diskName = slash >= 0 ? path.slice(slash + 1) : path;
+              await window.CreoJS.openModel(directory, tip, "", diskName, path);
+            } catch (openErr) {
+              return {
+                __error: "toolkit_wrong_model",
+                __detail:
+                  `Toolkit active model is ${activeName || "(none)"}; wanted ${tip}. ` +
+                  `Open failed: ${openErr?.message || openErr}`,
+              };
             }
+          } else {
+            return {
+              __error: "toolkit_wrong_model",
+              __detail:
+                `Toolkit active model is ${activeName || "(none)"}; wanted ${tip}. ` +
+                "Open the tip in Creo (or pass a local path) before Collect.",
+            };
           }
         }
+        const query = new URLSearchParams({ filename: tip });
+        const snapResp = await fetch(`${base}/toolkit/snapshot?${query}`, {
+          headers: agentAuthHeaders(),
+          signal: abortSignalAfter(120000),
+        });
+        if (!snapResp.ok) {
+          return {
+            __error: "toolkit_snapshot_failed",
+            __detail: await readToolkitAgentError(snapResp, `HTTP ${snapResp.status}`),
+          };
+        }
+        const body = await snapResp.json();
+        const snapshot = body?.snapshot;
+        if (!body?.ok || !snapshot || typeof snapshot !== "object" || !snapshot.identity) {
+          return {
+            __error: "toolkit_snapshot_unusable",
+            __detail: "Toolkit snapshot missing identity.",
+          };
+        }
         return snapshot;
-      } catch {
-        return null;
+      } catch (exc) {
+        return {
+          __error: "toolkit_exception",
+          __detail: String(exc?.message || exc || "toolkit call failed"),
+        };
       }
+    }
+
+    async function gatherCreoMetadataForFilename(filename, filePath, options) {
+      if (!canGatherCreoMetadata() || !filename) return null;
+      // Toolkit via agent only — probes / creo_inventory stay as manual Creo.JS tools.
+      const snapshot = await gatherViaToolkitAgent(filename, filePath || "");
+      if (snapshot && snapshot.__error) {
+        return {
+          __error: String(snapshot.__error || "toolkit_failed"),
+          __detail: String(snapshot.__detail || ""),
+        };
+      }
+      return snapshot || {
+        __error: "toolkit_unavailable",
+        __detail: "Toolkit collect returned nothing.",
+      };
     }
 
     async function pushCreoMetadataForItems(items, options) {
@@ -195,7 +279,9 @@ window.__creopdmModules.creo_workspace = {
           dependencies: Array.isArray(snapshot.dependencies) ? snapshot.dependencies : [],
           bom: snapshot.bom || null,
           units: snapshot.units || null,
-          // Mass unsupported without a displayed solid — omit so mass_json is preserved.
+          // Toolkit can return mass; Creo.JS gather used to omit it — keep mass when present.
+          mass:
+            snapshot.mass && typeof snapshot.mass === "object" ? snapshot.mass : null,
           family_table: snapshot.family_table || null,
           features: Array.isArray(snapshot.features) && snapshot.features.length
             ? snapshot.features
@@ -211,6 +297,7 @@ window.__creopdmModules.creo_workspace = {
             ? snapshot.relations
             : null,
         };
+        if (!body.mass) delete body.mass;
         try {
           const response = await fetch(
             `/api/objects/${encodeURIComponent(target.uuid)}/creo-metadata`,

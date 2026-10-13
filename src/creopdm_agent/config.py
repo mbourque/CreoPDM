@@ -9,6 +9,8 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, field_validator
 
+from creopdm.toolkit_snapshot import DEFAULT_TOOLKIT_BASE_URL
+
 APP_NAME = "CreoPDM-agent"
 DEFAULT_PORT = 8766
 DEFAULT_HEALTH_INTERVAL_SECONDS = 30
@@ -98,6 +100,8 @@ class AgentConfig(BaseModel):
     pdm_url: str = ""
     local_root: str = ""
     token: str = ""
+    # Creo Toolkit HTTP collector (same PC as Creo). Agent proxies /toolkit/*.
+    toolkit_base_url: str = DEFAULT_TOOLKIT_BASE_URL
     health_interval_seconds: int = DEFAULT_HEALTH_INTERVAL_SECONDS
     # How often the CreoPDM page may re-check /health for the status pill (0 = once).
     status_poll_interval_seconds: int = DEFAULT_STATUS_POLL_INTERVAL_SECONDS
@@ -127,6 +131,16 @@ class AgentConfig(BaseModel):
             return ""
         if "://" not in text:
             # Allow host:port shorthand.
+            return build_pdm_url(text)
+        return text
+
+    @field_validator("toolkit_base_url")
+    @classmethod
+    def normalize_toolkit_base_url(cls, value: object) -> str:
+        text = str(value or "").strip().rstrip("/")
+        if not text:
+            return DEFAULT_TOOLKIT_BASE_URL
+        if "://" not in text:
             return build_pdm_url(text)
         return text
 
@@ -216,6 +230,7 @@ def load_config() -> AgentConfig:
     env_port = (os.environ.get("CREOPDM_AGENT_PORT") or "").strip()
     env_root = (os.environ.get("CREOPDM_AGENT_ROOT") or "").strip()
     env_token = (os.environ.get("CREOPDM_TOKEN") or "").strip()
+    env_toolkit = (os.environ.get("CREOPDM_TOOLKIT_URL") or "").strip()
     env_health = (os.environ.get("CREOPDM_AGENT_HEALTH_INTERVAL") or "").strip()
     env_status = (os.environ.get("CREOPDM_AGENT_STATUS_POLL") or "").strip()
     if env_url:
@@ -226,6 +241,8 @@ def load_config() -> AgentConfig:
         data["local_root"] = env_root
     if env_token:
         data["token"] = env_token
+    if env_toolkit:
+        data["toolkit_base_url"] = env_toolkit
     if env_health.isdigit():
         data["health_interval_seconds"] = int(env_health)
     if env_status.isdigit():
@@ -248,6 +265,7 @@ def apply_runtime_settings(target: AgentConfig, source: AgentConfig) -> list[str
     target.pdm_url = source.pdm_url
     target.token = source.token
     target.local_root = source.local_root
+    target.toolkit_base_url = source.toolkit_base_url
     target.health_interval_seconds = source.health_interval_seconds
     target.status_poll_interval_seconds = source.status_poll_interval_seconds
     if source.host != target.host or source.port != target.port:
