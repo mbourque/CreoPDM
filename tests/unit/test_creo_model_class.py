@@ -116,6 +116,12 @@ def test_files_list_type_prefers_distinctive_role():
         == "SKELETON"
     )
     assert (
+        files_list_type_from_identity_json(
+            '{"model_type":"PART","model_role":"HARNESS"}'
+        )
+        == "HARNESS"
+    )
+    assert (
         files_list_type_from_identity_json('{"model_type":"MFG","model_role":"MFG"}')
         == "MFG"
     )
@@ -128,3 +134,4 @@ def test_files_list_type_prefers_distinctive_role():
     )
     assert resolve_type_icon(type_label="SHEETMETAL") == "part.png"
     assert resolve_type_icon(type_label="SKELETON") == "skeleton.png"
+    assert resolve_type_icon(type_label="HARNESS") == "part.png"

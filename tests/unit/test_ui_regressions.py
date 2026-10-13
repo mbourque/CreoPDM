@@ -486,6 +486,8 @@ def test_metadata_gear_items_require_creo_session():
     assert "prepareLocalPathForMetadata(target.uuid, target.filename)" in push
     assert "featureNames: true" in loop
     assert "deferErase: true" in loop
+    assert "harness_not_openable_in_isolation" in loop
+    assert 'reason: harness ? "harness"' in meta_js
     assert "attachCollectLocalPaths" in loop
     assert "async function attachCollectLocalPaths(" in ws_js
     assert "Checking local workspace tips…" in ws_js

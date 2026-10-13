@@ -869,6 +869,8 @@ DEFAULT_TYPE_ICON_BY_LABEL: dict[str, str] = {
     "SHEETMETAL": "part.png",
     "SHEETMETAL_MFG": "mfg.png",
     "SKELETON": "skeleton.png",
+    "HARNESS": "part.png",
+    "CABLING_DATA": "part.png",
     "LAYOUT": "model3d.svg",
     "FORMAT": "drawing.png",
     "REPORT": "drawing.png",

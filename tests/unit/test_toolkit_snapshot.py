@@ -110,6 +110,49 @@ def test_toolkit_snapshot_reject_reason_surfaces_collect_error():
     assert "could not retrieve" in reason
 
 
+def test_map_harness_identity_only_sets_model_role():
+    """Cabling harness: Toolkit identity stub → Files Type HARNESS without Retrieve."""
+    from creopdm.utils.creo_model_class import files_list_type_from_identity_json
+    import json
+
+    snap = map_toolkit_collect_to_snapshot(
+        {
+            "ok": True,
+            "fileName": "600640041454.prt",
+            "type": "PART",
+            "harness": True,
+            "domains": {
+                "identity": {
+                    "ok": True,
+                    "identity": {
+                        "file_name": "600640041454.prt",
+                        "model_type": "PART",
+                        "model_role": "HARNESS",
+                        "subtype": "HARNESS",
+                        "identity_source": "file_header",
+                    },
+                },
+                "parameters": {
+                    "ok": False,
+                    "error": "harness_not_openable_in_isolation: open the cabling assembly",
+                },
+                "features": {
+                    "ok": False,
+                    "error": "harness_not_openable_in_isolation: open the cabling assembly",
+                },
+            },
+        },
+        fallback_filename="600640041454.prt",
+    )
+    assert snap is not None
+    assert snap["identity"]["model_role"] == "HARNESS"
+    assert snap["identity"]["model_type"] == "PART"
+    assert snap["features"] is None or snap["features"] == []
+    assert (
+        files_list_type_from_identity_json(json.dumps(snap["identity"])) == "HARNESS"
+    )
+
+
 def test_map_fills_file_name_from_filename_alias_and_fallback():
     """Regression: Collect skips when Toolkit identity uses filename / omits tip."""
     aliased = map_toolkit_collect_to_snapshot(

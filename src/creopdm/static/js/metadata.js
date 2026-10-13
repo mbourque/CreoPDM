@@ -512,7 +512,11 @@ window.__creopdmModules.metadata = {
             await postAiSnapshotFromGather(target.uuid, target.versionId || null, snapshot, {
               objectFilename: target.filename,
             });
-            return { ok: true, reason: "" };
+            const role = String(snapshot.identity?.model_role || "").trim().toUpperCase();
+            const harness =
+              role === "HARNESS"
+              || String(snapshot.identity?.identity_source || "").toLowerCase() === "file_header";
+            return { ok: true, reason: harness ? "harness" : "" };
           }
           let detail = "";
           try {
@@ -567,9 +571,20 @@ window.__creopdmModules.metadata = {
       let index = Math.max(0, Number(state.index) || 0);
       let captured = Number(state.captured) || 0;
       let failed = Number(state.failed) || 0;
+      let expectedSkipped = Number(state.expectedSkipped) || 0;
       let lastReason = "";
       let shouldRefreshList = false;
       const pendingErase = [];
+      // Toolkit: cabling harness tips cannot be retrieved alone (header PART/HARNESS_PART).
+      const isExpectedCollectSkip = (detail) =>
+        /harness_not_openable_in_isolation/i.test(String(detail || ""));
+      const collectProgressBits = () => {
+        const bits = [`${captured} saved`];
+        if (failed) bits.push(`${failed} skipped`);
+        if (expectedSkipped) bits.push(`${expectedSkipped} harness`);
+        if (lastReason) bits.push(`last: ${lastReason}`);
+        return bits.join(", ");
+      };
       try {
         // Fresh runs: parts/asms before drawings so companions land before .drw Retrieve.
         // Do not re-order mid-resume (index would point at the wrong file).
@@ -587,9 +602,7 @@ window.__creopdmModules.metadata = {
           const target = targets[index];
           const message =
             `Collecting Creo metadata… ${index + 1} of ${targets.length}: ${target.filename}` +
-            ` (${captured} saved, ${failed} skipped` +
-            (lastReason ? `, last: ${lastReason}` : "") +
-            `)`;
+            ` (${collectProgressBits()})`;
           setBusyMessage(message);
           // Avoid showOk every file — toolbar churn; busy overlay carries progress.
           saveMetadataCollectState({
@@ -598,6 +611,7 @@ window.__creopdmModules.metadata = {
             index,
             captured,
             failed,
+            expectedSkipped,
             message,
             lastReason,
             updatedAt: Date.now(),
@@ -612,14 +626,20 @@ window.__creopdmModules.metadata = {
             // Keep mass/units/feature gap hints on success so we can watch Collect.
             lastReason = String(result.reason || "");
           } else {
-            failed += 1;
-            lastReason = String(result.detail || result.reason || "skipped");
+            const detail = String(result.detail || result.reason || "skipped");
+            if (isExpectedCollectSkip(detail)) {
+              expectedSkipped += 1;
+              lastReason = "harness (open cabling assembly)";
+            } else {
+              failed += 1;
+              lastReason = detail;
+            }
             // Lifecycle / validation: stop immediately — do not Creo-walk the rest.
             const locked =
               Number(result.status) === 400 ||
-              /cannot update metadata|in review|is locked|validation/i.test(lastReason);
+              /cannot update metadata|in review|is locked|validation/i.test(detail);
             if (locked) {
-              showError($("#toolbar-error"), lastReason);
+              showError($("#toolbar-error"), detail);
               saveMetadataCollectState(null);
               metadataCollectJob.cancel = true;
               await reconcileProductLifecycleChrome(state.productId, {
@@ -639,12 +659,11 @@ window.__creopdmModules.metadata = {
             index,
             captured,
             failed,
+            expectedSkipped,
             lastReason,
             message:
               `Collecting Creo metadata… ${index} of ${targets.length}` +
-              ` (${captured} saved, ${failed} skipped` +
-              (lastReason ? `, last: ${lastReason}` : "") +
-              `)`,
+              ` (${collectProgressBits()})`,
             updatedAt: Date.now(),
           });
           await new Promise((resolve) => window.setTimeout(resolve, 0));
@@ -657,17 +676,17 @@ window.__creopdmModules.metadata = {
             /* final sweep is best-effort */
           }
         }
+        const doneBits = [`${captured} saved`];
+        if (failed) doneBits.push(`${failed} skipped`);
+        if (expectedSkipped) doneBits.push(`${expectedSkipped} harness skipped`);
         if (metadataCollectJob.cancel) {
           const msg =
-            `Metadata collection cancelled after ${captured + failed} of ${targets.length} ` +
-            `(${captured} saved, ${failed} skipped).`;
+            `Metadata collection cancelled after ${captured + failed + expectedSkipped} of ${targets.length} ` +
+            `(${doneBits.join(", ")}).`;
           showOk(msg);
           saveMetadataCollectState(null);
         } else {
-          const msg =
-            `Metadata collection finished: ${captured} saved` +
-            (failed ? `, ${failed} skipped` : "") +
-            `.`;
+          const msg = `Metadata collection finished: ${doneBits.join(", ")}.`;
           showOk(msg);
           saveMetadataCollectState(null);
         }

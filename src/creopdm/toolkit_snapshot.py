@@ -335,6 +335,12 @@ def map_toolkit_collect_to_snapshot(
     if not file_name:
         return None
     identity = {**identity, "file_name": file_name}
+    # Toolkit cabling harness: identity-only stub (no Retrieve) with model_role HARNESS.
+    if payload.get("harness") is True or str(identity.get("identity_source") or "").strip().lower() == "file_header":
+        role = str(identity.get("model_role") or identity.get("subtype") or "").strip().upper()
+        if role in {"", "PART", "SOLID"} or payload.get("harness") is True:
+            identity["model_role"] = "HARNESS"
+        identity.setdefault("model_type", "PART")
 
     parameters_block = _ok_domain(payload, "parameters")
     parameters = _list_field(parameters_block, "parameters") or []
