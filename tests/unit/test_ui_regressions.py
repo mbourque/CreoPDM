@@ -1460,6 +1460,14 @@ def test_inventory_name_column_keeps_grid_left_padding():
     assert "padding-left: calc(0.65rem + (max(0, var(--inv-depth, 0)) * 1.25rem))" in css
     assert "Clamp depth" in css
     assert "never set padding-left: 0" in css
+    # BOM table uses the same └ nest indent as Features/Structure.
+    assert "{% if depth %}└ {% endif %}{{ bom_name_link(node) }}" in detail
+    assert 'style="--inv-depth: {{ depth }};"' in detail
+    # Structure tip names link into the product like BOM.
+    assert "structure_name_link(row)" in detail
+    assert "_enrich_structure_rows" in (
+        ROOT / "src" / "creopdm" / "api" / "pages.py"
+    ).read_text(encoding="utf-8")
 
 
 def test_details_data_tabs_use_inventory_table_chrome():

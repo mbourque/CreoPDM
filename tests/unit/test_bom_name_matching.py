@@ -1,6 +1,6 @@
 """BOM/structure name matching, including family-table generics."""
 
-from creopdm.api.pages import _enrich_bom_tree
+from creopdm.api.pages import _enrich_bom_tree, _enrich_structure_rows
 from creopdm.utils.bom_match import (
     bom_generic_label,
     bom_lookup_keys,
@@ -90,3 +90,19 @@ def test_enrich_bom_links_instance_to_generic_uuid():
     assert "open_as" not in enriched[0]
     assert enriched[1]["object_id"] == "uuid-generic"
     assert enriched[1]["open_as"] == "SPLIT-RIVET.prt"
+
+
+def test_enrich_structure_rows_links_tip_names():
+    """Structure Component column must resolve product tips like BOM."""
+    by_logical = {"shaft.prt": "uuid-shaft", "600640041454.prt": "uuid-harness"}
+    rows = _enrich_structure_rows(
+        [
+            {"name": "shaft.prt", "type": "PART", "level": 1},
+            {"name": "600640041454.prt", "type": "HARNESS", "level": 1},
+            {"name": "missing.prt", "type": "PART", "level": 2},
+        ],
+        by_logical,
+    )
+    assert rows[0]["object_id"] == "uuid-shaft"
+    assert rows[1]["object_id"] == "uuid-harness"
+    assert "object_id" not in rows[2]

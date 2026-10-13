@@ -102,6 +102,34 @@ def _enrich_bom_tree(nodes: list, by_logical: dict[str, str]) -> list[dict]:
     return enriched
 
 
+def _enrich_structure_rows(rows: list, by_logical: dict[str, str]) -> list[dict]:
+    """Attach product object_id so Structure tip names open like BOM links."""
+    enriched: list[dict] = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        item = dict(row)
+        filename = str(
+            item.get("name")
+            or item.get("filename")
+            or item.get("file_name")
+            or item.get("fileName")
+            or ""
+        ).strip()
+        object_id = ""
+        for key in _bom_lookup_keys(filename):
+            object_id = by_logical.get(key) or ""
+            if object_id:
+                break
+        if object_id:
+            item["object_id"] = object_id
+            generic = _bom_generic_label(filename)
+            if generic:
+                item["open_as"] = generic
+        enriched.append(item)
+    return enriched
+
+
 def _folder_page(
     ctx: AppContext,
     db: Session,
@@ -595,7 +623,9 @@ def object_detail(
     )
     bom = metadata.bom if isinstance(metadata.bom, list) else []
     is_drawing = obj.object_type == ObjectType.CREO_DRAWING.value
-    bom = _enrich_bom_tree(bom, _product_bom_index(ctx, db, product.id))
+    product_index = _product_bom_index(ctx, db, product.id)
+    bom = _enrich_bom_tree(bom, product_index)
+    structure = _enrich_structure_rows(structure, product_index)
     show_mass_tab = bool(
         mass
         and (

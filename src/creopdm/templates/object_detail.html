@@ -30,6 +30,15 @@
   <span class="bom-name" title="Not in this product">{{ node.filename or "—" }}</span>
   {% endif %}
 {% endmacro %}
+{% macro structure_name_link(row) %}
+  {% set tip = row.name or row.filename or "—" %}
+  {% if row.object_id %}
+  <button type="button" class="object-open bom-name" data-uuid="{{ row.object_id }}"
+          title="{% if row.open_as %}Open generic {{ row.open_as }}{% else %}Open {{ tip }}{% endif %}">{{ tip }}</button>
+  {% else %}
+  <span class="bom-name" title="Not in this product">{{ tip }}</span>
+  {% endif %}
+{% endmacro %}
 {% macro bom_tree(nodes, depth=0) %}
   {% for node in nodes %}
   <li class="bom-node{% if node.children %} has-children{% endif %}{% if node.dependency_type == 'ASSEMBLY_ROOT' %} is-root{% endif %}">
@@ -49,9 +58,7 @@
 {% macro bom_table_rows(nodes, depth=0) %}
   {% for node in nodes %}
   <tr class="{% if node.dependency_type == 'ASSEMBLY_ROOT' %}is-root{% endif %}">
-    <td class="inv-name filename-cell" style="--inv-depth: {{ depth }};">
-      {{ bom_name_link(node) }}
-    </td>
+    <td class="inv-name filename-cell" style="--inv-depth: {{ depth }};">{% if depth %}└ {% endif %}{{ bom_name_link(node) }}</td>
     <td>{% if node.dependency_type == 'ASSEMBLY_ROOT' %}—{% else %}{{ node.quantity|bom_qty }}{% endif %}</td>
     <td>{% if node.dependency_type == 'ASSEMBLY_ROOT' %}Assembly{% else %}{{ node.dependency_type }}{% endif %}</td>
   </tr>
@@ -411,7 +418,7 @@
         {% set lvl = row.level|default(1, true)|int %}
         {% if lvl < 1 %}{% set lvl = 1 %}{% endif %}
         <tr>
-          <td class="inv-name" style="--inv-depth: {{ lvl - 1 }};">{% if lvl > 1 %}└ {% endif %}{{ row.name }}</td>
+          <td class="inv-name filename-cell" style="--inv-depth: {{ lvl - 1 }};">{% if lvl > 1 %}└ {% endif %}{{ structure_name_link(row) }}</td>
           <td>{{ row.id|default("", true) }}</td>
           <td>{{ row.type|default("", true) }}</td>
           <td>{{ row.subtype|default(row.subType|default("", true), true) }}</td>
