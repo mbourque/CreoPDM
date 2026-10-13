@@ -8,6 +8,7 @@ import pytest
 
 from creopdm.utils.creo_thumbnail import (
     MARKER,
+    diagnose_thumbnail,
     extract_thumbnail,
     is_thumbnail_candidate,
     jpeg_dimensions,
@@ -113,6 +114,20 @@ def test_is_thumbnail_candidate_creo_tips_only():
 
 def test_extract_thumbnail_missing_file_returns_none(tmp_path: Path):
     assert extract_thumbnail(tmp_path / "missing.prt") is None
+
+
+def test_diagnose_thumbnail_not_in_model_vs_ok(tmp_path: Path):
+    bare = tmp_path / "bare.prt"
+    bare.write_bytes(b"no marker " * 200)
+    assert diagnose_thumbnail(bare)["reason"] == "not_in_model"
+
+    jpeg = _minimal_jpeg()
+    good = tmp_path / "good.prt"
+    good.write_bytes(b"H" + MARKER + b"\x00\x00" + jpeg)
+    report = diagnose_thumbnail(good)
+    assert report["reason"] == "ok"
+    assert report["extract_bytes"] == len(jpeg)
+    assert report["marker_count"] == 1
 
 
 @pytest.mark.skipif(
