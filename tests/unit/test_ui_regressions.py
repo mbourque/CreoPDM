@@ -550,6 +550,14 @@ def test_metadata_gear_items_require_creo_session():
     assert "materializeCheckedOutToAgentCache(ids" in push_items
     assert "Updating local workspace…" in push_items
     assert "does not fill the product agent cache" in push_items
+    mat_cache = _between(
+        ws_js,
+        "async function materializeCheckedOutToAgentCache(",
+        "mod.attachCollectLocalPaths = attachCollectLocalPaths",
+    )
+    assert "total >= 2" in mat_cache
+    assert "materializeCheckedOutToAgentCacheZip(ids)" in mat_cache
+    assert "One vault zip for 2+ tips" in mat_cache
     # Open: session-only gather; Add/Check In: path-first (no empty-session probe).
     assert "sessionOnly || sessionWaitRounds > 0" in push_items
     assert 'gatherCreoMetadataForFilename(target.filename, "", {' in push_items

@@ -652,7 +652,9 @@ window.__creopdmModules.creo_workspace = {
       const agent = await probeCreoAgent();
       if (!agent) return { agentOffline: true, ok: 0, failed: 0 };
       const total = ids.length;
-      if (total >= BULK_AGENT_CACHE_ZIP_THRESHOLD) {
+      // One vault zip for 2+ tips (Add Collect was paying /creo/open + GET per file
+      // until BULK_AGENT_CACHE_ZIP_THRESHOLD=50). Single tip stays per-file.
+      if (total >= 2) {
         if (typeof onProgress === "function") onProgress(0, total);
         try {
           const zipResult = await materializeCheckedOutToAgentCacheZip(ids);
