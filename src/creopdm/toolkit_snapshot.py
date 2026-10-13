@@ -140,10 +140,16 @@ def normalize_toolkit_structure_rows(
 def normalize_toolkit_feature_rows(
     rows: list[Any] | None,
 ) -> list[dict[str, Any]] | None:
-    """Ensure feature/drawing inventory rows have level ≥ 1 for Details indent."""
+    """Ensure feature/drawing inventory rows have level ≥ 1 for Details indent.
+
+    Also drop invisible / ``no_name`` rows (same policy as metadata_service) so a
+    stale Toolkit build cannot persist those placeholders into CreoPDM.
+    """
     if rows is None:
         return None
-    out: list[dict[str, Any]] = []
+    from creopdm.services.metadata_service import normalize_feature_rows
+
+    leveled: list[dict[str, Any]] = []
     for row in rows:
         if not isinstance(row, dict):
             continue
@@ -156,8 +162,8 @@ def normalize_toolkit_feature_rows(
         if level_n < 1:
             level_n = 1
         item["level"] = level_n
-        out.append(item)
-    return out
+        leveled.append(item)
+    return normalize_feature_rows(leveled)
 
 
 _MASS_KEY_ALIASES = {
