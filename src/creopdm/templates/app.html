@@ -217,6 +217,7 @@
               data-object-type="{{ obj.object_type }}"
               data-extension="{{ obj.extension }}"
               data-filename="{{ obj.filename }}"
+              data-content-hash="{{ obj.current_version.content_hash if obj.current_version else '' }}"
               data-relative-path="{{ obj.relative_path }}"
               data-can-checkout="{{ '1' if obj.can_checkout else '0' }}"
               data-can-checkin="{{ '1' if obj.can_checkin else '0' }}"
@@ -241,7 +242,11 @@
                 {% if obj.type_icon %}
                 <img class="type-icon" src="/static/icons/{{ obj.type_icon }}" alt="{{ obj.type_label }}" title="{{ obj.type_label }}" width="14" height="14" decoding="async">
                 {% endif %}
-                <button type="button" class="object-open" data-uuid="{{ obj.uuid }}" title="Open this file">{{ obj.filename }}</button>
+                <button type="button" class="object-open" data-uuid="{{ obj.uuid }}"
+                        data-content-hash="{{ obj.current_version.content_hash if obj.current_version else '' }}"
+                        data-filename="{{ obj.filename }}"
+                        data-extension="{{ obj.extension }}"
+                        title="Open this file">{{ obj.filename }}</button>
               </span>
               {% if entry.depth == 0 and obj.relative_path and obj.relative_path != obj.filename %}
               <div class="muted small">{{ obj.relative_path }}</div>

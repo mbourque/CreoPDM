@@ -45,6 +45,7 @@ from creopdm.services.password_reset_service import PasswordResetService
 from creopdm.services.product_service import ProductService
 from creopdm.services.product_watch_service import ProductWatchService
 from creopdm.services.user_service import UserService
+from creopdm.services.thumbnail_service import ThumbnailService
 from creopdm.services.where_used_index_jobs import WhereUsedIndexJobs
 from creopdm.services.zip_import_jobs import ZipImportJobs
 from creopdm.services.workspace_service import WorkspaceService
@@ -98,6 +99,7 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
         creo_connector,
     )
     metadata = MetadataService(objects, workspaces)
+    thumbnails = ThumbnailService(workspaces)
     ai_snapshots = AiSnapshotService(objects)
     user_accounts = UserService()
     email = EmailService()
@@ -128,7 +130,10 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
         ),
         metadata=metadata,
         ai_snapshots=ai_snapshots,
-        where_used_index=WhereUsedIndexJobs(session_factory, metadata),
+        thumbnails=thumbnails,
+        where_used_index=WhereUsedIndexJobs(
+            session_factory, metadata, thumbnails=thumbnails
+        ),
         zip_imports=ZipImportJobs(),
         email=email,
         notifications=notifications,

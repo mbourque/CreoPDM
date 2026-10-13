@@ -21,6 +21,7 @@ from creopdm.models import (  # noqa: F401
     Product,
     ProductWatch,
     Remote,
+    Thumbnail,
 )
 
 config = context.config

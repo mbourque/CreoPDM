@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-lifecycle-matrix-ops">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-thumb-preview">
   <script>
     /* Suppress PTC creojs.js noise outside Creo's browser (and when Creo injects its own copy). */
     (function () {
@@ -4254,5 +4254,6 @@ function gatherModelMetadata(filename, filePath, options) {
 }
   </script>
   <script src="/client/app.js?v={{ app_version }}-no-product-readonly"></script>
+  <script src="/static/js/thumbnail_preview.js?v={{ app_version }}-thumb-preview"></script>
 </body>
 </html>

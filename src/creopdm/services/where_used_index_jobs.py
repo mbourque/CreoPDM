@@ -14,6 +14,7 @@ from creopdm.logging_setup import get_logger
 from creopdm.models.object import EngineeringObject
 from creopdm.models.product import Product
 from creopdm.services.metadata_service import MetadataService
+from creopdm.services.thumbnail_service import ThumbnailService
 from creopdm.utils.creo_dependencies import needs_open_dependencies
 
 logger = get_logger("where_used_index")
@@ -21,6 +22,7 @@ logger = get_logger("where_used_index")
 # Start background Where Used after any successful Add (1+ files).
 WHERE_USED_AUTO_INDEX_MIN_FILES = 1
 _CHUNK = 20
+_THUMB_CHUNK = 40
 
 
 @dataclass
@@ -47,6 +49,7 @@ class WhereUsedIndexJobs:
 
     session_factory: sessionmaker[Session]
     metadata: MetadataService
+    thumbnails: ThumbnailService | None = None
     _lock: threading.Lock = field(default_factory=threading.Lock)
     _status: dict[str, WhereUsedIndexStatus] = field(default_factory=dict)
 
@@ -233,6 +236,9 @@ class WhereUsedIndexJobs:
                 edges_existing,
                 missing,
             )
+            # Best-effort thumbnails after Where Used is already done — never
+            # changes job state; failures are swallowed inside the helper.
+            self._extract_thumbnails_quiet(product_uuid, run_id)
         except Exception as exc:
             logger.exception("Where Used index failed for %s", product_uuid)
             with self._lock:
@@ -244,6 +250,46 @@ class WhereUsedIndexJobs:
                 status.state = "error"
                 status.error = str(exc) or exc.__class__.__name__
                 status.finished_at = time.time()
+
+    def _extract_thumbnails_quiet(self, product_uuid: str, run_id: float | None) -> None:
+        """Scan vault tips for embedded JPEGs; never raises or touches job status."""
+        if self.thumbnails is None:
+            return
+        try:
+            offset = 0
+            while True:
+                if self._cancelled(product_uuid):
+                    return
+                session = self.session_factory()
+                try:
+                    product = session.scalar(
+                        select(Product).where(Product.uuid == product_uuid)
+                    )
+                    if product is None:
+                        return
+                    _counts, offset, done = self.thumbnails.extract_for_product_chunk(
+                        session, product, offset=offset, limit=_THUMB_CHUNK
+                    )
+                    session.commit()
+                except Exception:
+                    session.rollback()
+                    logger.debug(
+                        "Thumbnail extract chunk failed for %s (ignored)",
+                        product_uuid,
+                        exc_info=True,
+                    )
+                    return
+                finally:
+                    session.close()
+                time.sleep(0.02)
+                if done:
+                    break
+        except Exception:
+            logger.debug(
+                "Thumbnail extract pass failed for %s (ignored)",
+                product_uuid,
+                exc_info=True,
+            )
 
 
 __all__ = [

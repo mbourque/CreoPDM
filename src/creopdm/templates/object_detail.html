@@ -24,7 +24,8 @@
 {% endmacro %}
 {% macro bom_name_link(node) %}
   {% if node.object_id %}
-  <a class="bom-name" href="/products/{{ product.uuid }}/objects/{{ node.object_id }}"
+  <a class="bom-name thumb-preview-target" href="/products/{{ product.uuid }}/objects/{{ node.object_id }}"
+     data-object-id="{{ node.object_id }}" data-filename="{{ node.filename or '' }}"
      title="{% if node.open_as %}Details for generic {{ node.open_as }}{% else %}Details for {{ node.filename }}{% endif %}">{{ node.filename or "—" }}</a>
   {% else %}
   <span class="bom-name" title="Not in this product">{{ node.filename or "—" }}</span>
@@ -33,7 +34,8 @@
 {% macro structure_name_link(row) %}
   {% set tip = row.name or row.filename or "—" %}
   {% if row.object_id %}
-  <a class="bom-name" href="/products/{{ product.uuid }}/objects/{{ row.object_id }}"
+  <a class="bom-name thumb-preview-target" href="/products/{{ product.uuid }}/objects/{{ row.object_id }}"
+     data-object-id="{{ row.object_id }}" data-filename="{{ tip }}"
      title="{% if row.open_as %}Details for generic {{ row.open_as }}{% else %}Details for {{ tip }}{% endif %}">{{ tip }}</a>
   {% else %}
   <span class="bom-name" title="Not in this product">{{ tip }}</span>
@@ -504,7 +506,8 @@
         {% for row in where_used %}
         <tr>
           <td class="filename-cell">
-            <a href="/products/{{ product.uuid }}/objects/{{ row.object_id }}#where-used">{{ row.filename }}</a>
+            <a class="thumb-preview-target" href="/products/{{ product.uuid }}/objects/{{ row.object_id }}#where-used"
+               data-object-id="{{ row.object_id }}" data-filename="{{ row.filename }}">{{ row.filename }}</a>
             {% if row.relative_path and row.relative_path != row.filename %}
             <div class="muted small">{{ row.relative_path }}</div>
             {% endif %}

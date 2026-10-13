@@ -2324,3 +2324,31 @@ body.is-file-drag #file-drop-overlay {
     padding: 0.4rem 0.55rem;
   }
 }
+
+/* Creo embedded model thumbnail hover preview (~256 px source). */
+.thumb-preview {
+  position: fixed;
+  z-index: 1200;
+  width: 256px;
+  max-width: calc(100vw - 16px);
+  padding: 0.35rem;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #c8c8c8);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+}
+.thumb-preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 256px;
+  object-fit: contain;
+  background: #f4f4f4;
+}
+.thumb-preview-caption {
+  margin-top: 0.3rem;
+  font-size: 0.75rem;
+  line-height: 1.25;
+  color: var(--muted, #555);
+  word-break: break-all;
+}

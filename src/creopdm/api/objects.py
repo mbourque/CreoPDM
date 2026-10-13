@@ -333,6 +333,61 @@ def remove_batch(
     return BatchOperationResponse(ok=ok, failed=failed, workspace_root=str(ctx.config.workspace_root()))
 
 
+def _thumbnail_response(row) -> Response:
+    digest = (row.content_hash or "").strip().lower()
+    return Response(
+        content=bytes(row.bytes),
+        media_type=row.mime or "image/jpeg",
+        headers={
+            "ETag": f'"{digest}"',
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "Content-Length": str(len(row.bytes)),
+        },
+    )
+
+
+@router.get("/api/thumbnails/{content_hash}")
+def get_thumbnail_by_hash(
+    content_hash: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> Response:
+    """Serve embedded Creo JPEG by tip content_hash (404 when none)."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    if ctx.thumbnails is None:
+        return Response(status_code=404)
+    row = ctx.thumbnails.get_by_hash(db, content_hash)
+    if row is None:
+        return Response(status_code=404)
+    etag = f'"{(row.content_hash or "").strip().lower()}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "public, max-age=31536000, immutable"})
+    return _thumbnail_response(row)
+
+
+@router.get("/api/objects/{object_id}/thumbnail")
+def get_object_thumbnail(
+    object_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> Response:
+    """Serve tip thumbnail for an object (resolves content_hash from current version)."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    obj = ctx.objects.get_object(db, object_id)
+    require_product_access(request, ctx, obj.product)
+    if ctx.thumbnails is None:
+        return Response(status_code=404)
+    row = ctx.thumbnails.get_for_object_tip(db, obj)
+    if row is None:
+        return Response(status_code=404)
+    etag = f'"{(row.content_hash or "").strip().lower()}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "public, max-age=31536000, immutable"})
+    return _thumbnail_response(row)
+
+
 @router.get("/api/objects/{object_id}", response_model=ObjectResponse)
 def get_object(
     object_id: str,
