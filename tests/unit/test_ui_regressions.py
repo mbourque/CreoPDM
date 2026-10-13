@@ -287,6 +287,10 @@ def test_add_paths_sends_purgeable_extensions():
     assert "import_batch_id: importBatchId" in add_chunk
     assert "client_total: batchTotal" in add_chunk
     assert "offset === 0 ? commentOnce" not in add_chunk
+    assert "ADD_PATHS_ZIP_MIN" in script
+    assert "total >= ADD_PATHS_ZIP_MIN" in add_chunk
+    assert "zip-import/jobs" in add_chunk
+    assert "job_id: jobId" in add_chunk
     assert 'data.append("batch_total"' in script
     assert 'data.append("import_batch_id"' in script
     assert "agentImportBatchId" in script
@@ -296,6 +300,7 @@ def test_add_paths_sends_purgeable_extensions():
     assert "Add 5 files` just because the agent uploaded in 5-file chunks" in docs
     assert "First check in: Add 26 files" in docs
     assert "separate Audit row for every" in docs and "25-path" in docs
+    assert "50+" in docs and "from-zip" in docs
     # logicalUploadName must not strip .N from non-purgeable names (e.g. .snagx.1).
     logical = _between(shell, "function logicalUploadName(", "function purgeableExtensionSet(")
     assert "isImportVersionedExtension" in logical

@@ -1994,6 +1994,87 @@ def test_agent_add_paths_comment_on_every_upload_chunk(tmp_path, monkeypatch):
         assert {post["data"].get("import_batch_id") for post in posts} == {shared}
 
 
+def test_agent_add_paths_uses_zip_for_large_batches(tmp_path, monkeypatch):
+    """50+ files pack one store-only zip → from-zip (not 5-file multipart)."""
+    from creopdm_agent.server import ADD_PATHS_ZIP_MIN_FILES
+
+    root = tmp_path / "src"
+    root.mkdir()
+    paths = []
+    for i in range(ADD_PATHS_ZIP_MIN_FILES):
+        path = root / f"part{i:03d}.prt"
+        path.write_bytes(b"x")
+        paths.append(str(path))
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(tmp_path / "cache"))
+    app = create_agent_app(settings)
+    posts: list[dict] = []
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {
+                "ok": [
+                    {
+                        "uuid": "u1",
+                        "filename": "part000.prt",
+                        "status": "added",
+                        "relative_path": "Library/part000.prt",
+                    }
+                ],
+                "failed": [],
+            }
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, url, headers=None, data=None, files=None):
+            file_name = None
+            if isinstance(files, dict) and "file" in files:
+                file_name = files["file"][0]
+            posts.append(
+                {
+                    "url": url,
+                    "data": dict(data or {}),
+                    "file_name": file_name,
+                }
+            )
+            return FakeResponse()
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    with TestClient(app) as client:
+        response = client.post(
+            "/add-paths",
+            json={
+                "pdm_url": "http://pdm.example:52113",
+                "product_id": "proj-bulk",
+                "absolute_paths": paths,
+                "base_folder": str(root),
+                "keep_root_folder": True,
+                "parent_folder": "",
+                "client_total": len(paths),
+                "job_id": "job-zip-1",
+                "comment": "Bulk library",
+            },
+        )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["ok"][0]["filename"] == "part000.prt"
+    assert len(posts) == 1
+    assert posts[0]["url"].endswith("/api/products/proj-bulk/objects/from-zip")
+    assert posts[0]["data"].get("strip_single_root") == "0"
+    assert posts[0]["data"].get("job_id") == "job-zip-1"
+    assert posts[0]["data"].get("comment") == "Bulk library"
+    assert posts[0]["file_name"] == "add-paths.zip"
+
+
 def test_agent_purge_versions_deletes_only_older_than_vault_floor(tmp_path):
     root = tmp_path / "cache"
     product_id = "proj-purge"

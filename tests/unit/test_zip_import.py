@@ -61,6 +61,18 @@ def test_strip_single_zip_root_keeps_files_at_root(tmp_path: Path):
     assert strip_single_zip_root(root) == root
 
 
+def test_plan_zip_import_can_keep_single_outer_folder(tmp_path: Path):
+    """Agent-packed Add folders must not strip Keep chosen folder name."""
+    root = tmp_path / "extracted"
+    (root / "Library" / "sub").mkdir(parents=True)
+    (root / "Library" / "a.prt").write_bytes(b"a")
+    (root / "Library" / "sub" / "b.prt").write_bytes(b"b")
+    stripped = plan_zip_import_jobs(root, strip_single_root=True)
+    kept = plan_zip_import_jobs(root, strip_single_root=False)
+    assert {job[2] for job in stripped} == {"a.prt", "sub/b.prt"}
+    assert {job[2] for job in kept} == {"Library/a.prt", "Library/sub/b.prt"}
+
+
 def test_extract_skips_junk_and_preserves_tree(tmp_path: Path):
     zip_path = tmp_path / "pack.zip"
     _write_zip(

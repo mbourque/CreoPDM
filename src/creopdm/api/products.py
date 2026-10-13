@@ -1246,6 +1246,8 @@ def _zip_extract_and_import(
     parent_folder: str,
     note: str | None,
     job_id: str,
+    *,
+    strip_single_root: bool = True,
 ) -> tuple[list[BatchItemResult], list[BatchItemResult], Path | None]:
     """Extract + import on a worker thread so progress polls are not blocked."""
     from creopdm.models.product import Product
@@ -1259,6 +1261,7 @@ def _zip_extract_and_import(
         parent_folder=parent_folder,
         purgeable_extensions=ctx.config.purgeable_cad_extensions(),
         ignore_patterns=ctx.config.ignore_patterns(),
+        strip_single_root=strip_single_root,
     )
     if not jobs:
         raise ValidationAppError("No files to add were found in that zip.")
@@ -1391,6 +1394,9 @@ async def import_from_zip(
     parent_folder = str(parent_raw or "").strip().replace("\\", "/").strip("/")
     job_raw = form.get("job_id")
     job_id = str(job_raw or "").strip()
+    # Compressed data… strips one outer folder; agent-packed Add folders must not.
+    strip_raw = str(form.get("strip_single_root") or "1").strip().lower()
+    strip_single_root = strip_raw not in {"0", "false", "no", "off"}
     zip_bytes_raw = form.get("zip_bytes")
     try:
         zip_bytes_hint = int(str(zip_bytes_raw or "0").strip() or "0")
@@ -1464,6 +1470,7 @@ async def import_from_zip(
             parent_folder,
             note,
             job_id,
+            strip_single_root=strip_single_root,
         )
     except Exception as exc:
         if job_id:

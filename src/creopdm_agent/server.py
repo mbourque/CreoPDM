@@ -30,6 +30,10 @@ logger = logging.getLogger("creopdm_agent")
 # Paths that stay reachable without a browser Bearer (status probe / OpenAPI).
 _AGENT_PUBLIC_PATHS = frozenset({"/health", "/docs", "/openapi.json", "/redoc"})
 
+# Large Add folders…: one ZIP_STORED upload to from-zip instead of 5-file multipart
+# chunks (keep in sync with ADD_PATHS_ZIP_MIN in static/js/add.js).
+ADD_PATHS_ZIP_MIN_FILES = 50
+
 
 def _origin_from_url(url: str) -> str:
     parsed = urlparse((url or "").strip())
@@ -433,6 +437,8 @@ class AddPathsRequest(BaseModel):
     client_total: int = 0
     # Stable across client 25-path /add-paths calls so Audit merges one Object added.
     import_batch_id: str | None = None
+    # Zip-import progress job (large Add via pack+from-zip).
+    job_id: str = ""
     # Settings → Purgeable extensions (omit older .ext.N on upload).
     purgeable_extensions: list[str] = Field(default_factory=list)
 
@@ -1964,11 +1970,9 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         token = (payload.token or settings.token or "").strip()
         if token:
             headers["Authorization"] = f"Bearer {token}"
-        url = f"{base}/api/products/{quote(product_id)}/objects/from-uploads"
         ok: list[BatchAddItem] = []
-        # Small chunks avoid reverse-proxy body limits on Snagit media batches.
-        chunk_size = 5
         from creopdm.utils.import_comments import resolve_add_commit_message
+        from creopdm.utils.zip_import import MAX_ZIP_IMPORT_BYTES
 
         batch_total = int(payload.client_total or 0) or len(jobs)
         comment = resolve_add_commit_message(
@@ -1979,6 +1983,180 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         )
         # Prefer client-supplied id (one Add → many /add-paths); else one per request.
         import_batch_id = (payload.import_batch_id or "").strip()[:80] or str(uuid.uuid4())
+        job_id = (payload.job_id or "").strip()
+
+        # Large folder Adds: one store-only zip → from-zip (same pipe as Compressed data…).
+        if len(jobs) >= ADD_PATHS_ZIP_MIN_FILES:
+            zip_tmp: Path | None = None
+            try:
+                fd, raw_name = tempfile.mkstemp(prefix="creopdm-add-", suffix=".zip")
+                os.close(fd)
+                zip_tmp = Path(raw_name)
+                packed = 0
+                with zipfile.ZipFile(zip_tmp, "w", compression=zipfile.ZIP_STORED) as zf:
+                    for path, rel in jobs:
+                        arc = str(rel or path.name).replace("\\", "/").lstrip("/")
+                        if not arc:
+                            continue
+                        zf.write(path, arcname=arc)
+                        packed += 1
+                if packed <= 0:
+                    logger.warning("Agent add-paths zip: nothing packed (%s jobs)", len(jobs))
+                else:
+                    try:
+                        zip_size = zip_tmp.stat().st_size
+                    except OSError as exc:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Could not read packed zip: {exc}",
+                        ) from exc
+                    if zip_size > MAX_ZIP_IMPORT_BYTES:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="That add is larger than the 2 GB zip limit.",
+                        )
+                    url = f"{base}/api/products/{quote(product_id)}/objects/from-zip"
+                    data: dict[str, str] = {
+                        "zip_bytes": str(zip_size),
+                        # Paths already include parent_folder / keep-root — do not strip.
+                        "strip_single_root": "0",
+                    }
+                    if comment:
+                        data["comment"] = comment
+                    if job_id:
+                        data["job_id"] = job_id
+                    logger.info(
+                        "Agent add-paths zip: packing %s file(s) (%s bytes) → from-zip",
+                        packed,
+                        zip_size,
+                    )
+                    zip_timeout = httpx.Timeout(
+                        connect=30.0, read=3600.0, write=3600.0, pool=30.0
+                    )
+                    try:
+                        with zip_tmp.open("rb") as handle:
+                            files = {
+                                "file": (
+                                    "add-paths.zip",
+                                    handle,
+                                    "application/zip",
+                                ),
+                            }
+                            with httpx.Client(
+                                timeout=zip_timeout, follow_redirects=True
+                            ) as client:
+                                response = client.post(
+                                    url,
+                                    headers=headers,
+                                    data=data,
+                                    files=files,
+                                )
+                    except httpx.HTTPError as exc:
+                        message = f"Could not reach CreoPDM: {exc}"
+                        logger.warning("Agent add-paths zip NETWORK: %s", message)
+                        for path, _rel in jobs:
+                            failed.append(
+                                BatchAddItem(
+                                    filename=path.name,
+                                    code="NETWORK",
+                                    message=message,
+                                )
+                            )
+                        return AddPathsResponse(ok=ok, failed=failed)
+                    if response.status_code >= 400:
+                        detail = ""
+                        try:
+                            body = response.json()
+                            detail = (
+                                body.get("error", {}).get("message")
+                                or body.get("detail")
+                                or response.text
+                            )
+                        except Exception:
+                            detail = response.text[:300]
+                        message = detail or f"CreoPDM returned {response.status_code}"
+                        logger.warning(
+                            "Agent add-paths zip HTTP %s: %s",
+                            response.status_code,
+                            message,
+                        )
+                        for path, _rel in jobs:
+                            failed.append(
+                                BatchAddItem(
+                                    filename=path.name,
+                                    code="HTTP_ERROR",
+                                    message=message,
+                                )
+                            )
+                        return AddPathsResponse(ok=ok, failed=failed)
+                    try:
+                        body = response.json()
+                    except Exception:
+                        for path, _rel in jobs:
+                            failed.append(
+                                BatchAddItem(
+                                    filename=path.name,
+                                    code="BAD_RESPONSE",
+                                    message="CreoPDM returned an invalid response.",
+                                )
+                            )
+                        return AddPathsResponse(ok=ok, failed=failed)
+                    by_rel = {
+                        rel.replace("\\", "/").lstrip("/").lower(): path
+                        for path, rel in jobs
+                    }
+                    by_name: dict[str, Path] = {}
+                    for path, _rel in jobs:
+                        by_name.setdefault(path.name.lower(), path)
+                    for item in body.get("ok") or []:
+                        if not isinstance(item, dict):
+                            continue
+                        rel = (
+                            str(item.get("relative_path") or "")
+                            .replace("\\", "/")
+                            .strip()
+                            .lstrip("/")
+                        )
+                        abs_path = by_rel.get(rel.lower()) if rel else None
+                        if abs_path is None:
+                            tip = str(item.get("filename") or "").strip()
+                            abs_path = by_name.get(tip.lower()) if tip else None
+                        ok.append(
+                            BatchAddItem(
+                                uuid=str(item.get("uuid") or ""),
+                                filename=str(item.get("filename") or ""),
+                                status=str(item.get("status") or "added"),
+                                path=str(abs_path) if abs_path is not None else "",
+                                relative_path=rel
+                                or str(item.get("relative_path") or ""),
+                            )
+                        )
+                    for item in body.get("failed") or []:
+                        if not isinstance(item, dict):
+                            continue
+                        fail_item = BatchAddItem(
+                            uuid=str(item.get("uuid") or ""),
+                            filename=str(item.get("filename") or ""),
+                            code=str(item.get("code") or "FAILED"),
+                            message=str(item.get("message") or "The file was not added."),
+                        )
+                        failed.append(fail_item)
+                    logger.info(
+                        "Agent add-paths zip done: ok=%s failed=%s",
+                        len(ok),
+                        len(failed),
+                    )
+                    return AddPathsResponse(ok=ok, failed=failed)
+            finally:
+                if zip_tmp is not None:
+                    try:
+                        zip_tmp.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+
+        url = f"{base}/api/products/{quote(product_id)}/objects/from-uploads"
+        # Small chunks avoid reverse-proxy body limits on Snagit media batches.
+        chunk_size = 5
         with httpx.Client(timeout=600.0, follow_redirects=True) as client:
             for offset in range(0, len(jobs), chunk_size):
                 chunk = jobs[offset : offset + chunk_size]

@@ -116,9 +116,15 @@ def plan_zip_import_jobs(
     parent_folder: str = "",
     purgeable_extensions: list[str] | None = None,
     ignore_patterns: list[str] | None = None,
+    strip_single_root: bool = True,
 ) -> list[tuple[Path, str, str]]:
-    """Build (source, stored_name, relative) jobs under parent_folder after strip-root."""
-    import_root = strip_single_zip_root(extract_dir)
+    """Build (source, stored_name, relative) jobs under parent_folder after strip-root.
+
+    ``strip_single_root`` is True for Compressed data… (user zip with one outer
+    folder). Agent-packed Add folders zips pass False so Keep chosen folder name
+    is not stripped away.
+    """
+    import_root = strip_single_zip_root(extract_dir) if strip_single_root else extract_dir
     selected = CreoFileManager.list_latest_in_folder(
         import_root,
         purgeable_extensions,

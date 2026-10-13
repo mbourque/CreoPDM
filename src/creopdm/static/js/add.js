@@ -1222,6 +1222,8 @@ window.__creopdmModules.add = {
               : "Adding files…",
           async () => {
             const out = await (async () => {
+              // Keep in sync with ADD_PATHS_ZIP_MIN_FILES in creopdm_agent/server.py.
+              const ADD_PATHS_ZIP_MIN = 50;
               async function addAgentPathChunks(paths, baseFolder, commentOnce, batchOpts) {
                 const agent = await probeCreoAgent();
                 if (!agent) {
@@ -1253,39 +1255,105 @@ window.__creopdmModules.add = {
                     count: batchTotal,
                     singleName: total === 1 ? basenameOf(list[0]) : "",
                   });
+                const postAddPaths = async (chunk, offset, extra) => {
+                  const response = await fetch(`${agentBase()}/add-paths`, {
+                    method: "POST",
+                    headers: agentAuthHeaders({ "Content-Type": "application/json" }),
+                    body: JSON.stringify({
+                      pdm_url: window.location.origin,
+                      ...agentPdmAuth(),
+                      product_id: productId,
+                      absolute_paths: chunk,
+                      base_folder: baseFolder || "",
+                      keep_root_folder: keepRootFolder(),
+                      parent_folder: parentFolder,
+                      comment: effectiveComment || null,
+                      client_offset: offset,
+                      client_total: batchTotal,
+                      import_batch_id: importBatchId,
+                      purgeable_extensions: [...purgeableExtensionSet()],
+                      ...(extra && typeof extra === "object" ? extra : {}),
+                    }),
+                  });
+                  return response;
+                };
+                const failChunk = (chunk, code, message) => {
+                  chunk.forEach((path) => {
+                    combined.failed.push({
+                      filename: basenameOf(path),
+                      code,
+                      message,
+                    });
+                  });
+                };
+                // Large Adds: one agent pack → from-zip (not 25× /add-paths × 5 uploads).
+                if (total >= ADD_PATHS_ZIP_MIN) {
+                  setBusyMessage(`Packing ${total} files into a zip…`);
+                  const pollAbort = new AbortController();
+                  let jobId = "";
+                  try {
+                    const jobResponse = await fetch(
+                      `/api/products/${encodeURIComponent(productId)}/zip-import/jobs`,
+                      { method: "POST" }
+                    );
+                    if (jobResponse.ok) {
+                      const job = await jobResponse.json();
+                      jobId = String(job.job_id || "").trim();
+                      if (job.message) setBusyMessage(job.message);
+                    }
+                  } catch {
+                    /* progress optional — still pack+upload */
+                  }
+                  const pollPromise = jobId
+                    ? pollZipImportJob(productId, jobId, { signal: pollAbort.signal })
+                    : Promise.resolve(null);
+                  let response;
+                  try {
+                    response = await postAddPaths(list, 0, jobId ? { job_id: jobId } : {});
+                  } catch (exc) {
+                    pollAbort.abort();
+                    failChunk(list, "NETWORK", exc?.message || "Could not reach creopdm-agent.");
+                    return combined;
+                  } finally {
+                    pollAbort.abort();
+                    try {
+                      await pollPromise;
+                    } catch {
+                      /* aborted */
+                    }
+                  }
+                  if (!response.ok) {
+                    let message = `creopdm-agent returned ${response.status}`;
+                    try {
+                      message = await readError(response);
+                    } catch {
+                      /* keep status message */
+                    }
+                    failChunk(list, "HTTP_ERROR", message);
+                    return combined;
+                  }
+                  try {
+                    const body = await response.json();
+                    combined.ok.push(...(body.ok || []));
+                    combined.failed.push(...(body.failed || []));
+                  } catch (exc) {
+                    failChunk(
+                      list,
+                      "BAD_RESPONSE",
+                      exc?.message || "Invalid JSON from creopdm-agent."
+                    );
+                  }
+                  return combined;
+                }
                 for (let offset = 0; offset < list.length; offset += chunkSize) {
                   const chunk = list.slice(offset, offset + chunkSize);
                   const done = Math.min(offset + chunk.length, total);
                   setBusyMessage(`Adding files… ${done} of ${total}`);
                   let response;
                   try {
-                    response = await fetch(`${agentBase()}/add-paths`, {
-                      method: "POST",
-                      headers: agentAuthHeaders({ "Content-Type": "application/json" }),
-                      body: JSON.stringify({
-                        pdm_url: window.location.origin,
-                        ...agentPdmAuth(),
-                        product_id: productId,
-                        absolute_paths: chunk,
-                        base_folder: baseFolder || "",
-                        keep_root_folder: keepRootFolder(),
-                        parent_folder: parentFolder,
-                        comment: effectiveComment || null,
-                        client_offset: offset,
-                        client_total: batchTotal,
-                        import_batch_id: importBatchId,
-                        purgeable_extensions: [...purgeableExtensionSet()],
-                      }),
-                    });
+                    response = await postAddPaths(chunk, offset);
                   } catch (exc) {
-                    const message = exc?.message || "Could not reach creopdm-agent.";
-                    chunk.forEach((path) => {
-                      combined.failed.push({
-                        filename: basenameOf(path),
-                        code: "NETWORK",
-                        message,
-                      });
-                    });
+                    failChunk(chunk, "NETWORK", exc?.message || "Could not reach creopdm-agent.");
                     continue;
                   }
                   if (!response.ok) {
@@ -1295,31 +1363,20 @@ window.__creopdmModules.add = {
                     } catch {
                       /* keep status message */
                     }
-                    chunk.forEach((path) => {
-                      combined.failed.push({
-                        filename: basenameOf(path),
-                        code: "HTTP_ERROR",
-                        message,
-                      });
-                    });
+                    failChunk(chunk, "HTTP_ERROR", message);
                     continue;
                   }
-                  let body = {};
                   try {
-                    body = await response.json();
+                    const body = await response.json();
+                    combined.ok.push(...(body.ok || []));
+                    combined.failed.push(...(body.failed || []));
                   } catch (exc) {
-                    const message = exc?.message || "Invalid JSON from creopdm-agent.";
-                    chunk.forEach((path) => {
-                      combined.failed.push({
-                        filename: basenameOf(path),
-                        code: "BAD_RESPONSE",
-                        message,
-                      });
-                    });
-                    continue;
+                    failChunk(
+                      chunk,
+                      "BAD_RESPONSE",
+                      exc?.message || "Invalid JSON from creopdm-agent."
+                    );
                   }
-                  combined.ok.push(...(body.ok || []));
-                  combined.failed.push(...(body.failed || []));
                 }
                 return combined;
               }
