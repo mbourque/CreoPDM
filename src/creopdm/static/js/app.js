@@ -366,7 +366,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function hideBusyOverlay() {
     const busyOverlay = busyOverlayEl();
     if (!(busyOverlay instanceof HTMLDialogElement)) return;
-    if (busyOverlay.open) busyOverlay.close();
+    if (busyOverlay.open) {
+      // Mark programmatic close so the deferred dialog "close" event does not
+      // look like a stuck overlay and invokeBusyCancel the *next* job (Rebuild
+      // metadata: Discard clearBusy → Collect setBusyCancelHandler → cancel@0).
+      busyOverlay.dataset.intentionalClose = "1";
+      busyOverlay.close();
+    }
   }
   function setBusyMessage(message) {
     const text = document.getElementById("busy-message");
@@ -391,6 +397,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     document.body.removeAttribute("aria-busy");
   }
   function recoverStuckBusyOverlay() {
+    const busyOverlay = busyOverlayEl();
+    // Programmatic hideBusyOverlay/close — not Escape / user dismiss.
+    if (busyOverlay?.dataset?.intentionalClose === "1") {
+      delete busyOverlay.dataset.intentionalClose;
+      return;
+    }
     // Dialog closed while depth > 0 (stale listener / browser quirk). Unstick UI only.
     if (busyDepth <= 0) return;
     if (typeof busyCancelHandler === "function") {

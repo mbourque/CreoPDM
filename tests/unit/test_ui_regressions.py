@@ -501,6 +501,9 @@ def test_metadata_gear_items_require_creo_session():
     assert "materializeCheckedOutToAgentCache(ids" in loop
     assert "Updating local workspace…" in loop
     assert "Empty local workspace" in loop
+    assert "busyAlready" in loop
+    assert 'dataset.intentionalClose = "1"' in script or "intentionalClose" in script
+    assert "cannot cancel@0" in loop or "cancel@0" in loop
     assert "async function attachCollectLocalPaths(" in ws_js
     assert "Checking local workspace tips…" in ws_js
     assert "flushPendingMetadataErase" in loop

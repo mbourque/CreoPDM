@@ -565,24 +565,24 @@ window.__creopdmModules.metadata = {
       }
     }
 
-    async function runMetadataCollectLoop(state) {
+    async function runMetadataCollectLoop(state, options = {}) {
       if (metadataCollectJob.running) return;
       const targets = Array.isArray(state.targets) ? state.targets : [];
       if (!targets.length) {
         saveMetadataCollectState(null);
         return;
       }
+      const busyAlready = Boolean(options && options.busyAlready);
       metadataCollectJob.running = true;
       metadataCollectJob.cancel = false;
       syncMetadataCollectControls();
       showError($("#toolbar-error"), "");
-      setBusy("Collecting Creo metadata…");
-      // Same Escape cancel as Where Used — stops between models; clears overlay via finally.
-      setBusyCancelHandler(() => {
-        metadataCollectJob.cancel = true;
-        publishBusyMessage("Cancelling metadata collection…");
-        showOk("Cancelling metadata collection…");
-      });
+      if (busyAlready) {
+        setBusyMessage("Collecting Creo metadata…");
+        publishBusyMessage("Collecting Creo metadata…");
+      } else {
+        setBusy("Collecting Creo metadata…");
+      }
       let index = Math.max(0, Number(state.index) || 0);
       let captured = Number(state.captured) || 0;
       let failed = Number(state.failed) || 0;
@@ -643,6 +643,13 @@ window.__creopdmModules.metadata = {
           setBusyMessage("Checking local workspace tips…");
           await attachCollectLocalPaths(state.productId, targets);
         }
+        // Register Escape cancel only once rematerialize/path warm finished — a deferred
+        // busy-overlay "close" from Discard must not cancel@0 before the tip loop.
+        setBusyCancelHandler(() => {
+          metadataCollectJob.cancel = true;
+          publishBusyMessage("Cancelling metadata collection…");
+          showOk("Cancelling metadata collection…");
+        });
         while (index < targets.length) {
           if (metadataCollectJob.cancel) break;
           const target = targets[index];
@@ -816,9 +823,13 @@ window.__creopdmModules.metadata = {
       });
       if (!okToStart) return;
 
+      let busyOwned = false;
       if (rebuild) {
         // Metadata JSON / parameters / AI snaps only — never file rows or Where Used edges.
+        // Keep this busy overlay through rematerialize/Collect — clearBusy+reopen raced the
+        // dialog "close" handler into Cancelling metadata collection… at 0 of N.
         setBusy("Discarding Creo metadata…");
+        busyOwned = true;
         try {
           const clearResponse = await fetch(
             `/api/products/${encodeURIComponent(productId)}/clear-creo-metadata`,
@@ -829,6 +840,7 @@ window.__creopdmModules.metadata = {
               $("#toolbar-error"),
               `Could not discard metadata: ${await readError(clearResponse)}`
             );
+            clearBusy();
             return;
           }
         } catch (err) {
@@ -836,9 +848,8 @@ window.__creopdmModules.metadata = {
             $("#toolbar-error"),
             `Could not discard metadata: ${err?.message || err || "request failed"}`
           );
-          return;
-        } finally {
           clearBusy();
+          return;
         }
         // Drop a paused Collect so we do not resume a stale skip-list mid-rebuild.
         saveMetadataCollectState(null);
@@ -855,7 +866,7 @@ window.__creopdmModules.metadata = {
         updatedAt: Date.now(),
       };
       saveMetadataCollectState(state);
-      await runMetadataCollectLoop(state);
+      await runMetadataCollectLoop(state, { busyAlready: busyOwned });
     }
 
     async function runRebuildAllMetadata(productId) {
