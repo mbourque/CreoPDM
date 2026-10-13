@@ -14,9 +14,97 @@ def test_domains_for_filename_by_extension():
     assert "mass" in domains_for_filename("wedge.prt")
     assert "materials" in domains_for_filename("wedge.prt.3")
     assert "structure" in domains_for_filename("top.asm")
+    assert "bom" in domains_for_filename("top.asm")
+    assert "bom" in domains_for_filename("frame.asm.2")
+    assert "bom" not in domains_for_filename("wedge.prt")
     assert "drawing" in domains_for_filename("wedge.drw")
     assert "mfg" in domains_for_filename("basic-milling1.mfg")
     assert "features" in domains_for_filename("notes.txt")
+
+
+def test_map_assembly_collect_includes_nested_bom():
+    """Toolkit bom domain → Creo.JS-shaped ASSEMBLY_ROOT tree on snapshot.bom."""
+    snap = map_toolkit_collect_to_snapshot(
+        {
+            "ok": True,
+            "fileName": "main.asm",
+            "domains": {
+                "identity": {
+                    "ok": True,
+                    "identity": {"file_name": "main.asm", "model_type": "ASSEMBLY"},
+                },
+                "parameters": {"ok": True, "parameters": []},
+                "structure": {"ok": True, "features": []},
+                "bom": {
+                    "ok": True,
+                    "partial": False,
+                    "maxDepth": 6,
+                    "bom": [
+                        {
+                            "filename": "main.asm",
+                            "quantity": 1,
+                            "dependency_type": "ASSEMBLY_ROOT",
+                            "type": "ASSEMBLY",
+                            "expanded": True,
+                            "children": [
+                                {
+                                    "filename": "base-plate.prt",
+                                    "quantity": 1,
+                                    "dependency_type": "ASSEMBLY_MEMBER",
+                                    "type": "PART",
+                                    "children": [],
+                                },
+                                {
+                                    "filename": "bracket.asm",
+                                    "quantity": 2,
+                                    "dependency_type": "ASSEMBLY_MEMBER",
+                                    "type": "ASSEMBLY",
+                                    "expanded": True,
+                                    "children": [
+                                        {
+                                            "filename": "arm.prt",
+                                            "quantity": 1,
+                                            "dependency_type": "ASSEMBLY_MEMBER",
+                                            "type": "PART",
+                                            "children": [],
+                                        }
+                                    ],
+                                },
+                                {
+                                    "filename": "skel.prt",
+                                    "quantity": 1,
+                                    "dependency_type": "ASSEMBLY_MEMBER",
+                                    "type": "SKELETON",
+                                    "children": [],
+                                },
+                                {
+                                    "filename": "600640041454.prt",
+                                    "quantity": 1,
+                                    "dependency_type": "ASSEMBLY_MEMBER",
+                                    "type": "HARNESS",
+                                    "children": [],
+                                },
+                            ],
+                        }
+                    ],
+                },
+            },
+        }
+    )
+    assert snap is not None
+    bom = snap["bom"]
+    assert isinstance(bom, list) and len(bom) == 1
+    root = bom[0]
+    assert root["filename"] == "main.asm"
+    assert root["dependency_type"] == "ASSEMBLY_ROOT"
+    assert root["quantity"] == 1.0
+    names = {child["filename"]: child for child in root["children"]}
+    assert names["base-plate.prt"]["quantity"] == 1.0
+    assert names["bracket.asm"]["quantity"] == 2.0
+    assert names["bracket.asm"]["children"][0]["filename"] == "arm.prt"
+    assert names["skel.prt"]["type"] == "SKELETON"
+    assert names["600640041454.prt"]["type"] == "HARNESS"
+    assert snap["ai_snapshot"]["bom"][0]["filename"] == "main.asm"
 
 
 def test_map_part_collect_identity_features_mass():

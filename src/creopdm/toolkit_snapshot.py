@@ -30,7 +30,8 @@ def domains_for_filename(filename: str) -> str:
     if name.endswith(".drw"):
         return "identity,parameters,drawing,units"
     if name.endswith(".asm"):
-        return "identity,parameters,features,structure,constraints,units"
+        # bom is opt-in on Toolkit /collect defaults; CreoPDM asks for it on .asm.
+        return "identity,parameters,features,structure,bom,constraints,units"
     if name.endswith(".prt"):
         return "identity,parameters,features,materials,mass,units"
     return "identity,parameters,features,units"
@@ -214,6 +215,67 @@ def normalize_toolkit_feature_rows(
     return out
 
 
+def _bom_node_filename(node: dict[str, Any]) -> str:
+    for key in ("filename", "file_name", "fileName", "name", "model_name"):
+        value = node.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def normalize_toolkit_bom_node(node: dict[str, Any]) -> dict[str, Any] | None:
+    """Align Toolkit /bom nodes with Creo.JS creoGatherBomTree shape."""
+    filename = _bom_node_filename(node)
+    if not filename:
+        return None
+    try:
+        qty = float(node.get("quantity") if node.get("quantity") is not None else 1.0)
+    except (TypeError, ValueError):
+        qty = 1.0
+    dep = str(node.get("dependency_type") or "ASSEMBLY_MEMBER").strip() or "ASSEMBLY_MEMBER"
+    children_raw = node.get("children")
+    children: list[dict[str, Any]] = []
+    if isinstance(children_raw, list):
+        for child in children_raw:
+            if not isinstance(child, dict):
+                continue
+            normalized = normalize_toolkit_bom_node(child)
+            if normalized is not None:
+                children.append(normalized)
+    out: dict[str, Any] = {
+        "filename": filename,
+        "quantity": qty,
+        "dependency_type": dep,
+        "children": children,
+    }
+    # Optional Toolkit extras (Details / AI ignore unknown keys; keep type for UI).
+    typ = str(node.get("type") or "").strip()
+    if typ:
+        out["type"] = typ
+    if "expanded" in node:
+        out["expanded"] = bool(node.get("expanded"))
+    leaf_reason = node.get("leaf_reason")
+    if isinstance(leaf_reason, str) and leaf_reason.strip():
+        out["leaf_reason"] = leaf_reason.strip()
+    return out
+
+
+def normalize_toolkit_bom(
+    rows: list[Any] | None,
+) -> list[dict[str, Any]] | None:
+    """Return Creo.JS-shaped BOM tree (one ASSEMBLY_ROOT wrapper) or None."""
+    if rows is None:
+        return None
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        normalized = normalize_toolkit_bom_node(row)
+        if normalized is not None:
+            out.append(normalized)
+    return out or None
+
+
 _MASS_KEY_ALIASES = {
     "mass": "mass",
     "volume": "volume",
@@ -385,6 +447,14 @@ def map_toolkit_collect_to_snapshot(
         )
     )
 
+    bom_block = _ok_domain(payload, "bom")
+    bom = normalize_toolkit_bom(
+        _list_field(bom_block, "bom", "tree", "nodes", "items", "children")
+    )
+    # Toolkit may put a single root object under domains.bom.bom instead of a list.
+    if bom is None and bom_block and isinstance(bom_block.get("bom"), dict):
+        bom = normalize_toolkit_bom([bom_block["bom"]])
+
     drawing_block = _ok_domain(payload, "drawing")
     if drawing_block:
         draw_feats = _list_field(drawing_block, "features")
@@ -467,7 +537,7 @@ def map_toolkit_collect_to_snapshot(
         "units": units,
         "mass": mass,
         "family_table": None,
-        "bom": None,
+        "bom": bom,
         "structure": structure,
         "simp_reps": simp_reps,
         "constraints": constraints,
@@ -479,7 +549,7 @@ def map_toolkit_collect_to_snapshot(
         "parameters": parameters,
         "materials": materials,
         "dependencies": [],
-        "bom": None,
+        "bom": bom,
         "units": units,
         "mass": mass,
         "family_table": None,
