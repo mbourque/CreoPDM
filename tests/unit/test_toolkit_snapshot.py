@@ -148,3 +148,30 @@ def test_toolkit_structure_component_tips_survive_noise_filter():
     names = {row["name"] for row in kept}
     assert names == {"shaft.prt", "bracket.asm"}
     assert {row["type"] for row in kept} == {"PART", "ASSEMBLY"}
+
+
+def test_toolkit_structure_preserves_skeleton_type_on_prt_tip():
+    """Regression: .prt tip must not overwrite Toolkit SKELETON → PART."""
+    by_type = normalize_toolkit_structure_row(
+        {
+            "name": "600610010001.prt",
+            "type": "SKELETON",
+            "subtype": "SKELETON",
+            "is_skeleton": True,
+            "level": 1,
+        }
+    )
+    assert by_type["type"] == "SKELETON"
+    assert by_type["subtype"] == "SKELETON"
+    assert filter_assembly_structure_rows([by_type]) == [by_type]
+
+    by_flag = normalize_toolkit_structure_row(
+        {"name": "skel.prt", "type": "PART", "is_skeleton": True, "level": 1}
+    )
+    assert by_flag["type"] == "SKELETON"
+    assert by_flag["subtype"] == "SKELETON"
+
+    by_sub = normalize_toolkit_structure_row(
+        {"name": "skel.prt", "type": "COMPONENT", "subtype": "SKELETON", "level": 1}
+    )
+    assert by_sub["type"] == "SKELETON"
