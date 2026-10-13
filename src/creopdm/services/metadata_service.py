@@ -50,8 +50,6 @@ _DRAWING_PARENT = "CREO_DRAWING"
 _ASSEMBLY_TYPE = "CREO_ASSEMBLY"
 # FeatSubType placeholders — not model-tree names (Round→ROUND, Chamfer→CHAMFER).
 _GENERIC_FEATURE_NAME_LABELS = frozenset({"general", "none", "default", "edge"})
-# Creo GetName() placeholders for unnamed / IFX internals (Toolkit also skips these).
-_PLACEHOLDER_FEATURE_NAMES = frozenset({"no_name", "unnamed"})
 
 
 _FEATURES_JSON_ENVELOPE_VERSION = 1
@@ -148,7 +146,7 @@ def pack_features_json(
         if constraints is not None and isinstance(constraints, dict):
             envelope["constraints"] = dict(constraints)
         if relations is not None and isinstance(relations, dict):
-            envelope["relations"] = scrub_relations_placeholder_names(relations)
+            envelope["relations"] = dict(relations)
         return envelope
     return feat_list
 
@@ -181,55 +179,15 @@ def unpack_features_json(
         cons_raw = raw.get("constraints")
         constraints = dict(cons_raw) if isinstance(cons_raw, dict) else None
         rel_raw = raw.get("relations")
-        relations = (
-            scrub_relations_placeholder_names(rel_raw)
-            if isinstance(rel_raw, dict)
-            else None
-        )
+        relations = dict(rel_raw) if isinstance(rel_raw, dict) else None
         return features, structure, simp_reps, constraints, relations
     if isinstance(raw, list):
         return normalize_feature_rows(raw), None, None, None, None
     return None, None, None, None, None
 
 
-def _is_dropped_feature_row(row: dict[str, Any]) -> bool:
-    """True for Toolkit-invisible rows or Creo no_name / unnamed placeholders."""
-    if row.get("visible") is False:
-        return True
-    name = str(row.get("name") or "").strip().lower()
-    return name in _PLACEHOLDER_FEATURE_NAMES
-
-
-def scrub_relations_placeholder_names(
-    relations: dict[str, Any] | None,
-) -> dict[str, Any] | None:
-    """Keep relation text; clear feature_name when it is no_name / unnamed."""
-    if not isinstance(relations, dict):
-        return relations
-    out = dict(relations)
-    feats = out.get("features")
-    if not isinstance(feats, list):
-        return out
-    cleaned: list[Any] = []
-    for item in feats:
-        if not isinstance(item, dict):
-            cleaned.append(item)
-            continue
-        row = dict(item)
-        fn = str(row.get("feature_name") or "").strip().lower()
-        if fn in _PLACEHOLDER_FEATURE_NAMES:
-            row["feature_name"] = None
-        cleaned.append(row)
-    out["features"] = cleaned
-    return out
-
-
 def normalize_feature_rows(features: Any) -> list[dict[str, Any]]:
-    """Replace subtype placeholders used as Name; keep real Creo feature.name values.
-
-    Drops Toolkit-invisible rows and Creo ``no_name`` / ``unnamed`` placeholders so
-    older Collect payloads no longer surface those on Details Features.
-    """
+    """Replace subtype placeholders used as Name; keep real Creo feature.name values."""
     if not isinstance(features, list):
         return []
     out: list[dict[str, Any]] = []
@@ -237,8 +195,6 @@ def normalize_feature_rows(features: Any) -> list[dict[str, Any]]:
         if not isinstance(feat, dict):
             continue
         row = dict(feat)
-        if _is_dropped_feature_row(row):
-            continue
         name = str(row.get("name") or "").strip()
         typ = str(row.get("type") or "").strip()
         sub = str(row.get("subtype") or "").strip()
