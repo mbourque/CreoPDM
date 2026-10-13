@@ -315,6 +315,9 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     # Two History snaps, or one snap + live Modified → compare chrome.
     assert "n >= 2 || (n >= 1 && isModified)" in script
     assert "const n = aiSnapshotCompareVersions.length" in script
+    assert "tipMissingSnap" in script
+    assert "has a snapshot, but" in script
+    assert "Collect metadata on this tip" in script
     assert "await copyTextToClipboard(text)" in script
     # Must not bail out silently when Clipboard API is missing (Creo embedded).
     assert "!navigator.clipboard?.writeText" not in script

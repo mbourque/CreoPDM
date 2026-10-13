@@ -1566,6 +1566,11 @@ window.__creopdmModules.modifications = {
         }
         aiSnapshotIncludeModified = Boolean(isModified);
         const n = aiSnapshotCompareVersions.length;
+        const tipId = String(panel.dataset.tipVersion || "").trim();
+        const tipListRow = tipId
+          ? items.find((row) => String(row?.version_id || "") === tipId)
+          : null;
+        const tipMissingSnap = Boolean(tipListRow && !tipListRow.has_snapshot);
         // Two+ History snaps, or one snap with live Modified → enabled OLD/NEW chrome.
         const mode =
           n >= 2 || (n >= 1 && isModified) ? "compare" : "pending";
@@ -1584,7 +1589,29 @@ window.__creopdmModules.modifications = {
           );
           return;
         }
-        const tipId = String(panel.dataset.tipVersion || "").trim();
+        // Tip is A.2 in History but Check In/Collect never stored an AI snap —
+        // dropdown only lists has_snapshot rows (A.1). Tell the user how to fill A.2.
+        if (tipMissingSnap && !isModified) {
+          const tipRev = String(tipListRow?.display_revision || "tip").trim();
+          const haveRev = String(
+            aiSnapshotCompareVersions[0]?.display_revision || "earlier"
+          ).trim();
+          setAiSnapshotPlainBody(
+            $("#ai-snapshot-body-a"),
+            $("#ai-snapshot-copy-a"),
+            `${haveRev} has a snapshot, but ${tipRev} does not.\n\n`
+              + "Collect metadata on this tip while Creo is Connected (Toolkit), "
+              + "then reopen Modifications to compare History revisions.",
+            false
+          );
+          setAiSnapshotPendingPlaceholder(
+            $("#ai-snapshot-body-b"),
+            $("#ai-snapshot-copy-b"),
+            aiSnapshotPendingCleanPlaceholder()
+          );
+          fillAiSnapshotPendingSelects();
+          return;
+        }
         if (n >= 2) {
           if (isModified) {
             // Default NEW = Modified; OLD = tip History snap (e.g. A.2).
