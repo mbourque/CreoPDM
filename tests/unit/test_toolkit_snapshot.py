@@ -4,6 +4,8 @@ from creopdm.services.metadata_service import filter_assembly_structure_rows
 from creopdm.toolkit_snapshot import (
     domains_for_filename,
     map_toolkit_collect_to_snapshot,
+    nest_drawing_inventory_by_sheet,
+    normalize_toolkit_feature_rows,
     normalize_toolkit_mass,
     normalize_toolkit_structure_row,
     toolkit_snapshot_reject_reason,
@@ -139,6 +141,68 @@ def test_map_part_collect_identity_features_mass():
     assert snap["ai_snapshot"]["identity"]["filename"] == "wedge.prt"
     assert snap["ai_snapshot"]["capture"]["source"] == "toolkit"
     assert snap["ai_snapshot"]["mass"]["volume"] == 12.5
+
+
+def test_nest_drawing_inventory_puts_views_under_their_sheet():
+    """Regression: Toolkit dumps all SHEETs then children → outline piles under last sheet."""
+    flat = [
+        {"id": "sheet:1", "name": "Sheet 1", "type": "SHEET", "level": 1, "sheet": 1},
+        {"id": "sheet:2", "name": "Sheet 2 (CURRENT)", "type": "SHEET", "level": 1, "sheet": 2},
+        {
+            "id": "view:1",
+            "name": "new_view_1",
+            "type": "VIEW",
+            "level": 2,
+            "sheet": 1,
+        },
+        {
+            "id": "view:3",
+            "name": "new_view_3",
+            "type": "VIEW",
+            "level": 2,
+            "sheet": 2,
+        },
+        {
+            "id": "note:72",
+            "name": "Note_72",
+            "type": "NOTE",
+            "level": 2,
+            "sheet": 2,
+            "status": "DISPLAYED",
+        },
+    ]
+    nested = nest_drawing_inventory_by_sheet(flat)
+    ids = [r["id"] for r in nested]
+    assert ids == ["sheet:1", "view:1", "sheet:2", "view:3", "note:72"]
+    assert nested[0]["level"] == 1 and nested[1]["level"] == 2
+    assert nested[2]["level"] == 1 and nested[3]["level"] == 2
+
+    # Collect path applies the same nest via normalize_toolkit_feature_rows.
+    mapped = map_toolkit_collect_to_snapshot(
+        {
+            "ok": True,
+            "fileName": "gorilla-cart.drw",
+            "domains": {
+                "identity": {
+                    "ok": True,
+                    "identity": {
+                        "file_name": "gorilla-cart.drw",
+                        "model_type": "DRAWING",
+                    },
+                },
+                "parameters": {"ok": True, "parameters": []},
+                "drawing": {"ok": True, "features": flat},
+            },
+        }
+    )
+    assert [r["id"] for r in mapped["features"]] == ids
+
+
+def test_normalize_feature_rows_leaves_part_features_alone():
+    rows = normalize_toolkit_feature_rows(
+        [{"id": "95", "name": "CUT", "type": "CUT", "level": 0}]
+    )
+    assert rows == [{"id": "95", "name": "CUT", "type": "CUT", "level": 1}]
 
 
 def test_map_drawing_and_mfg_use_domain_features():

@@ -7,6 +7,7 @@ from collections import Counter
 from typing import Any
 
 from creopdm.exceptions import ValidationAppError
+from creopdm.toolkit_snapshot import nest_drawing_inventory_by_sheet
 from creopdm.utils.bom_match import normalize_bom_compare_filename
 
 # Creo pattern members often land as "Feature 15775" / IFX_ID_* with empty type.
@@ -2211,11 +2212,15 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
         views = [f for f in features if _is_view_feature(f)]
         if _drawing_has_rich_inventory(features):
             # Full drawing inventory (sheets / views / notes / tables / …).
+            # Nest by sheet so Toolkit "all sheets then all children" snapshots indent right.
             _blank_before_section(lines)
             lines.append("Drawing inventory:")
+            nested = nest_drawing_inventory_by_sheet(
+                [f for f in features if isinstance(f, dict)]
+            )
             inv_rows = [
                 f
-                for f in features
+                for f in nested
                 if _feature_type_label(f) not in {"DRAWING", "DIMENSION", "DIM"}
             ]
             if inv_rows:

@@ -484,6 +484,49 @@ def test_compare_outline_uses_drawing_inventory():
     assert "View count:" in text
 
 
+def test_compare_outline_nests_views_under_correct_sheet():
+    """Stored Toolkit snapshots list all sheets then all children — outline must re-nest."""
+    text = format_snapshot_compare_text(
+        {
+            "identity": {"filename": "gorilla-cart.drw", "model_type": "DRAWING"},
+            "features": [
+                {"id": "sheet:1", "name": "Sheet 1", "type": "SHEET", "level": 1, "sheet": 1},
+                {
+                    "id": "sheet:2",
+                    "name": "Sheet 2 (CURRENT)",
+                    "type": "SHEET",
+                    "level": 1,
+                    "sheet": 2,
+                },
+                {
+                    "id": "view:1",
+                    "name": "new_view_1",
+                    "type": "VIEW",
+                    "level": 2,
+                    "sheet": 1,
+                },
+                {
+                    "id": "view:3",
+                    "name": "new_view_3",
+                    "type": "VIEW",
+                    "level": 2,
+                    "sheet": 2,
+                },
+            ],
+            "capture": {"sheet_count": 2},
+        }
+    )
+    inv = text.split("Drawing inventory:", 1)[1]
+    # Sheet 1, then its view, then Sheet 2 — not both views under Sheet 2.
+    assert inv.index("Sheet 1") < inv.index("new_view_1") < inv.index("Sheet 2")
+    assert inv.index("Sheet 2") < inv.index("new_view_3")
+    # View under Sheet 1 is indented; bare Sheet lines are not.
+    view_line = [ln for ln in inv.splitlines() if "new_view_1" in ln][0]
+    sheet1_line = [ln for ln in inv.splitlines() if ln.strip().startswith("- Sheet 1")][0]
+    assert view_line.startswith("  -")
+    assert sheet1_line.startswith("- Sheet 1")
+
+
 def test_compare_outline_uses_assembly_structure_inventory():
     text = format_snapshot_compare_text(
         {

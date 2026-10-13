@@ -192,6 +192,122 @@ def normalize_toolkit_structure_rows(
     ]
 
 
+def _drawing_sheet_key(row: dict[str, Any]) -> str | None:
+    """Stable sheet bucket key from a SHEET row or a sheet-tagged child."""
+    sheet = row.get("sheet")
+    if sheet not in (None, ""):
+        return str(sheet).strip() or None
+    rid = str(row.get("id") or "").strip()
+    if rid.lower().startswith("sheet:"):
+        key = rid.split(":", 1)[1].strip()
+        return key or None
+    return None
+
+
+def nest_drawing_inventory_by_sheet(
+    rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Put views/notes/tables under their sheet (Toolkit often dumps sheets then children).
+
+    Outline indent uses ``level`` + list order. When every SHEET is level 1 and every
+    view/note is level 2 *after* the last sheet, the UI piles all children under Sheet N
+    even though each row already has the correct ``sheet`` field. Rebuild order/levels
+    from that field (same idea as Creo.JS ``buildDrawingInventory``).
+    """
+    if not rows:
+        return rows
+    if not any(str(r.get("type") or "").upper() == "SHEET" for r in rows):
+        return rows
+
+    roots: list[dict[str, Any]] = []
+    sheets: dict[str, dict[str, Any]] = {}
+    sheet_order: list[str] = []
+    children: dict[str, list[dict[str, Any]]] = {}
+    unassigned: list[dict[str, Any]] = []
+
+    def _remember_sheet(key: str, row: dict[str, Any] | None = None) -> None:
+        if key not in sheets:
+            sheet_order.append(key)
+            if row is not None:
+                sheets[key] = row
+            else:
+                try:
+                    sheet_num: Any = int(key)
+                except (TypeError, ValueError):
+                    sheet_num = key
+                sheets[key] = {
+                    "id": f"sheet:{key}",
+                    "name": f"Sheet {key}",
+                    "type": "SHEET",
+                    "level": 1,
+                    "sheet": sheet_num,
+                    "status": "ACTIVE",
+                }
+        elif row is not None:
+            sheets[key] = row
+
+    for row in rows:
+        item = dict(row)
+        typ = str(item.get("type") or "").upper()
+        if typ == "SHEET":
+            key = _drawing_sheet_key(item)
+            if not key:
+                roots.append(item)
+                continue
+            item["level"] = 1
+            if item.get("sheet") in (None, ""):
+                try:
+                    item["sheet"] = int(key)
+                except (TypeError, ValueError):
+                    item["sheet"] = key
+            _remember_sheet(key, item)
+            continue
+        if typ == "DRAWING":
+            item["level"] = 1
+            roots.append(item)
+            continue
+        key = _drawing_sheet_key(item)
+        if key is None:
+            unassigned.append(item)
+            continue
+        _remember_sheet(key)
+        children.setdefault(key, []).append(item)
+
+    def _sheet_sort_key(key: str) -> tuple[int, Any]:
+        try:
+            return (0, int(key))
+        except (TypeError, ValueError):
+            return (1, key)
+
+    out: list[dict[str, Any]] = list(roots)
+    for key in sorted(sheet_order, key=_sheet_sort_key):
+        sheet_row = dict(sheets[key])
+        sheet_row["level"] = 1
+        out.append(sheet_row)
+        for child in children.get(key, []):
+            nested = dict(child)
+            nested["level"] = 2
+            out.append(nested)
+
+    if unassigned:
+        out.append(
+            {
+                "id": "sheet:unassigned",
+                "name": "Unassigned sheet",
+                "type": "SHEET",
+                "level": 1,
+                "sheet": None,
+                "status": "ACTIVE",
+                "detail": "items with no sheet number",
+            }
+        )
+        for child in unassigned:
+            nested = dict(child)
+            nested["level"] = 2
+            out.append(nested)
+    return out
+
+
 def normalize_toolkit_feature_rows(
     rows: list[Any] | None,
 ) -> list[dict[str, Any]] | None:
@@ -212,6 +328,8 @@ def normalize_toolkit_feature_rows(
             level_n = 1
         item["level"] = level_n
         out.append(item)
+    if any(str(i.get("type") or "").upper() == "SHEET" for i in out):
+        out = nest_drawing_inventory_by_sheet(out)
     return out
 
 
