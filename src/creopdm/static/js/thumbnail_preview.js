@@ -229,6 +229,11 @@
     if (ev.key === "Escape") hide();
   }
 
+  function onContextMenu() {
+    // Files right-click menu must not sit under the hover preview.
+    hide();
+  }
+
   function onClick(ev) {
     if (!(ev.pointerType === "touch" || (!ev.pointerType && "ontouchstart" in window))) {
       return;
@@ -260,6 +265,7 @@
     document.addEventListener("focusin", onFocusIn, true);
     document.addEventListener("focusout", onFocusOut, true);
     document.addEventListener("keydown", onKeyDown, true);
+    document.addEventListener("contextmenu", onContextMenu, true);
     document.addEventListener("click", onClick, true);
     window.addEventListener("scroll", hide, true);
     window.addEventListener("resize", hide);

@@ -2106,6 +2106,26 @@ def test_files_context_menu_download_to_workspace():
     assert "without `objects.view`" in docs or "`objects.view`" in docs
 
 
+def test_thumb_preview_hides_for_files_context_menu():
+    """Regression: hover thumbnail must not cover the Files right-click menu."""
+    thumb_js = (
+        ROOT / "src" / "creopdm" / "static" / "js" / "thumbnail_preview.js"
+    ).read_text(encoding="utf-8")
+    css = APP_CSS.read_text(encoding="utf-8")
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert 'addEventListener("contextmenu", onContextMenu' in thumb_js
+    assert "onContextMenu" in thumb_js
+    hide_fn = _between(thumb_js, "function onContextMenu(", "function onClick(")
+    assert "hide()" in hide_fn
+    menu_block = _between(css, ".files-context-menu {", ".files-context-menu[hidden]")
+    thumb_block = _between(css, ".thumb-preview {", ".thumb-preview img {")
+    menu_z = int(re.search(r"z-index:\s*(\d+)", menu_block).group(1))
+    thumb_z = int(re.search(r"z-index:\s*(\d+)", thumb_block).group(1))
+    assert menu_z > thumb_z
+    assert "right-click" in docs.lower()
+    assert "covering the right-click menu" in docs
+
+
 def test_folder_row_click_selects_double_click_opens():
     """Regression: folder name link opens; row chrome selects; double-click opens."""
     script = _app_js()

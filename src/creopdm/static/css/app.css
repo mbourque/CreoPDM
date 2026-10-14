@@ -1315,10 +1315,11 @@ span.object-open:hover { text-decoration: underline; }
 .toolbar-menu-item.is-danger { color: #9b1c1c; }
 .toolbar-menu-item.is-danger:hover:not(:disabled) { background: #fdf2f2; }
 
-/* Files list right-click menu (replaces browser context menu when offered). */
+/* Files list right-click menu (replaces browser context menu when offered).
+   Above .thumb-preview (1200) so a linger hover cannot cover the menu. */
 .files-context-menu {
   position: fixed;
-  z-index: 200;
+  z-index: 1300;
   min-width: 12.5rem;
   max-width: min(22rem, calc(100vw - 1rem));
   padding: 0.25rem;
