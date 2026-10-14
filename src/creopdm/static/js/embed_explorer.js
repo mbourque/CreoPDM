@@ -12,11 +12,7 @@
   var searchEl = document.getElementById("ex-search");
   var bannerEl = document.getElementById("ex-banner");
   var msgEl = document.getElementById("ex-msg");
-  var actionsEl = document.getElementById("ex-actions");
-  var selNameEl = document.getElementById("ex-sel-name");
-  var openBtn = document.getElementById("ex-open");
-  var checkoutBtn = document.getElementById("ex-checkout");
-  var checkinBtn = document.getElementById("ex-checkin");
+  var menuEl = document.getElementById("ex-context-menu");
   var refreshBtn = document.getElementById("ex-refresh");
   var listErrorEl = document.getElementById("ex-list-error");
   var listErrorText = document.getElementById("ex-list-error-text");
@@ -31,11 +27,13 @@
   var queryFile = (root.getAttribute("data-query-file") || "").trim();
   var queryFolder = (root.getAttribute("data-query-folder") || "").trim();
   var allowsContent = root.getAttribute("data-allows-content") === "1";
-  var showOpen = root.getAttribute("data-show-open") === "1";
-  var showCheckout = root.getAttribute("data-show-checkout") === "1";
-  var showCheckin = root.getAttribute("data-show-checkin") === "1";
+  var productAllowsCheckout = root.getAttribute("data-show-checkout") === "1";
+  var productAllowsCheckin = root.getAttribute("data-show-checkin") === "1";
   var canCheckoutRole = root.getAttribute("data-can-checkout") === "1";
   var canCheckinRole = root.getAttribute("data-can-checkin") === "1";
+  var canExportRole =
+    root.getAttribute("data-can-export") === "1" ||
+    root.getAttribute("data-show-export") === "1";
   var productNameEl = document.getElementById("ex-product-name");
   var productStateEl = document.getElementById("ex-product-state");
 
@@ -119,6 +117,21 @@
       return { file: "part.png", label: "Part" };
     }
     return { file: "file.svg", label: "File" };
+  }
+
+  function isCreoOpenable(obj) {
+    if (!obj) return false;
+    var typ = String(obj.object_type || "").toUpperCase();
+    if (
+      typ === "CREO_PART" ||
+      typ === "CREO_ASSEMBLY" ||
+      typ === "CREO_DRAWING" ||
+      typ === "CREO_MANUFACTURING"
+    ) {
+      return true;
+    }
+    var name = String(obj.filename || obj.relative_path || "").toLowerCase();
+    return /\.(prt|asm|drw|mfg)(\.\d+)?$/i.test(name);
   }
 
   function folderOf(relative) {
@@ -367,54 +380,189 @@
           selectObject(obj);
           void onOpen();
         });
+        row.addEventListener("contextmenu", function (ev) {
+          onFileContextMenu(ev, obj);
+        });
         parent.appendChild(row);
       });
   }
 
   function selectObject(obj) {
     selected = obj;
-    if (actionsEl) actionsEl.hidden = !obj;
-    if (selNameEl) selNameEl.textContent = obj ? obj.filename || obj.name || "" : "";
-    syncActionButtons();
     renderTree();
   }
 
-  function syncActionButtons() {
-    if (!selected) {
-      if (openBtn) openBtn.disabled = true;
-      if (checkoutBtn) checkoutBtn.disabled = true;
-      if (checkinBtn) checkinBtn.disabled = true;
+  function menuCapabilities() {
+    var canOpen =
+      Boolean(selected) &&
+      allowsContent &&
+      isCreoOpenable(selected) &&
+      toolkitOk &&
+      agentOnline &&
+      !busy;
+    var canDetails = Boolean(selected && selected.uuid && productId);
+    var canCheckout =
+      Boolean(selected) &&
+      canCheckoutRole &&
+      productAllowsCheckout &&
+      Boolean(selected.can_checkout) &&
+      !busy;
+    var canUndo =
+      Boolean(selected) &&
+      canCheckoutRole &&
+      productAllowsCheckout &&
+      Boolean(selected.owned_by_me) &&
+      !busy;
+    var canCheckin =
+      Boolean(selected) &&
+      canCheckinRole &&
+      productAllowsCheckin &&
+      Boolean(selected.can_checkin) &&
+      !busy;
+    var canDownload =
+      Boolean(selected && selected.uuid) && allowsContent && agentOnline && !busy;
+    var canExport =
+      Boolean(selected && selected.uuid) &&
+      canExportRole &&
+      allowsContent &&
+      !busy;
+    return {
+      canOpen: canOpen,
+      canDetails: canDetails,
+      canCheckout: canCheckout,
+      canUndo: canUndo,
+      canAddSelected: false,
+      canCheckin: canCheckin,
+      canDownload: canDownload,
+      canExport: canExport,
+      canDiscardLocal: false,
+    };
+  }
+
+  function ensureContextMenu() {
+    if (!menuEl) return null;
+    if (menuEl.dataset.ready === "1") return menuEl;
+    var items = [
+      { action: "open", label: "Open selected" },
+      { action: "details", label: "Details" },
+      { action: "checkout", label: "Checkout selected" },
+      { action: "undo", label: "Undo Checkout" },
+      { action: "add-selected", label: "Add selected…" },
+      { action: "checkin", label: "Check in selected…" },
+      { action: "download", label: "Download selected to workspace" },
+      { action: "export", label: "Export selected…" },
+      { action: "discard-local", label: "Remove from Workspace…" },
+    ];
+    menuEl.innerHTML = "";
+    items.forEach(function (spec) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ex-menu-item";
+      btn.setAttribute("role", "menuitem");
+      btn.setAttribute("data-action", spec.action);
+      btn.textContent = spec.label;
+      menuEl.appendChild(btn);
+    });
+    menuEl.dataset.ready = "1";
+    return menuEl;
+  }
+
+  function closeContextMenu() {
+    if (menuEl) menuEl.hidden = true;
+  }
+
+  function positionContextMenu(menu, clientX, clientY) {
+    menu.hidden = false;
+    menu.style.left = "0px";
+    menu.style.top = "0px";
+    var rect = menu.getBoundingClientRect();
+    var pad = 8;
+    var left = clientX;
+    var top = clientY;
+    if (left + rect.width > window.innerWidth - pad) {
+      left = Math.max(pad, window.innerWidth - rect.width - pad);
+    }
+    if (top + rect.height > window.innerHeight - pad) {
+      top = Math.max(pad, window.innerHeight - rect.height - pad);
+    }
+    menu.style.left = left + "px";
+    menu.style.top = top + "px";
+  }
+
+  function openContextMenu(clientX, clientY) {
+    var caps = menuCapabilities();
+    if (
+      !caps.canOpen &&
+      !caps.canDetails &&
+      !caps.canCheckout &&
+      !caps.canUndo &&
+      !caps.canCheckin &&
+      !caps.canDownload &&
+      !caps.canExport
+    ) {
+      return false;
+    }
+    var menu = ensureContextMenu();
+    if (!menu) return false;
+    var map = {
+      open: caps.canOpen,
+      details: caps.canDetails,
+      checkout: caps.canCheckout,
+      undo: caps.canUndo,
+      "add-selected": false,
+      checkin: caps.canCheckin,
+      download: caps.canDownload,
+      export: caps.canExport,
+      "discard-local": false,
+    };
+    menu.querySelectorAll("[data-action]").forEach(function (btn) {
+      var action = btn.getAttribute("data-action") || "";
+      btn.hidden = !map[action];
+    });
+    positionContextMenu(menu, clientX, clientY);
+    return true;
+  }
+
+  function onFileContextMenu(ev, obj) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    selectObject(obj);
+    if (!openContextMenu(ev.clientX, ev.clientY)) closeContextMenu();
+  }
+
+  function runContextAction(action) {
+    closeContextMenu();
+    if (action === "open") {
+      void onOpen();
       return;
     }
-    var openEnabled =
-      showOpen && allowsContent && toolkitOk && agentOnline && !busy;
-    if (openBtn) {
-      openBtn.disabled = !openEnabled;
-      openBtn.classList.toggle("is-primary", openEnabled);
-      openBtn.title = openEnabled
-        ? "Download via creopdm-agent, then open with Creo Toolkit"
-        : toolkitOk
-          ? "Open unavailable"
-          : toolkitReason;
+    if (action === "details") {
+      onDetails();
+      return;
     }
-    if (checkoutBtn) {
-      checkoutBtn.disabled = !(
-        showCheckout &&
-        canCheckoutRole &&
-        selected.can_checkout &&
-        !busy
-      );
-      checkoutBtn.hidden = !showCheckout;
+    if (action === "checkout") {
+      void onCheckout();
+      return;
     }
-    if (checkinBtn) {
-      checkinBtn.disabled = !(
-        showCheckin &&
-        canCheckinRole &&
-        selected.can_checkin &&
-        !busy
-      );
-      checkinBtn.hidden = !showCheckin;
+    if (action === "undo") {
+      void onUndoCheckout();
+      return;
     }
+    if (action === "checkin") {
+      void onCheckin();
+      return;
+    }
+    if (action === "download") {
+      void onDownload();
+      return;
+    }
+    if (action === "export") {
+      void onExport();
+    }
+  }
+
+  function syncActionButtons() {
+    /* Bottom Open/Checkout/Check In removed — actions live on RMB + double-click. */
   }
 
   function applyProductChrome(product, stateKey, stateLabel) {
@@ -495,6 +643,8 @@
       root.setAttribute("data-initial-folder", initialFolder);
       if (product) {
         allowsContent = product.allows_content !== false;
+        productAllowsCheckout = product.allows_checkout !== false;
+        productAllowsCheckin = product.allows_checkin !== false;
         root.setAttribute("data-allows-content", allowsContent ? "1" : "0");
       }
       applyProductChrome(
@@ -507,7 +657,7 @@
         objects = [];
         expanded = Object.create(null);
         if (initialFolder) ensureExpandedPath(initialFolder);
-        if (actionsEl) actionsEl.hidden = true;
+        closeContextMenu();
         if (!quiet) setMsg("Switched to " + (product.name || "product") + ".", "ok");
       }
       if (!productId) {
@@ -668,10 +818,22 @@
     return body;
   }
 
+  function onDetails() {
+    if (!selected || !selected.uuid || !productId) return;
+    window.location.href =
+      "/products/" +
+      encodeURIComponent(productId) +
+      "/objects/" +
+      encodeURIComponent(selected.uuid);
+  }
+
   async function onOpen() {
     if (!selected || busy) return;
+    if (!allowsContent || !isCreoOpenable(selected)) {
+      setMsg("Open is not available for this file.", "err");
+      return;
+    }
     busy = true;
-    syncActionButtons();
     setMsg("Preparing…");
     try {
       await refreshConnectivity();
@@ -700,14 +862,106 @@
       setMsg(String(err && err.message ? err.message : err), "err");
     } finally {
       busy = false;
-      syncActionButtons();
+    }
+  }
+
+  async function onDownload() {
+    if (!selected || busy || !allowsContent) return;
+    busy = true;
+    setMsg("Downloading to workspace…");
+    try {
+      await refreshConnectivity();
+      if (!agentOnline) {
+        throw new Error("Start creopdm-agent on this PC to download into the local workspace.");
+      }
+      var prepare = await fetch("/api/creo/open", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          object_id: selected.uuid,
+          launch: false,
+          include_dependencies: true,
+        }),
+      });
+      if (!prepare.ok) throw new Error(await readError(prepare));
+      await materializePrepared(await prepare.json());
+      setMsg("Downloaded " + (selected.filename || "") + " to the local workspace.", "ok");
+    } catch (err) {
+      setMsg(String(err && err.message ? err.message : err), "err");
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function onExport() {
+    if (!selected || busy || !allowsContent || !canExportRole) return;
+    if (!window.confirm('Export "' + (selected.filename || "file") + '" as a zip?')) return;
+    busy = true;
+    setMsg("Preparing export…");
+    try {
+      var response = await fetch(
+        "/api/products/" + encodeURIComponent(productId) + "/export",
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json", Accept: "application/zip" },
+          body: JSON.stringify({ object_ids: [selected.uuid], folder_paths: [] }),
+        }
+      );
+      if (!response.ok) throw new Error(await readError(response));
+      var blob = await response.blob();
+      var headerName = response.headers.get("X-CreoPDM-Export-Name");
+      var filename = (selected.filename || "export") + ".zip";
+      if (headerName) {
+        try {
+          filename = decodeURIComponent(headerName);
+        } catch (err) {
+          /* keep fallback */
+        }
+      }
+      var url = URL.createObjectURL(blob);
+      var link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setMsg("Exported " + (selected.filename || "") + ".", "ok");
+    } catch (err) {
+      setMsg(String(err && err.message ? err.message : err), "err");
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function onUndoCheckout() {
+    if (!selected || busy) return;
+    busy = true;
+    setMsg("Undoing checkout…");
+    try {
+      var response = await fetch(
+        "/api/objects/" + encodeURIComponent(selected.uuid) + "/undo-checkout",
+        { method: "POST" }
+      );
+      if (!response.ok) throw new Error(await readError(response));
+      var updated = await response.json();
+      selected = updated;
+      objects = objects.map(function (row) {
+        return row.uuid === updated.uuid ? updated : row;
+      });
+      renderTree();
+      setMsg("Undid checkout for " + (selected.filename || "") + ".", "ok");
+    } catch (err) {
+      setMsg(String(err && err.message ? err.message : err), "err");
+    } finally {
+      busy = false;
     }
   }
 
   async function onCheckout() {
     if (!selected || busy) return;
     busy = true;
-    syncActionButtons();
     setMsg("Checking out…");
     try {
       var response = await fetch(
@@ -736,13 +990,11 @@
         }
       }
       renderTree();
-      selectObject(selected);
       setMsg("Checked out " + (selected.filename || "") + ".", "ok");
     } catch (err) {
       setMsg(String(err && err.message ? err.message : err), "err");
     } finally {
       busy = false;
-      syncActionButtons();
     }
   }
 
@@ -756,7 +1008,6 @@
       return;
     }
     busy = true;
-    syncActionButtons();
     setMsg("Checking in…");
     try {
       if (agentOnline) {
@@ -798,13 +1049,11 @@
         return row.uuid === updated.uuid ? updated : row;
       });
       renderTree();
-      selectObject(selected);
       setMsg("Checked in " + (selected.filename || "") + ".", "ok");
     } catch (err) {
       setMsg(String(err && err.message ? err.message : err), "err");
     } finally {
       busy = false;
-      syncActionButtons();
     }
   }
 
@@ -825,15 +1074,43 @@
         void syncActiveProduct({ quiet: false });
       });
     }
-    if (openBtn) openBtn.addEventListener("click", function () {
-      void onOpen();
+    ensureContextMenu();
+    if (menuEl) {
+      menuEl.addEventListener("click", function (ev) {
+        var item = ev.target && ev.target.closest ? ev.target.closest("[data-action]") : null;
+        if (!item || !menuEl.contains(item)) return;
+        ev.preventDefault();
+        runContextAction(item.getAttribute("data-action") || "");
+      });
+    }
+    document.addEventListener(
+      "click",
+      function (ev) {
+        if (!menuEl || menuEl.hidden) return;
+        var node = ev.target;
+        if (node instanceof Element && menuEl.contains(node)) return;
+        closeContextMenu();
+      },
+      true
+    );
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape") closeContextMenu();
     });
-    if (checkoutBtn) checkoutBtn.addEventListener("click", function () {
-      void onCheckout();
-    });
-    if (checkinBtn) checkinBtn.addEventListener("click", function () {
-      void onCheckin();
-    });
+    window.addEventListener("scroll", closeContextMenu, true);
+    window.addEventListener("resize", closeContextMenu);
+    // Never show the browser Refresh / Save as menu in this pane.
+    document.addEventListener(
+      "contextmenu",
+      function (ev) {
+        ev.preventDefault();
+        var node = ev.target;
+        if (node instanceof Element && node.closest && node.closest(".ex-node[data-uuid]")) {
+          return; // file row bubble handler opens CreoPDM menu
+        }
+        closeContextMenu();
+      },
+      true
+    );
     document.addEventListener("visibilitychange", function () {
       if (document.visibilityState === "visible") onPaneShown();
     });

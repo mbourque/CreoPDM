@@ -165,13 +165,23 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "fetch(`http://127.0.0.1:8767" not in script
     assert 'addEventListener("dblclick"' in script
     assert "void onOpen()" in script
-    assert 'id="embed-explorer"' in EMBED_HTML.read_text(encoding="utf-8")
+    assert "Open selected" in script
+    assert "function openContextMenu(" in script
+    assert "contextmenu" in script
+    html = EMBED_HTML.read_text(encoding="utf-8")
+    assert 'id="embed-explorer"' in html
+    assert 'id="ex-context-menu"' in html
+    assert 'id="ex-open"' not in html
+    assert 'id="ex-actions"' not in html
     css = (ROOT / "src/creopdm/static/css/embed_explorer.css").read_text(encoding="utf-8")
     assert "ex-tree" in css
-    assert "ex-actions" in css
+    assert "ex-context-menu" in css
+    assert "overflow: hidden" in css
     assert "ex-loading" in css
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "**Double-click** a file" in docs
+    assert "**Right-click** a file" in docs
+    assert "one scrollbar" in docs.lower() or "Only the tree scrolls" in docs
 
 
 def test_agent_exposes_toolkit_open_proxy():

@@ -20,8 +20,16 @@
 html, body {
   margin: 0;
   padding: 0;
+  height: 100%;
+  overflow: hidden;
   background: var(--ex-bg);
-  min-height: 100%;
+}
+
+/* One scroll surface: header + banner + msg stay put; only the tree scrolls. */
+body#embed-explorer {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .visually-hidden {
@@ -36,8 +44,7 @@ html, body {
 }
 
 .ex-header {
-  position: sticky;
-  top: 0;
+  flex: 0 0 auto;
   z-index: 2;
   background: var(--ex-surface);
   border-bottom: 1px solid var(--ex-line);
@@ -107,6 +114,7 @@ html, body {
 }
 
 .ex-status {
+  flex: 0 0 auto;
   margin: 0.4rem 0.5rem 0;
   padding: 0.4rem 0.5rem;
   border-radius: 4px;
@@ -121,6 +129,7 @@ html, body {
   border-color: #f0b4b4;
   color: var(--ex-danger);
 }
+.ex-status[hidden] { display: none !important; }
 
 .ex-empty {
   margin: 1rem 0.75rem;
@@ -140,6 +149,7 @@ html, body {
   font-style: italic;
 }
 .ex-list-error {
+  flex: 0 0 auto;
   margin: 0.5rem;
   padding: 0.55rem 0.6rem;
   border: 1px solid #f0b4b4;
@@ -151,9 +161,11 @@ html, body {
 .ex-list-error .ex-btn { width: auto; min-width: 4.5rem; }
 
 .ex-tree {
-  padding: 0.25rem 0.25rem 4.5rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0.25rem;
   overflow: auto;
-  max-height: calc(100vh - 7.5rem);
+  overscroll-behavior: contain;
 }
 
 .ex-node {
@@ -241,33 +253,7 @@ html, body {
 .ex-folder-kids { margin-left: 0; }
 .ex-folder-kids[hidden] { display: none !important; }
 
-.ex-actions {
-  position: sticky;
-  bottom: 0;
-  border-top: 1px solid var(--ex-line);
-  background: var(--ex-surface);
-  padding: 0.45rem 0.5rem 0.55rem;
-  box-shadow: 0 -4px 12px rgba(16, 24, 32, 0.06);
-}
-.ex-actions[hidden] { display: none !important; }
-
-.ex-sel-name {
-  font-weight: 600;
-  margin-bottom: 0.35rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.ex-action-row {
-  display: flex;
-  gap: 0.3rem;
-  flex-wrap: wrap;
-}
-
 .ex-btn {
-  flex: 1 1 auto;
-  min-width: 4.5rem;
   border: 1px solid var(--ex-line);
   border-radius: 4px;
   background: #fff;
@@ -282,19 +268,49 @@ html, body {
   opacity: 0.45;
   cursor: not-allowed;
 }
-.ex-btn.is-primary:not(:disabled) {
-  background: var(--ex-accent);
-  border-color: var(--ex-accent);
-  color: #fff;
-}
 
 .ex-msg {
+  flex: 0 0 auto;
   margin: 0;
-  padding: 0.35rem 0.5rem 0.55rem;
+  padding: 0.3rem 0.5rem 0.4rem;
   font-size: 0.75rem;
   color: var(--ex-muted);
-  min-height: 1.2rem;
+  min-height: 0;
+  border-top: 1px solid transparent;
 }
 .ex-msg.is-ok { color: var(--ex-ok); }
 .ex-msg.is-err { color: var(--ex-danger); }
 .ex-msg:empty { display: none; }
+
+/* Same labels/order as Files right-click menu (app.css .files-context-menu). */
+.ex-context-menu {
+  position: fixed;
+  z-index: 1300;
+  min-width: 12.5rem;
+  max-width: min(22rem, calc(100vw - 1rem));
+  padding: 0.25rem;
+  background: white;
+  border: 1px solid var(--ex-line);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(16, 24, 32, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.ex-context-menu[hidden] { display: none !important; }
+.ex-context-menu .ex-menu-item {
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  padding: 0.45rem 0.65rem;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--ex-text);
+  white-space: nowrap;
+  width: 100%;
+}
+.ex-context-menu .ex-menu-item:hover { background: #eef2f6; }
+.ex-context-menu .ex-menu-item[hidden] { display: none !important; }

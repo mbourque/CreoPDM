@@ -23,7 +23,10 @@
   data-allows-content="{{ '1' if product_ui.allows_content else '0' }}"
   data-show-open="{{ '1' if product_ui.show_open else '0' }}"
   data-show-checkout="{{ '1' if product_ui.show_checkout else '0' }}"
+  data-show-undo="{{ '1' if product_ui.show_undo_checkout else '0' }}"
   data-show-checkin="{{ '1' if product_ui.show_checkin else '0' }}"
+  data-show-export="{{ '1' if product_ui.show_export_objects else '0' }}"
+  data-can-export="{{ '1' if can_export_objects else '0' }}"
   data-can-checkout="{{ '1' if can_checkout else '0' }}"
   data-can-checkin="{{ '1' if can_checkin else '0' }}"
 >
@@ -53,16 +56,10 @@
     <p class="ex-empty is-error" id="ex-list-error-text">Could not load files.</p>
     <button type="button" class="ex-btn" id="ex-retry">Retry</button>
   </div>
-  <div class="ex-actions" id="ex-actions" hidden>
-    <div class="ex-sel-name" id="ex-sel-name"></div>
-    <div class="ex-action-row">
-      <button type="button" class="ex-btn" id="ex-open" disabled title="Materialize via creopdm-agent, then open in Creo through Toolkit">Open</button>
-      <button type="button" class="ex-btn" id="ex-checkout" disabled>Check Out</button>
-      <button type="button" class="ex-btn" id="ex-checkin" disabled>Check In</button>
-    </div>
-  </div>
   <p class="ex-msg" id="ex-msg" role="status" aria-live="polite"></p>
   {% endif %}
+
+  <div id="ex-context-menu" class="ex-context-menu" role="menu" hidden></div>
 
   <script src="/static/js/embed_explorer.js?v={{ app_version }}"></script>
 </body>
