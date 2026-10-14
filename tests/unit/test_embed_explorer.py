@@ -136,6 +136,12 @@ def test_embed_explorer_context_follows_switched_product(client):
     assert "CreoPdmFilesContextMenu" in script
     assert "menuCapabilitiesFor" in script
     assert "needsEmbeddedBrowser" in script
+    # Check In needs the same pending Modified signal Files uses (server + agent cache).
+    assert "checkin-preview" in script
+    assert "pendingCheckinIds" in script
+    assert "tipHasCheckinWork" in script
+    assert "mergeAgentPendingCheckinIds" in script
+    assert "/files?" in script
     assert "files_context_menu.js" in EMBED_HTML.read_text(encoding="utf-8")
 
 

@@ -54,6 +54,9 @@
   var toolkitReason = "Checking local Toolkit…";
   var agentOnline = false;
   var busy = false;
+  /** Same signal Files uses (checkin-preview object_ids) — objects.modified_locally is often stale. */
+  var pendingCheckinIds = Object.create(null);
+  var pendingCheckinSeq = 0;
   /** loading | ok | error — never show "no files yet" until ok with length 0. */
   var listState = "loading";
   var listError = "";
@@ -129,6 +132,118 @@
     return { file: "file.svg", label: "File" };
   }
 
+  function tipHasCheckinWork(obj) {
+    // Match Files rowHasCheckinWork: can_checkin + (server Modified or pending set).
+    if (!obj || !obj.can_checkin || !obj.uuid) return false;
+    if (obj.modified_locally) return true;
+    return Boolean(pendingCheckinIds[String(obj.uuid)]);
+  }
+
+  function logicalTipName(filename) {
+    return String(filename || "")
+      .toLowerCase()
+      .replace(/\\/g, "/")
+      .split("/")
+      .pop()
+      .replace(/\.\d+$/, "");
+  }
+
+  async function mergeAgentPendingCheckinIds(into) {
+    // Same ground truth as Files Modified tab: agent /files cache index hash vs vault tip.
+    if (!productId || !into) return;
+    agentOnline = await probeAgent();
+    if (!agentOnline) return;
+    try {
+      var params = new URLSearchParams({ product_id: productId });
+      if (vaultFolder) params.set("vault_folder", vaultFolder);
+      var response = await fetch(agentBase() + "/files?" + params.toString(), {
+        headers: agentHeaders(),
+        signal: abortAfter(8000),
+      });
+      if (!response.ok) return;
+      var body = await response.json();
+      var files = body && Array.isArray(body.files) ? body.files : [];
+      var byRel = Object.create(null);
+      var byBase = Object.create(null);
+      var baseCounts = Object.create(null);
+      files.forEach(function (file) {
+        var rel = String(file.relative_path || "").replace(/\\/g, "/").toLowerCase();
+        var name = String(file.filename || (rel ? rel.split("/").pop() : "") || "").toLowerCase();
+        var base = logicalTipName(name);
+        if (rel) byRel[rel] = file;
+        if (base) {
+          baseCounts[base] = (baseCounts[base] || 0) + 1;
+          byBase[base] = file;
+        }
+      });
+      var vaultBaseCounts = Object.create(null);
+      objects.forEach(function (obj) {
+        var base = logicalTipName(obj.filename || obj.relative_path || "");
+        if (base) vaultBaseCounts[base] = (vaultBaseCounts[base] || 0) + 1;
+      });
+      objects.forEach(function (obj) {
+        if (!obj || !obj.can_checkin || !obj.uuid) return;
+        var vaultRel = String(obj.relative_path || "").replace(/\\/g, "/");
+        var local = vaultRel ? byRel[vaultRel.toLowerCase()] : null;
+        if (!local) {
+          var base = logicalTipName(obj.filename || vaultRel);
+          if (base && vaultBaseCounts[base] === 1 && baseCounts[base] === 1) {
+            local = byBase[base];
+          }
+        }
+        if (!local) return;
+        var vaultHash = String(
+          (obj.current_version && obj.current_version.content_hash) || ""
+        )
+          .trim()
+          .toLowerCase();
+        var localHash = String(local.content_hash || "").trim().toLowerCase();
+        if (vaultHash && localHash && localHash !== vaultHash) {
+          into[String(obj.uuid)] = true;
+        }
+      });
+    } catch (err) {
+      /* agent offline / old agent — keep server pending set */
+    }
+  }
+
+  async function refreshPendingCheckinIds() {
+    if (!productId) {
+      pendingCheckinIds = Object.create(null);
+      return;
+    }
+    var seq = ++pendingCheckinSeq;
+    var next = Object.create(null);
+    try {
+      var response = await fetch(
+        "/api/products/" +
+          encodeURIComponent(productId) +
+          "/checkin-preview?_=" +
+          String(Date.now()),
+        {
+          credentials: "same-origin",
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+        }
+      );
+      if (seq !== pendingCheckinSeq) return;
+      if (response.ok) {
+        var data = await response.json();
+        if (seq !== pendingCheckinSeq) return;
+        (data.object_ids || []).forEach(function (id) {
+          var key = String(id || "").trim();
+          if (key) next[key] = true;
+        });
+      }
+    } catch (err) {
+      if (seq !== pendingCheckinSeq) return;
+    }
+    // Files also merges agent newer-local — without this, navigator misses Modified tips.
+    await mergeAgentPendingCheckinIds(next);
+    if (seq !== pendingCheckinSeq) return;
+    pendingCheckinIds = next;
+  }
+
   function rowStateFromObject(obj) {
     if (!obj) return null;
     return {
@@ -140,7 +255,7 @@
       localCache: false,
       isNewFile: false,
       hasDetails: Boolean(obj.uuid && productId),
-      hasCheckinWork: Boolean(obj.can_checkin && obj.modified_locally),
+      hasCheckinWork: tipHasCheckinWork(obj),
       isFolder: false,
     };
   }
@@ -393,7 +508,7 @@
         if (obj.owned_by_me || obj.checkout_user) {
           badges += '<span class="ex-badge co" title="Checked out">CO</span>';
         }
-        if (obj.modified_locally && (obj.owned_by_me || obj.can_checkin)) {
+        if (tipHasCheckinWork(obj)) {
           badges += '<span class="ex-badge mod" title="Modified">MOD</span>';
         }
         row.innerHTML =
@@ -476,7 +591,13 @@
     ev.preventDefault();
     ev.stopPropagation();
     selectObject(obj);
-    if (!openContextMenu(ev.clientX, ev.clientY)) closeContextMenu();
+    var x = ev.clientX;
+    var y = ev.clientY;
+    // Refresh pending Modified set before hide rules (same checkin-preview as Files).
+    void refreshPendingCheckinIds().then(function () {
+      if (selected !== obj) return;
+      if (!openContextMenu(x, y)) closeContextMenu();
+    });
   }
 
   function runContextAction(action) {
@@ -666,6 +787,8 @@
       if (seq !== listLoadSeq) return;
       objects = Array.isArray(items) ? items : [];
       listState = "ok";
+      await refreshPendingCheckinIds();
+      if (seq !== listLoadSeq) return;
       if (focusUuid && !selected) {
         selected =
           objects.find(function (row) {
