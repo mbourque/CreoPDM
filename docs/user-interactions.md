@@ -653,8 +653,10 @@ Narrow page for Creo’s navigator pane (~350–450 px): **`GET /embed/explorer?
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Open `/embed/explorer` with `product` (uuid or name) | Show a compact header (product name + state), search, expand/collapse folder tree, small type icons (part / assembly / drawing / other), CO / MOD badges; Refresh reloads the list | Load the full Files shell (`app.js` / multi-column table) |
+| Open `/embed/explorer` with `product` (uuid or name) | Show a compact header (product name + state), search, expand/collapse folder tree, small type icons (part / assembly / drawing / other), CO / MOD badges; show **Loading files…** then fill from `/api/products/…/objects` (cache-bust, session cookies); Refresh / Retry reload the list | Load the full Files shell (`app.js` / multi-column table); show “This product has no files yet.” before the list request finishes |
+| Open `/embed/explorer` with **no** query params (Creo navigator when no model is open) | Pick the default product the same way Files does (**last used**, else first accessible); load that product’s files on first paint without requiring Refresh | Stay empty until the user clicks Refresh; pick a different product than Files would |
 | Omit `product` but pass `file` / `folder` | Infer an accessible product that contains that tip or folder; seed folder expand + selection from `file` | Leave the page blank when a matching product exists |
+| File list request fails (auth / network / 4xx / 5xx) | Show an error and a **Retry** button | Show “This product has no files yet.” for a failed load |
 | Select a file | Show a short action row: **Open**, **Check Out**, **Check In** (hidden/disabled when role ∩ lifecycle cannot) | Call Toolkit on `127.0.0.1:8767` from the browser (CORS / credentials) |
 | Click **Open** | CreoPDM prepare (`/api/creo/open`) → creopdm-agent materialize → agent proxies Toolkit `http://127.0.0.1:8767/open?fileName=…&path=…`; show success or failure on the page | Open when Toolkit / agent is unreachable without explaining why |
 | Toolkit Companion unreachable (agent `/toolkit/health` fails) | Keep the read-only list and search; disable **Open** and show why | Crash the page; pretend Open succeeded |

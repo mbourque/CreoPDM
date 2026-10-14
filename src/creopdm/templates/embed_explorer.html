@@ -44,7 +44,13 @@
   {% if not selected %}
   <p class="ex-empty">No accessible product. Sign in or pass <code>?product=</code>.</p>
   {% else %}
-  <div class="ex-tree" id="ex-tree" role="tree" aria-label="Product files"></div>
+  <div class="ex-tree" id="ex-tree" role="tree" aria-label="Product files" data-list-state="loading">
+    <p class="ex-loading" id="ex-loading">Loading files…</p>
+  </div>
+  <div class="ex-list-error" id="ex-list-error" hidden>
+    <p class="ex-empty is-error" id="ex-list-error-text">Could not load files.</p>
+    <button type="button" class="ex-btn" id="ex-retry">Retry</button>
+  </div>
   <div class="ex-actions" id="ex-actions" hidden>
     <div class="ex-sel-name" id="ex-sel-name"></div>
     <div class="ex-action-row">
@@ -56,7 +62,6 @@
   <p class="ex-msg" id="ex-msg" role="status" aria-live="polite"></p>
   {% endif %}
 
-  <script type="application/json" id="ex-objects-json">{{ objects | tojson }}</script>
   <script src="/static/js/embed_explorer.js?v={{ app_version }}"></script>
 </body>
 </html>

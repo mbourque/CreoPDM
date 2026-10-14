@@ -18,6 +18,9 @@
   var checkoutBtn = document.getElementById("ex-checkout");
   var checkinBtn = document.getElementById("ex-checkin");
   var refreshBtn = document.getElementById("ex-refresh");
+  var listErrorEl = document.getElementById("ex-list-error");
+  var listErrorText = document.getElementById("ex-list-error-text");
+  var retryBtn = document.getElementById("ex-retry");
 
   var productId = (root.getAttribute("data-product-uuid") || "").trim();
   var vaultFolder = (root.getAttribute("data-vault-folder") || "").trim();
@@ -37,6 +40,10 @@
   var toolkitReason = "Checking local Toolkit…";
   var agentOnline = false;
   var busy = false;
+  /** loading | ok | error — never show "no files yet" until ok with length 0. */
+  var listState = "loading";
+  var listError = "";
+  var listLoadSeq = 0;
 
   function agentBase() {
     return (root.getAttribute("data-agent-base") || "http://127.0.0.1:8766").replace(/\/$/, "");
@@ -109,15 +116,11 @@
     return idx < 0 ? "" : path.slice(0, idx);
   }
 
-  function loadObjectsFromDom() {
-    var node = document.getElementById("ex-objects-json");
-    if (!node) return [];
-    try {
-      var parsed = JSON.parse(node.textContent || "[]");
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (err) {
-      return [];
-    }
+  function setListErrorVisible(show, message) {
+    if (!listErrorEl) return;
+    listErrorEl.hidden = !show;
+    if (listErrorText && message) listErrorText.textContent = message;
+    if (treeEl) treeEl.hidden = Boolean(show);
   }
 
   function abortAfter(ms) {
@@ -248,6 +251,19 @@
 
   function renderTree() {
     if (!treeEl || !productId) return;
+    treeEl.setAttribute("data-list-state", listState);
+    if (listState === "loading") {
+      setListErrorVisible(false);
+      treeEl.hidden = false;
+      treeEl.innerHTML = '<p class="ex-loading" id="ex-loading">Loading files…</p>';
+      return;
+    }
+    if (listState === "error") {
+      setListErrorVisible(true, listError || "Could not load files.");
+      return;
+    }
+    setListErrorVisible(false);
+    treeEl.hidden = false;
     var q = (searchEl && searchEl.value ? searchEl.value : "").trim().toLowerCase();
     var filtered = objects.filter(function (obj) {
       return matchesQuery(obj, q);
@@ -260,6 +276,7 @@
     var tree = buildTree(filtered);
     treeEl.innerHTML = "";
     appendFolderKids(treeEl, tree, 0, q);
+    // Empty copy only after a successful list response (listState === "ok").
     if (!filtered.length) {
       var empty = document.createElement("p");
       empty.className = "ex-empty";
@@ -383,27 +400,68 @@
     }
   }
 
-  async function refreshObjects() {
+  async function loadObjects(options) {
+    var opts = options || {};
+    var quiet = Boolean(opts.quiet);
     if (!productId) return;
-    setMsg("Refreshing…");
-    var response = await fetch(
-      "/api/products/" + encodeURIComponent(productId) + "/objects"
-    );
-    if (!response.ok) {
-      setMsg(await readError(response), "err");
-      return;
-    }
-    var items = await response.json();
-    objects = Array.isArray(items) ? items : [];
-    if (selected) {
-      selected =
-        objects.find(function (row) {
-          return row.uuid === selected.uuid;
-        }) || null;
-    }
+    var seq = ++listLoadSeq;
+    listState = "loading";
+    listError = "";
     renderTree();
-    if (selected) selectObject(selected);
-    setMsg("Updated.", "ok");
+    if (!quiet) setMsg("Loading files…");
+    try {
+      // credentials + no-store: Creo CEF must send session cookies and not reuse
+      // an empty cached list from the first navigator hit.
+      var url =
+        "/api/products/" +
+        encodeURIComponent(productId) +
+        "/objects?_=" +
+        String(Date.now());
+      var response = await fetch(url, {
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+      });
+      if (seq !== listLoadSeq) return;
+      if (!response.ok) {
+        listState = "error";
+        listError = await readError(response);
+        objects = [];
+        renderTree();
+        setMsg(listError, "err");
+        return;
+      }
+      var items = await response.json();
+      if (seq !== listLoadSeq) return;
+      objects = Array.isArray(items) ? items : [];
+      listState = "ok";
+      if (focusUuid && !selected) {
+        selected =
+          objects.find(function (row) {
+            return row.uuid === focusUuid;
+          }) || null;
+        if (selected) ensureExpandedPath(folderOf(selected.relative_path));
+      } else if (selected) {
+        selected =
+          objects.find(function (row) {
+            return row.uuid === selected.uuid;
+          }) || null;
+      }
+      renderTree();
+      if (selected) selectObject(selected);
+      if (!quiet) setMsg(objects.length ? "Updated." : "", objects.length ? "ok" : "");
+    } catch (err) {
+      if (seq !== listLoadSeq) return;
+      listState = "error";
+      listError = String(err && err.message ? err.message : err || "Network error");
+      objects = [];
+      renderTree();
+      setMsg(listError, "err");
+    }
+  }
+
+  async function refreshObjects() {
+    await loadObjects({ quiet: false });
     await refreshConnectivity();
   }
 
@@ -603,27 +661,20 @@
   }
 
   function boot() {
-    objects = loadObjectsFromDom();
     if (initialFolder) ensureExpandedPath(initialFolder);
-    if (focusUuid) {
-      var focus = objects.find(function (row) {
-        return row.uuid === focusUuid;
-      });
-      if (focus) {
-        ensureExpandedPath(folderOf(focus.relative_path));
-        selected = focus;
-      }
-    }
-    renderTree();
-    if (selected) selectObject(selected);
     if (searchEl) {
       searchEl.addEventListener("input", function () {
-        renderTree();
+        if (listState === "ok") renderTree();
       });
     }
     if (refreshBtn) {
       refreshBtn.addEventListener("click", function () {
         void refreshObjects();
+      });
+    }
+    if (retryBtn) {
+      retryBtn.addEventListener("click", function () {
+        void loadObjects({ quiet: false });
       });
     }
     if (openBtn) openBtn.addEventListener("click", function () {
@@ -635,8 +686,23 @@
     if (checkinBtn) checkinBtn.addEventListener("click", function () {
       void onCheckin();
     });
-    void refreshConnectivity();
+    // Product uuid is resolved server-side (last used / first / query). Fetch the
+    // list after listeners are wired — do not paint "no files" from an empty SSR.
+    listState = productId ? "loading" : "error";
+    if (!productId) {
+      listError = "No product selected.";
+      renderTree();
+      return;
+    }
+    renderTree();
+    void loadObjects({ quiet: true }).then(function () {
+      return refreshConnectivity();
+    });
   }
 
-  boot();
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
 })();

@@ -127,12 +127,28 @@ html, body {
   color: var(--ex-muted);
   line-height: 1.4;
 }
+.ex-empty.is-error { color: var(--ex-danger); }
 .ex-empty code {
   font-size: 0.85em;
   background: #eef1f4;
   padding: 0.05rem 0.25rem;
   border-radius: 3px;
 }
+.ex-loading {
+  margin: 0.85rem 0.65rem;
+  color: var(--ex-muted);
+  font-style: italic;
+}
+.ex-list-error {
+  margin: 0.5rem;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid #f0b4b4;
+  border-radius: 4px;
+  background: #fdf2f2;
+}
+.ex-list-error[hidden] { display: none !important; }
+.ex-list-error .ex-empty { margin: 0 0 0.45rem; }
+.ex-list-error .ex-btn { width: auto; min-width: 4.5rem; }
 
 .ex-tree {
   padding: 0.25rem 0.25rem 4.5rem;

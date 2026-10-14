@@ -6,12 +6,10 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
-from creopdm.api.checkout import present_objects
 from creopdm.api.deps import (
     accessible_products,
     get_context,
     get_db,
-    load_accessible_product,
     require_permission,
     require_product_access,
 )
@@ -118,8 +116,13 @@ def resolve_embed_product(
             chosen = scored[0][1]
             focus = scored[0][2]
 
+    # Same default as Files home: last used product, else first accessible.
     if chosen is None and products:
-        chosen = products[0]
+        last_uuid = (ctx.config.settings.ui.last_product_uuid or "").strip()
+        if last_uuid:
+            chosen = by_uuid.get(last_uuid.casefold())
+        if chosen is None:
+            chosen = products[0]
 
     if chosen is not None and wanted_file and focus is None:
         file_key = _norm_name(wanted_file) or _norm_name(_basename(wanted_file))
@@ -166,7 +169,8 @@ def embed_explorer(
         raise
 
     selected = product_to_response(product) if product is not None else None
-    objects: list = []
+    # File rows are loaded by the page via /api/products/…/objects (cache-bust) so
+    # Creo's embedded browser does not stick on a stale empty SSR payload.
     if product is not None:
         try:
             ctx.objects.migrate_numbered_vault_tips(
@@ -178,15 +182,11 @@ def embed_explorer(
             get_logger("embed").exception(
                 "Vault-name migrate failed for product %s", product.uuid
             )
-        objects = present_objects(ctx, db, ctx.objects.list_objects(db, product.id))
+        ctx.config.remember_product(product.uuid)
 
     initial_folder = normalize_folder_query(folder_q)
     if not initial_folder and focus is not None:
         initial_folder = folder_of(str(focus.relative_path or ""))
-
-    objects_payload = [
-        row.model_dump(mode="json") if hasattr(row, "model_dump") else row for row in objects
-    ]
 
     state_key = product_state_value(product) if product else ""
     return render(
@@ -198,7 +198,6 @@ def embed_explorer(
             **_creo_page(ctx),
             "selected": selected,
             "product": selected,
-            "objects": objects_payload,
             "focus_uuid": focus.uuid if focus else "",
             "focus_filename": (focus.filename if focus else "") or (file_q or ""),
             "initial_folder": initial_folder,
