@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ selected.name if selected else app_name }} — Explorer</title>
+  <link rel="stylesheet" href="/static/css/embed_explorer.css?v={{ app_version }}">
+</head>
+<body
+  id="embed-explorer"
+  data-agent-base="{{ agent_base_url | default('http://127.0.0.1:8766') }}"
+  data-agent-token="{{ agent_token | default('') }}"
+  data-product-uuid="{{ selected.uuid if selected else '' }}"
+  data-vault-folder="{{ selected.vault_folder if selected else '' }}"
+  data-product-name="{{ selected.name if selected else '' }}"
+  data-initial-folder="{{ initial_folder or '' }}"
+  data-focus-uuid="{{ focus_uuid or '' }}"
+  data-focus-filename="{{ focus_filename or '' }}"
+  data-allows-content="{{ '1' if product_ui.allows_content else '0' }}"
+  data-show-open="{{ '1' if product_ui.show_open else '0' }}"
+  data-show-checkout="{{ '1' if product_ui.show_checkout else '0' }}"
+  data-show-checkin="{{ '1' if product_ui.show_checkin else '0' }}"
+  data-can-checkout="{{ '1' if can_checkout else '0' }}"
+  data-can-checkin="{{ '1' if can_checkin else '0' }}"
+>
+  <header class="ex-header">
+    <div class="ex-title-row">
+      <h1 class="ex-product" title="{{ selected.name if selected else 'No product' }}">
+        {% if selected %}{{ selected.name }}{% else %}No product{% endif %}
+      </h1>
+      {% if selected and product_state_label %}
+      <span class="ex-state" data-state="{{ product_state_key }}" title="Product state">{{ product_state_label }}</span>
+      {% endif %}
+      <button type="button" class="ex-icon-btn" id="ex-refresh" title="Refresh file list">↻</button>
+    </div>
+    <label class="ex-search">
+      <span class="visually-hidden">Search</span>
+      <input type="search" id="ex-search" placeholder="Search files…" autocomplete="off" {% if not selected %}disabled{% endif %}>
+    </label>
+  </header>
+
+  <div class="ex-status" id="ex-banner" hidden></div>
+
+  {% if not selected %}
+  <p class="ex-empty">No accessible product. Sign in or pass <code>?product=</code>.</p>
+  {% else %}
+  <div class="ex-tree" id="ex-tree" role="tree" aria-label="Product files"></div>
+  <div class="ex-actions" id="ex-actions" hidden>
+    <div class="ex-sel-name" id="ex-sel-name"></div>
+    <div class="ex-action-row">
+      <button type="button" class="ex-btn" id="ex-open" disabled title="Materialize via creopdm-agent, then open in Creo through Toolkit">Open</button>
+      <button type="button" class="ex-btn" id="ex-checkout" disabled>Check Out</button>
+      <button type="button" class="ex-btn" id="ex-checkin" disabled>Check In</button>
+    </div>
+  </div>
+  <p class="ex-msg" id="ex-msg" role="status" aria-live="polite"></p>
+  {% endif %}
+
+  <script type="application/json" id="ex-objects-json">{{ objects | tojson }}</script>
+  <script src="/static/js/embed_explorer.js?v={{ app_version }}"></script>
+</body>
+</html>

@@ -27,6 +27,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 15. [Administration (users, roles, membership, utilities, system settings)](#15-administration-users-roles-membership-utilities-system-settings)
 16. [Quick walkthroughs](#16-quick-walkthroughs)
 17. [For developers (tests)](#17-for-developers-tests)
+18. [Creo navigator embed explorer](#18-creo-navigator-embed-explorer)
 
 ---
 
@@ -603,7 +604,8 @@ Automated coverage lives mainly in:
 - `tests/unit/test_creo_dependencies.py` (open dependencies walk sub-assemblies + parts across folders; walk returns storeable edges)
 - `tests/unit/test_open_large_assembly_contract.py` (JD-scale Open: no WU discard, product-fill, magnet prune ≥200, scaled Creo open timeout)
 - `tests/integration/test_creo_open.py` (`test_open_dependencies_prefer_where_used_db`, `test_open_dependencies_trust_large_where_used_tree`, `test_open_dependencies_sparse_where_used_falls_back_to_vault_scan`, nested vault-scan stores Where Used / Top Level)
-- `tests/unit/test_creopdm_agent.py` (`test_agent_materialize_skips_unchanged_local_files`)
+- `tests/unit/test_creopdm_agent.py` (`test_agent_materialize_skips_unchanged_local_files`; Toolkit `/toolkit/open` proxy)
+- `tests/unit/test_embed_explorer.py` (compact `/embed/explorer` for Creo navigator; product resolve by name/file; Open via agent→Toolkit, never browser→8767)
 - `tests/unit/test_password_reset.py` (forgot link only after wrong password; GET blocked; wrong email same confirmation / one try; spam disable)
 - `tests/unit/test_product_watch.py` (bell when email enabled; per-user watch; subscribe/unsubscribe; one email per bulk action; actor excluded; notifications off skips mail; Force Undo Checkout emails former owner; check-in comment in watch mail)
 - `tests/unit/test_launch.py` / `tests/unit/test_creopdm_agent.py` (Open workspace creates empty agent cache and opens via ShellExecute explore)
@@ -642,3 +644,18 @@ Test helpers: `tests/client_js.py` (`client_js_bundle()`); slice one function wi
 Mobile browse is CSS-only in `app.css`: `@media` with `pointer: coarse` and `hover: none` (plus width/height limits). Do **not** gate browse mode on `max-width` alone.
 
 When you change any behavior above, update **this document** in the same change and add or adjust tests so the “must not” cases stay covered. See `.cursor/rules/user-interactions.mdc`.
+
+---
+
+## 18. Creo navigator embed explorer
+
+Narrow page for Creo’s navigator pane (~350–450 px): **`GET /embed/explorer?product=<uuid or name>&file=<tip name>&folder=<folder>`**. Additive — does **not** change the full Files UI.
+
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Open `/embed/explorer` with `product` (uuid or name) | Show a compact header (product name + state), search, expand/collapse folder tree, small type icons (part / assembly / drawing / other), CO / MOD badges; Refresh reloads the list | Load the full Files shell (`app.js` / multi-column table) |
+| Omit `product` but pass `file` / `folder` | Infer an accessible product that contains that tip or folder; seed folder expand + selection from `file` | Leave the page blank when a matching product exists |
+| Select a file | Show a short action row: **Open**, **Check Out**, **Check In** (hidden/disabled when role ∩ lifecycle cannot) | Call Toolkit on `127.0.0.1:8767` from the browser (CORS / credentials) |
+| Click **Open** | CreoPDM prepare (`/api/creo/open`) → creopdm-agent materialize → agent proxies Toolkit `http://127.0.0.1:8767/open?fileName=…&path=…`; show success or failure on the page | Open when Toolkit / agent is unreachable without explaining why |
+| Toolkit Companion unreachable (agent `/toolkit/health` fails) | Keep the read-only list and search; disable **Open** and show why | Crash the page; pretend Open succeeded |
+| creopdm-agent offline | Same as above for Open; Checkout / Check In that need a local workspace tip may warn | |

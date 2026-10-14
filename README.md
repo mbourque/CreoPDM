@@ -341,6 +341,10 @@ Ports: agent **8766**, Toolkit **8767** (override Toolkit with `CREOPDM_TOOLKIT_
 
 Open still uses the agent to **materialize** files and Creo.JS / File > Open to bring models into session. Gathering inventory for Collect goes through Toolkit via the agent — keep both the tray agent and Toolkit loaded whenever you Collect.
 
+### Creo navigator embed explorer
+
+Compact list for Creo’s navigator pane (~350–450 px wide): **`/embed/explorer?product=<uuid or name>&file=<tip>&folder=<path>`**. It is a separate page (not the full Files UI). **Open** prepares on the CreoPDM server, materializes through creopdm-agent, then the agent calls Toolkit `http://127.0.0.1:8767/open?fileName=…&path=…` (the browser never talks to 8767). If Toolkit is down, the list stays usable and Open is disabled with a reason. See [docs/user-interactions.md](docs/user-interactions.md) §18.
+
 ## AI (Ask AI / check-in comments)
 
 CreoPDM can call a local **Ollama** model to draft check-in comments and Modifications “Ask AI” summaries from two revision outlines.

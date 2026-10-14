@@ -1,0 +1,284 @@
+/* Compact Creo navigator explorer (~350–450 px). Standalone — not the full Files UI. */
+:root {
+  --ex-bg: #f4f6f8;
+  --ex-surface: #ffffff;
+  --ex-line: #d5dce8;
+  --ex-text: #1a2330;
+  --ex-muted: #5c6b7a;
+  --ex-accent: #2f6fed;
+  --ex-danger: #9b1c1c;
+  --ex-ok: #1b6b3a;
+  --ex-badge-co: #c45c00;
+  --ex-badge-mod: #7a3eb0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 12px;
+  color: var(--ex-text);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--ex-bg);
+  min-height: 100%;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.ex-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--ex-surface);
+  border-bottom: 1px solid var(--ex-line);
+  padding: 0.45rem 0.5rem 0.5rem;
+}
+
+.ex-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.ex-product {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ex-state {
+  flex: 0 0 auto;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--ex-accent);
+  background: #e8f0fe;
+  border-radius: 999px;
+  padding: 0.12rem 0.45rem;
+  white-space: nowrap;
+}
+
+.ex-icon-btn {
+  flex: 0 0 auto;
+  width: 1.7rem;
+  height: 1.7rem;
+  border: 1px solid var(--ex-line);
+  border-radius: 4px;
+  background: var(--ex-surface);
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--ex-muted);
+}
+.ex-icon-btn:hover { color: var(--ex-text); border-color: #aeb9c5; }
+
+.ex-search {
+  display: block;
+  margin-top: 0.4rem;
+}
+.ex-search input {
+  width: 100%;
+  border: 1px solid var(--ex-line);
+  border-radius: 4px;
+  padding: 0.35rem 0.45rem;
+  font: inherit;
+  background: #fafbfc;
+}
+.ex-search input:focus {
+  outline: 2px solid #c5d7fb;
+  border-color: var(--ex-accent);
+  background: #fff;
+}
+
+.ex-status {
+  margin: 0.4rem 0.5rem 0;
+  padding: 0.4rem 0.5rem;
+  border-radius: 4px;
+  background: #fff6e8;
+  border: 1px solid #e8c48a;
+  color: #7a4b00;
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+.ex-status.is-error {
+  background: #fdf2f2;
+  border-color: #f0b4b4;
+  color: var(--ex-danger);
+}
+
+.ex-empty {
+  margin: 1rem 0.75rem;
+  color: var(--ex-muted);
+  line-height: 1.4;
+}
+.ex-empty code {
+  font-size: 0.85em;
+  background: #eef1f4;
+  padding: 0.05rem 0.25rem;
+  border-radius: 3px;
+}
+
+.ex-tree {
+  padding: 0.25rem 0.25rem 4.5rem;
+  overflow: auto;
+  max-height: calc(100vh - 7.5rem);
+}
+
+.ex-node {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 0.22rem 0.35rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  min-width: 0;
+}
+.ex-node:hover { background: #e8eef8; }
+.ex-node.is-selected { background: #d6e4ff; }
+.ex-node.is-focus { box-shadow: inset 2px 0 0 var(--ex-accent); }
+
+.ex-twist {
+  width: 0.9rem;
+  flex: 0 0 auto;
+  color: var(--ex-muted);
+  font-size: 0.65rem;
+  text-align: center;
+}
+.ex-twist.is-leaf { visibility: hidden; }
+
+.ex-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+.ex-folder-glyph {
+  width: 12px;
+  height: 10px;
+  flex: 0 0 auto;
+  border: 1.5px solid #8a9aab;
+  border-radius: 1px 2px 2px 2px;
+  background: #e8eef4;
+  position: relative;
+  margin-top: 1px;
+}
+.ex-folder-glyph::before {
+  content: "";
+  position: absolute;
+  left: -1.5px;
+  top: -3px;
+  width: 5px;
+  height: 3px;
+  border: 1.5px solid #8a9aab;
+  border-bottom: 0;
+  border-radius: 1px 2px 0 0;
+  background: #e8eef4;
+}
+
+.ex-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ex-badges {
+  display: flex;
+  gap: 0.2rem;
+  flex: 0 0 auto;
+}
+.ex-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 0.05rem 0.28rem;
+  border-radius: 3px;
+  line-height: 1.2;
+}
+.ex-badge.co { background: #ffe8cc; color: var(--ex-badge-co); }
+.ex-badge.mod { background: #f0e4ff; color: var(--ex-badge-mod); }
+
+.ex-folder-kids { margin-left: 0; }
+.ex-folder-kids[hidden] { display: none !important; }
+
+.ex-actions {
+  position: sticky;
+  bottom: 0;
+  border-top: 1px solid var(--ex-line);
+  background: var(--ex-surface);
+  padding: 0.45rem 0.5rem 0.55rem;
+  box-shadow: 0 -4px 12px rgba(16, 24, 32, 0.06);
+}
+.ex-actions[hidden] { display: none !important; }
+
+.ex-sel-name {
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ex-action-row {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.ex-btn {
+  flex: 1 1 auto;
+  min-width: 4.5rem;
+  border: 1px solid var(--ex-line);
+  border-radius: 4px;
+  background: #fff;
+  padding: 0.35rem 0.4rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--ex-text);
+}
+.ex-btn:hover:not(:disabled) { border-color: var(--ex-accent); color: var(--ex-accent); }
+.ex-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.ex-btn.is-primary:not(:disabled) {
+  background: var(--ex-accent);
+  border-color: var(--ex-accent);
+  color: #fff;
+}
+
+.ex-msg {
+  margin: 0;
+  padding: 0.35rem 0.5rem 0.55rem;
+  font-size: 0.75rem;
+  color: var(--ex-muted);
+  min-height: 1.2rem;
+}
+.ex-msg.is-ok { color: var(--ex-ok); }
+.ex-msg.is-err { color: var(--ex-danger); }
+.ex-msg:empty { display: none; }

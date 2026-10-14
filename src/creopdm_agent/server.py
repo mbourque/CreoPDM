@@ -3041,6 +3041,39 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             "toolkit": body,
         }
 
+    @app.get("/toolkit/open")
+    def toolkit_open(fileName: str = "", path: str = "") -> dict[str, object]:
+        """Proxy Toolkit /open?fileName=&path= (loopback only — browser must not call 8767).
+
+        Used by the compact /embed/explorer Open action after the agent materializes
+        the tip into the local workspace.
+        """
+        tip = (fileName or "").strip()
+        disk_path = (path or "").strip()
+        if not tip and not disk_path:
+            raise HTTPException(
+                status_code=400,
+                detail="Pass fileName=… and/or path=… for Toolkit open.",
+            )
+        q: list[str] = []
+        if tip:
+            q.append(f"fileName={quote(tip)}")
+        if disk_path:
+            q.append(f"path={quote(disk_path)}")
+        body = _proxy_toolkit_get(f"/open?{'&'.join(q)}", timeout=120.0)
+        if body.get("ok") is False:
+            raise HTTPException(
+                status_code=502,
+                detail=str(body.get("error") or "toolkit_open_failed"),
+            )
+        return {
+            "ok": bool(body.get("ok", True)),
+            "toolkit_base_url": _toolkit_base(),
+            "toolkit": body,
+            "fileName": tip or body.get("fileName") or body.get("filename") or "",
+            "path": disk_path,
+        }
+
     @app.get("/toolkit/collect")
     def toolkit_collect(domains: str = "") -> dict[str, object]:
         """Proxy Toolkit /collect?domains=… (raw JSON)."""
