@@ -21,6 +21,7 @@ Locks are stored in the database. **PostgreSQL is the default for a normal insta
 - Git on `PATH`
 - Windows 10/11 for Creo Parametric / Creo View integration (Linux is fine for the server and development)
 - **PostgreSQL 14+** for a normal CreoPDM server install (see [Database](#database)). The `psycopg` driver is included with CreoPDM. SQLite needs no extra packages if you skip Postgres for local experiments.
+- **[CreoPDM Toolkit Companion](https://github.com/mbourque/CreoPDM-Toolkit-Companion)** on every Creo PC that will **Collect** metadata (or Rebuild metadata). Install the Toolkit DLL into Creo via `protk.dat` / `config.pro` — see [Toolkit Companion](#toolkit-companion-creo-pc) below. Without it, Collect cannot read model identity, parameters, features, structure, BOM, and related fields from Creo.
 
 ## Install from GitHub
 
@@ -227,7 +228,7 @@ Open `http://127.0.0.1:52113` on that PC, or the **Other PCs** LAN URL after all
 
 ## Creo agent (Windows tray)
 
-Use the agent on the PC using CreoPDM. It downloads CAD into a local workspace so Creo.JS can open files by path.
+Use the agent on the PC using CreoPDM. It downloads CAD into a local workspace so Creo.JS can open files by path, and it **proxies Collect** to the [Toolkit Companion](#toolkit-companion-creo-pc) so CreoPDM can store model metadata.
 
 The agent is separate from the CreoPDM server. Do **not** run it on the Linux host for a Windows Creo setup — run it on the PC that runs Creo.
 
@@ -303,12 +304,42 @@ Then users on Creo see **Creo: Agent offline** in the top bar → click the pill
 
 1. Keep CreoPDM running on the server (for example `systemctl --user` on Linux).
 2. Keep `creopdm-agent-tray` running on the Creo PC.
-3. In CreoPDM Settings, set open mode to **Embedded Creo Browser**.
-4. In Creo's built-in browser, open the CreoPDM URL (the Linux **Other PCs** address).
-5. Open a model — the page calls the agent at `http://127.0.0.1:8766`, which fetches the file (and assembly dependencies) into the local workspace, then Creo.JS opens native Creo-openable files. SolidWorks / CATIA / Inventor Multi-CAD files are materialized locally; CreoPDM drives **File > Open** in the running session and navigates the dialog to the workspace folder (session working directory is left unchanged).
-6. **Set Working Directory** uses the local workspace folder for the current product (not the remote server path).
+3. Install and load the [Toolkit Companion](#toolkit-companion-creo-pc) in Creo (required for Collect / Rebuild metadata).
+4. In CreoPDM Settings, set open mode to **Embedded Creo Browser**.
+5. In Creo's built-in browser, open the CreoPDM URL (the Linux **Other PCs** address).
+6. Open a model — the page calls the agent at `http://127.0.0.1:8766`, which fetches the file (and assembly dependencies) into the local workspace, then Creo.JS opens native Creo-openable files. SolidWorks / CATIA / Inventor Multi-CAD files are materialized locally; CreoPDM drives **File > Open** in the running session and navigates the dialog to the workspace folder (session working directory is left unchanged).
+7. **Set Working Directory** uses the local workspace folder for the current product (not the remote server path).
 
 Quick check that the agent is up: open `http://127.0.0.1:8766/health` in a normal browser on the Creo PC.
+
+## Toolkit Companion (Creo PC)
+
+**Collect** and **Rebuild metadata** need [CreoPDM-Toolkit-Companion](https://github.com/mbourque/CreoPDM-Toolkit-Companion) installed into Creo on the same PC as the agent. It is a Pro/TOOLKIT auxiliary app (Windows x64, Creo Parametric **10+**) that runs **inside** Creo and exposes a small localhost HTTP API (default `http://127.0.0.1:8767`). Full install steps, `protk.dat` / `config.pro` examples, and troubleshooting live in that repo’s README.
+
+**Install summary** (details in the companion README):
+
+1. Download or clone the companion repo and keep `bin\creopdm_structure.dll`, `protk.dat`, and `text\usascii\` together in a permanent folder (for example `C:\CreoPDM\Toolkit\`).
+2. Edit `protk.dat` so `EXEC_FILE` and `TEXT_DIR` match that folder.
+3. Add `protkdat <full-path-to-protk.dat>` to a `config.pro` Creo reads at startup; restart Creo.
+4. On startup you should see *CreoPDM Structure: HTTP listening on 127.0.0.1.* Confirm with:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8767/health
+```
+
+### How Collect uses the agent and Toolkit
+
+CreoPDM does **not** call Toolkit from the browser or from the Linux server. The chain on the Creo PC is:
+
+1. **CreoPDM UI** (embedded browser) starts Collect / Rebuild metadata for a tip already in the local agent workspace.
+2. The page calls the **agent** at `http://127.0.0.1:8766` (`/toolkit/health`, then `/toolkit/snapshot?filename=…&path=…`).
+3. The **agent** proxies to Toolkit on `http://127.0.0.1:8767` (`/health`, `/collect?domains=…`). Toolkit silent-retrieves the model when needed (no new Creo window/tab), reads identity, parameters, features, structure, BOM, mass, drawings, MFG, and related domains, then returns JSON.
+4. The agent maps that JSON into CreoPDM’s metadata snapshot shape and returns it to the page.
+5. The page **POSTs** the snapshot to the CreoPDM server so Details / Type / Ask AI / Where Used consumers can use it.
+
+Ports: agent **8766**, Toolkit **8767** (override Toolkit with `CREOPDM_TOOLKIT_PORT` before starting Creo; point the agent at a non-default URL with `CREOPDM_TOOLKIT_URL` or the agent’s `toolkit_base_url` setting).
+
+Open still uses the agent to **materialize** files and Creo.JS / File > Open to bring models into session. Gathering inventory for Collect goes through Toolkit via the agent — keep both the tray agent and Toolkit loaded whenever you Collect.
 
 ## AI (Ask AI / check-in comments)
 
