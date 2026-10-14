@@ -205,6 +205,8 @@ class EmbedExplorerContextResponse(BaseModel):
     show_undo_checkout: bool = False
     show_checkin: bool = False
     show_export_objects: bool = False
+    # Settings → Creo-openable models (cad_model_extensions).
+    cad_model_extensions: list[str] = Field(default_factory=list)
 
 
 class ProductWatchResponse(BaseModel):

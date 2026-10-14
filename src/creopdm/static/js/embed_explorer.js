@@ -36,8 +36,23 @@
   var showExport =
     root.getAttribute("data-show-export") === "1" ||
     root.getAttribute("data-can-export") === "1";
+  // Settings → Creo-openable models (types Creo can open / click-to-open).
+  var creoOpenableExtensions = parseExtensionList(
+    root.getAttribute("data-creo-openable") || ""
+  );
   var productNameEl = document.getElementById("ex-product-name");
   var productStateEl = document.getElementById("ex-product-state");
+
+  function parseExtensionList(raw) {
+    return String(raw || "")
+      .split(/[\s,;]+/)
+      .map(function (item) {
+        var ext = item.trim().toLowerCase();
+        if (!ext) return "";
+        return ext.startsWith(".") ? ext : "." + ext;
+      })
+      .filter(Boolean);
+  }
 
   var objects = [];
   var selected = null;
@@ -121,19 +136,33 @@
     return { file: "file.svg", label: "File" };
   }
 
-  function isCreoOpenable(obj) {
-    if (!obj) return false;
-    var typ = String(obj.object_type || "").toUpperCase();
-    if (
-      typ === "CREO_PART" ||
-      typ === "CREO_ASSEMBLY" ||
-      typ === "CREO_DRAWING" ||
-      typ === "CREO_MANUFACTURING"
-    ) {
-      return true;
-    }
-    var name = String(obj.filename || obj.relative_path || "").toLowerCase();
-    return /\.(prt|asm|drw|mfg)(\.\d+)?$/i.test(name);
+  function filenameExtension(filename) {
+    // Same as Files (shaft.prt.3 / outline.dxf.4 → logical suffix).
+    var name = String(filename || "").toLowerCase();
+    var match = name.match(/(\.[a-z0-9_+]+)(?:\.\d+)?$/i);
+    return match ? match[1] : "";
+  }
+
+  function objectExtension(obj) {
+    if (!obj) return "";
+    var fromName = filenameExtension(obj.filename || obj.relative_path || "");
+    if (fromName) return fromName;
+    var ext = String(obj.extension || "").toLowerCase();
+    if (!ext || /^\.\d+$/.test(ext.startsWith(".") ? ext : "." + ext)) return "";
+    return ext.startsWith(".") ? ext : "." + ext;
+  }
+
+  function isCreoOpenableTip(obj) {
+    var list = creoOpenableExtensions;
+    if (!list.length) return false;
+    return list.indexOf(objectExtension(obj)) >= 0;
+  }
+
+  function canOfferOpen(obj) {
+    // Open when permission allows and the tip is in Settings → Creo-openable models.
+    return (
+      Boolean(obj && obj.uuid) && showOpen && allowsContent && isCreoOpenableTip(obj)
+    );
   }
 
   function folderOf(relative) {
@@ -398,12 +427,7 @@
 
   function menuCapabilities() {
     // Match Files filesContextMenuCapabilities: hide when toolbar/product_ui would.
-    var canOpen =
-      Boolean(selected) &&
-      showOpen &&
-      allowsContent &&
-      isCreoOpenable(selected) &&
-      !busy;
+    var canOpen = canOfferOpen(selected) && !busy;
     var canDetails = Boolean(selected && selected.uuid && productId);
     var canCheckout =
       Boolean(selected) &&
@@ -658,12 +682,18 @@
       if (body && typeof body.show_export_objects === "boolean") {
         showExport = body.show_export_objects;
       }
+      if (body && Array.isArray(body.cad_model_extensions)) {
+        creoOpenableExtensions = parseExtensionList(
+          body.cad_model_extensions.join(",")
+        );
+      }
       root.setAttribute("data-allows-content", allowsContent ? "1" : "0");
       root.setAttribute("data-show-open", showOpen ? "1" : "0");
       root.setAttribute("data-show-checkout", showCheckout ? "1" : "0");
       root.setAttribute("data-show-undo", showUndo ? "1" : "0");
       root.setAttribute("data-show-checkin", showCheckin ? "1" : "0");
       root.setAttribute("data-show-export", showExport ? "1" : "0");
+      root.setAttribute("data-creo-openable", creoOpenableExtensions.join(","));
       applyProductChrome(
         product,
         (body && body.product_state_key) || "",
@@ -885,11 +915,11 @@
 
   async function onOpen() {
     if (!selected || busy) return;
-    if (!allowsContent || !isCreoOpenable(selected)) {
+    if (!canOfferOpen(selected)) {
       setMsg("Open is not available for this file.", "err");
       return;
     }
-    // Open chooser + Toolkit Open live in the main CreoPDM browser — not this pane.
+    // Open chooser lives in the main CreoPDM browser — not this pane.
     await openInMainEmbeddedBrowser(filesDeepLink("open"));
   }
 

@@ -45,6 +45,8 @@ def test_embed_explorer_route_and_assets(client):
     assert 'data-product-uuid="%s"' % product["uuid"] in page.text
     assert 'data-follow-active="0"' in page.text  # pinned ?product= stays put
     assert 'data-initial-folder="CAD"' in page.text
+    assert "data-creo-openable=" in page.text
+    assert ".prt" in page.text  # Creo-openable extensions seeded on the page
     assert 'id="ex-retry"' in page.text
     # Must not pull in the full Files shell.
     assert 'id="object-table"' not in page.text
@@ -114,6 +116,10 @@ def test_embed_explorer_context_follows_switched_product(client):
     assert "show_checkin" in body1
     assert "show_open" in body1
     assert "allows_content" in body1
+    assert "cad_model_extensions" in body1
+    assert isinstance(body1["cad_model_extensions"], list)
+    assert ".prt" in body1["cad_model_extensions"]
+    assert ".frm" in body1["cad_model_extensions"]
 
     assert client.get(f"/?product={second['uuid']}").status_code == 200
     ctx2 = client.get("/api/embed/explorer/context")
@@ -131,6 +137,17 @@ def test_embed_explorer_context_follows_switched_product(client):
     assert "body.show_checkout" in script
     # Must not enable Checkout from lifecycle-only allows_checkout after sync.
     assert "product.allows_checkout !== false" not in script
+    # Open = permission + Settings → Creo-openable models (not hardcoded .prt only).
+    assert "function canOfferOpen(" in script
+    assert "isCreoOpenableTip" in script
+    assert "creoOpenableExtensions" in script
+    assert "body.cad_model_extensions" in script
+    assert "data-creo-openable" in EMBED_HTML.read_text(encoding="utf-8")
+    open_fn = script.split("function canOfferOpen(", 1)[1].split("function ", 1)[0]
+    assert "obj.uuid" in open_fn
+    assert "showOpen" in open_fn
+    assert "allowsContent" in open_fn
+    assert "isCreoOpenableTip" in open_fn
 
 
 @requires_git
@@ -219,8 +236,9 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "**Right-click** a file" in docs
     assert "how do you want to open" in docs
     assert "main embedded browser" in docs
-    assert "never as a modal inside this navigator pane" in docs
-    assert "clear sticky metric pills" in docs
+    assert "never as a modal inside this navigator pane" in docs or "never a modal in this pane" in docs
+    assert "clear sticky metric pills" in docs or "Clear sticky metric pills" in docs
+    assert ".frm" in docs
     assert "No hover thumbnail" in docs
     assert "one scrollbar" in docs.lower() or "Only the tree scrolls" in docs
 

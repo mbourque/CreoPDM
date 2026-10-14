@@ -41,6 +41,7 @@ def _explorer_context_payload(
     *,
     file_q: str | None,
     folder_q: str | None,
+    ctx: AppContext,
 ) -> EmbedExplorerContextResponse:
     selected = product_to_response(product) if product is not None else None
     initial_folder = normalize_folder_query(folder_q)
@@ -77,6 +78,7 @@ def _explorer_context_payload(
         show_undo_checkout=bool(ui.show_undo_checkout),
         show_checkin=bool(ui.show_checkin),
         show_export_objects=bool(ui.show_export_objects),
+        cad_model_extensions=list(ctx.config.model_cad_extensions()),
     )
 
 
@@ -216,7 +218,7 @@ def embed_explorer_context(
         folder_q=folder_q,
     )
     return _explorer_context_payload(
-        request, product, focus, file_q=file_q, folder_q=folder_q
+        request, product, focus, file_q=file_q, folder_q=folder_q, ctx=ctx
     )
 
 
@@ -265,7 +267,7 @@ def embed_explorer(
             ctx.config.remember_product(product.uuid)
 
     ctx_payload = _explorer_context_payload(
-        request, product, focus, file_q=file_q, folder_q=folder_q
+        request, product, focus, file_q=file_q, folder_q=folder_q, ctx=ctx
     )
     selected = ctx_payload.product
     return render(
@@ -287,5 +289,6 @@ def embed_explorer(
             "query_folder": ctx_payload.initial_folder,
             "follow_active": not bool((product_q or "").strip()),
             "object_types": [item.value for item in ObjectType],
+            "cad_model_extensions": ctx_payload.cad_model_extensions,
         },
     )
