@@ -107,7 +107,13 @@ def test_embed_explorer_context_follows_switched_product(client):
     assert client.get(f"/?product={first['uuid']}").status_code == 200
     ctx1 = client.get("/api/embed/explorer/context")
     assert ctx1.status_code == 200, ctx1.text
-    assert ctx1.json()["product"]["uuid"] == first["uuid"]
+    body1 = ctx1.json()
+    assert body1["product"]["uuid"] == first["uuid"]
+    # Role ∩ lifecycle — same chrome Files uses (not lifecycle-only allows_*).
+    assert "show_checkout" in body1
+    assert "show_checkin" in body1
+    assert "show_open" in body1
+    assert "allows_content" in body1
 
     assert client.get(f"/?product={second['uuid']}").status_code == 200
     ctx2 = client.get("/api/embed/explorer/context")
@@ -121,6 +127,10 @@ def test_embed_explorer_context_follows_switched_product(client):
     assert "Switched to " in script
     assert "setInterval" in script
     assert "onlyIfChanged" in script
+    assert "showCheckout" in script
+    assert "body.show_checkout" in script
+    # Must not enable Checkout from lifecycle-only allows_checkout after sync.
+    assert "product.allows_checkout !== false" not in script
 
 
 @requires_git

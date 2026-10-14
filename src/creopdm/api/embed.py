@@ -21,10 +21,12 @@ from creopdm.context import AppContext
 from creopdm.exceptions import PermissionDeniedError, ProductNotFoundError, ValidationAppError
 from creopdm.models.object import EngineeringObject
 from creopdm.models.product import Product
+from creopdm.permissions import caps_dict
 from creopdm.product_state import (
     product_is_archived,
     product_state_label,
     product_state_value,
+    product_ui_capabilities,
 )
 from creopdm.schemas.common import EmbedExplorerContextResponse
 from creopdm.utils.folders import folder_of, normalize_folder_query
@@ -33,6 +35,7 @@ router = APIRouter()
 
 
 def _explorer_context_payload(
+    request: Request,
     product: Product | None,
     focus: EngineeringObject | None,
     *,
@@ -44,6 +47,23 @@ def _explorer_context_payload(
     if not initial_folder and focus is not None:
         initial_folder = folder_of(str(focus.relative_path or ""))
     state_key = product_state_value(product) if product else ""
+    caps = caps_dict(request)
+    ui = product_ui_capabilities(
+        product,
+        can_add_objects=bool(caps.get("can_add_objects")),
+        can_checkout=bool(caps.get("can_checkout")),
+        can_force_undo_checkout=bool(caps.get("can_force_undo_checkout")),
+        can_checkin=bool(caps.get("can_checkin")),
+        can_view_objects=bool(caps.get("can_view_objects")),
+        can_export_product=bool(caps.get("can_export_product")),
+        can_export_objects=bool(caps.get("can_export_objects")),
+        can_copy_to_vault=bool(caps.get("can_copy_to_vault")),
+        can_remove_objects=bool(caps.get("can_remove_objects")),
+        can_edit_product=bool(caps.get("can_edit_product")),
+        can_delete_product=bool(caps.get("can_delete_product")),
+        can_update_metadata=bool(caps.get("can_update_metadata")),
+        can_revert_objects=bool(caps.get("can_revert_objects")),
+    )
     return EmbedExplorerContextResponse(
         product=selected,
         product_state_key=state_key,
@@ -51,6 +71,12 @@ def _explorer_context_payload(
         focus_uuid=focus.uuid if focus else "",
         focus_filename=(focus.filename if focus else "") or (file_q or ""),
         initial_folder=initial_folder,
+        allows_content=bool(ui.allows_content),
+        show_open=bool(ui.show_open),
+        show_checkout=bool(ui.show_checkout),
+        show_undo_checkout=bool(ui.show_undo_checkout),
+        show_checkin=bool(ui.show_checkin),
+        show_export_objects=bool(ui.show_export_objects),
     )
 
 
@@ -189,7 +215,9 @@ def embed_explorer_context(
         file_q=file_q,
         folder_q=folder_q,
     )
-    return _explorer_context_payload(product, focus, file_q=file_q, folder_q=folder_q)
+    return _explorer_context_payload(
+        request, product, focus, file_q=file_q, folder_q=folder_q
+    )
 
 
 @router.get("/embed/explorer", response_class=HTMLResponse)
@@ -237,7 +265,7 @@ def embed_explorer(
             ctx.config.remember_product(product.uuid)
 
     ctx_payload = _explorer_context_payload(
-        product, focus, file_q=file_q, folder_q=folder_q
+        request, product, focus, file_q=file_q, folder_q=folder_q
     )
     selected = ctx_payload.product
     return render(

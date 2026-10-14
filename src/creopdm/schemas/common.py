@@ -198,6 +198,13 @@ class EmbedExplorerContextResponse(BaseModel):
     focus_uuid: str = ""
     focus_filename: str = ""
     initial_folder: str = ""
+    # Same role ∩ lifecycle flags as Files product_ui (RMB must match Files).
+    allows_content: bool = False
+    show_open: bool = False
+    show_checkout: bool = False
+    show_undo_checkout: bool = False
+    show_checkin: bool = False
+    show_export_objects: bool = False
 
 
 class ProductWatchResponse(BaseModel):

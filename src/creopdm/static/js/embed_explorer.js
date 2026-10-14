@@ -26,14 +26,16 @@
   var queryProduct = (root.getAttribute("data-query-product") || "").trim();
   var queryFile = (root.getAttribute("data-query-file") || "").trim();
   var queryFolder = (root.getAttribute("data-query-folder") || "").trim();
+  // Same product_ui flags as Files (role ∩ lifecycle). Do not use lifecycle-only
+  // allows_checkout — that wrongly showed Checkout when the role cannot.
   var allowsContent = root.getAttribute("data-allows-content") === "1";
-  var productAllowsCheckout = root.getAttribute("data-show-checkout") === "1";
-  var productAllowsCheckin = root.getAttribute("data-show-checkin") === "1";
-  var canCheckoutRole = root.getAttribute("data-can-checkout") === "1";
-  var canCheckinRole = root.getAttribute("data-can-checkin") === "1";
-  var canExportRole =
-    root.getAttribute("data-can-export") === "1" ||
-    root.getAttribute("data-show-export") === "1";
+  var showOpen = root.getAttribute("data-show-open") === "1";
+  var showCheckout = root.getAttribute("data-show-checkout") === "1";
+  var showUndo = root.getAttribute("data-show-undo") === "1";
+  var showCheckin = root.getAttribute("data-show-checkin") === "1";
+  var showExport =
+    root.getAttribute("data-show-export") === "1" ||
+    root.getAttribute("data-can-export") === "1";
   var productNameEl = document.getElementById("ex-product-name");
   var productStateEl = document.getElementById("ex-product-state");
 
@@ -395,35 +397,33 @@
   }
 
   function menuCapabilities() {
-    // Open/Checkout run in the main CreoPDM browser (chooser dialog lives there).
+    // Match Files filesContextMenuCapabilities: hide when toolbar/product_ui would.
     var canOpen =
-      Boolean(selected) && allowsContent && isCreoOpenable(selected) && !busy;
+      Boolean(selected) &&
+      showOpen &&
+      allowsContent &&
+      isCreoOpenable(selected) &&
+      !busy;
     var canDetails = Boolean(selected && selected.uuid && productId);
     var canCheckout =
       Boolean(selected) &&
-      canCheckoutRole &&
-      productAllowsCheckout &&
+      showCheckout &&
       Boolean(selected.can_checkout) &&
       !busy;
     var canUndo =
       Boolean(selected) &&
-      canCheckoutRole &&
-      productAllowsCheckout &&
+      showUndo &&
       Boolean(selected.owned_by_me) &&
       !busy;
     var canCheckin =
       Boolean(selected) &&
-      canCheckinRole &&
-      productAllowsCheckin &&
+      showCheckin &&
       Boolean(selected.can_checkin) &&
       !busy;
     var canDownload =
-      Boolean(selected && selected.uuid) && allowsContent && agentOnline && !busy;
+      Boolean(selected && selected.uuid) && allowsContent && !busy;
     var canExport =
-      Boolean(selected && selected.uuid) &&
-      canExportRole &&
-      allowsContent &&
-      !busy;
+      Boolean(selected && selected.uuid) && showExport && allowsContent && !busy;
     return {
       canOpen: canOpen,
       canDetails: canDetails,
@@ -639,12 +639,31 @@
       root.setAttribute("data-product-name", product ? product.name || "" : "");
       root.setAttribute("data-focus-uuid", focusUuid);
       root.setAttribute("data-initial-folder", initialFolder);
-      if (product) {
+      // Prefer server product_ui flags (role ∩ lifecycle) — same as Files chrome.
+      if (body && typeof body.allows_content === "boolean") {
+        allowsContent = body.allows_content;
+      } else if (product) {
         allowsContent = product.allows_content !== false;
-        productAllowsCheckout = product.allows_checkout !== false;
-        productAllowsCheckin = product.allows_checkin !== false;
-        root.setAttribute("data-allows-content", allowsContent ? "1" : "0");
       }
+      if (body && typeof body.show_open === "boolean") showOpen = body.show_open;
+      if (body && typeof body.show_checkout === "boolean") {
+        showCheckout = body.show_checkout;
+      }
+      if (body && typeof body.show_undo_checkout === "boolean") {
+        showUndo = body.show_undo_checkout;
+      }
+      if (body && typeof body.show_checkin === "boolean") {
+        showCheckin = body.show_checkin;
+      }
+      if (body && typeof body.show_export_objects === "boolean") {
+        showExport = body.show_export_objects;
+      }
+      root.setAttribute("data-allows-content", allowsContent ? "1" : "0");
+      root.setAttribute("data-show-open", showOpen ? "1" : "0");
+      root.setAttribute("data-show-checkout", showCheckout ? "1" : "0");
+      root.setAttribute("data-show-undo", showUndo ? "1" : "0");
+      root.setAttribute("data-show-checkin", showCheckin ? "1" : "0");
+      root.setAttribute("data-show-export", showExport ? "1" : "0");
       applyProductChrome(
         product,
         (body && body.product_state_key) || "",
@@ -903,7 +922,7 @@
   }
 
   async function onExport() {
-    if (!selected || busy || !allowsContent || !canExportRole) return;
+    if (!selected || busy || !allowsContent || !showExport) return;
     if (!window.confirm('Export "' + (selected.filename || "file") + '" as a zip?')) return;
     busy = true;
     setMsg("Preparing export…");
