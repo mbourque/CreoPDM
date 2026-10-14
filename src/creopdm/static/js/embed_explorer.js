@@ -346,9 +346,15 @@
           badges +
           "</span>";
         row.querySelector(".ex-name").textContent = obj.filename || obj.name || "file";
-        row.title = obj.relative_path || obj.filename || "";
+        row.title =
+          (obj.relative_path || obj.filename || "") + " — double-click to Open";
         row.addEventListener("click", function () {
           selectObject(obj);
+        });
+        row.addEventListener("dblclick", function (ev) {
+          ev.preventDefault();
+          selectObject(obj);
+          void onOpen();
         });
         parent.appendChild(row);
       });

@@ -658,6 +658,7 @@ Narrow page for Creo’s navigator pane (~350–450 px): **`GET /embed/explorer?
 | Omit `product` but pass `file` / `folder` | Infer an accessible product that contains that tip or folder; seed folder expand + selection from `file` | Leave the page blank when a matching product exists |
 | File list request fails (auth / network / 4xx / 5xx) | Show an error and a **Retry** button | Show “This product has no files yet.” for a failed load |
 | Select a file | Show a short action row: **Open**, **Check Out**, **Check In** (hidden/disabled when role ∩ lifecycle cannot) | Call Toolkit on `127.0.0.1:8767` from the browser (CORS / credentials) |
+| **Double-click** a file | Same as **Open** for that file (select, then prepare → materialize → Toolkit open) | Open Details (this pane is not the full Files UI); call Toolkit from the browser |
 | Click **Open** | CreoPDM prepare (`/api/creo/open`) → creopdm-agent materialize → agent proxies Toolkit `http://127.0.0.1:8767/open?fileName=…&path=…`; show success or failure on the page | Open when Toolkit / agent is unreachable without explaining why |
 | Toolkit Companion unreachable (agent `/toolkit/health` fails) | Keep the read-only list and search; disable **Open** and show why | Crash the page; pretend Open succeeded |
 | creopdm-agent offline | Same as above for Open; Checkout / Check In that need a local workspace tip may warn | |
