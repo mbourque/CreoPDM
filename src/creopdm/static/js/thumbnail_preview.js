@@ -55,6 +55,15 @@
     );
   }
 
+  function overlapsRect(left, top, w, h, rect) {
+    return !(
+      left + w <= rect.left ||
+      left >= rect.right ||
+      top + h <= rect.top ||
+      top >= rect.bottom
+    );
+  }
+
   function positionNear(el) {
     if (!overlay || !el) return;
     var rect = el.getBoundingClientRect();
@@ -64,26 +73,55 @@
     var left = rect.right + margin;
     var top = rect.top;
     var rightOnly = preferRightOfLink();
-    if (!rightOnly && left + w > window.innerWidth - margin) {
-      left = rect.left - w - margin;
+    if (rightOnly) {
+      // 1) Immediately right of the name.
+      // 2) Else pin to the pane’s right edge (names are left-aligned).
+      // 3) Else below / above the name — never slide up over it.
+      if (left + w > window.innerWidth - margin) {
+        left = window.innerWidth - w - margin;
+      }
+      if (left < margin) left = margin;
+      if (overlapsRect(left, top, w, h, rect)) {
+        left = Math.max(margin, Math.min(rect.left, window.innerWidth - w - margin));
+        top = rect.bottom + margin;
+        if (top + h > window.innerHeight - margin) {
+          top = rect.top - h - margin;
+        }
+        if (top < margin || overlapsRect(left, top, w, h, rect)) {
+          left = Math.max(rect.right + margin, margin);
+          if (left + w > window.innerWidth - margin) {
+            left = window.innerWidth - w - margin;
+          }
+          top = rect.bottom + margin;
+          if (top + h > window.innerHeight - margin) {
+            top = Math.max(margin, window.innerHeight - h - margin);
+          }
+          // Final guard: if still on top of the name, hide rather than cover.
+          if (overlapsRect(left, top, w, h, rect)) {
+            overlay.hidden = true;
+            return;
+          }
+        }
+      }
+    } else {
+      if (left + w > window.innerWidth - margin) {
+        left = rect.left - w - margin;
+      }
+      if (left < margin) left = margin;
+      if (top + h > window.innerHeight - margin) {
+        top = window.innerHeight - h - margin;
+      }
+      if (top < margin) top = margin;
     }
-    if (rightOnly && left + w > window.innerWidth - margin) {
-      // No room to the right inside this viewport — sit under the name instead
-      // of covering it (never flip to the left over the filename).
-      left = Math.max(margin, Math.min(rect.left, window.innerWidth - w - margin));
-      top = rect.bottom + margin;
-    }
-    if (left < margin) left = margin;
-    if (top + h > window.innerHeight - margin) {
-      top = window.innerHeight - h - margin;
-    }
-    if (top < margin) top = margin;
     overlay.style.left = Math.round(left) + "px";
     overlay.style.top = Math.round(top) + "px";
   }
 
   function showWithUrl(el, name, url) {
     ensureOverlay();
+    img.onload = function () {
+      if (activeEl === el && overlay && !overlay.hidden) positionNear(el);
+    };
     img.src = url;
     img.alt = name || "Model preview";
     caption.textContent = name || "";

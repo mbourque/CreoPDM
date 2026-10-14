@@ -189,7 +189,11 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "ex-loading" in css
     thumb_js = (ROOT / "src/creopdm/static/js/thumbnail_preview.js").read_text(encoding="utf-8")
     assert 'data-thumb-place") === "right"' in thumb_js
+    assert "overlapsRect" in thumb_js
+    assert "never slide up over it" in thumb_js or "Never flip" in thumb_js or "never flip" in thumb_js
     assert "rect.bottom + margin" in thumb_js
+    assert "overlay.hidden = true" in thumb_js  # last resort: hide rather than cover name
+    assert "128px" in css
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "**Double-click** a file" in docs
     assert "**Right-click** a file" in docs

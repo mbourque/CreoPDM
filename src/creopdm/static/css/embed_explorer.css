@@ -315,13 +315,13 @@ body#embed-explorer {
 .ex-context-menu .ex-menu-item:hover { background: #eef2f6; }
 .ex-context-menu .ex-menu-item[hidden] { display: none !important; }
 
-/* Same hover preview as Files — pointer-events none so double-click still works. */
+/* Compact thumbs so they fit to the right of names in a ~350–450 px pane. */
 .thumb-preview {
   position: fixed;
   z-index: 1200;
-  width: 200px;
+  width: 128px;
   max-width: calc(100vw - 16px);
-  padding: 0.3rem;
+  padding: 0.25rem;
   background: var(--ex-surface);
   border: 1px solid var(--ex-line);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
@@ -331,7 +331,7 @@ body#embed-explorer {
   display: block;
   width: 100%;
   height: auto;
-  max-height: 200px;
+  max-height: 128px;
   object-fit: contain;
   background: #f4f4f4;
 }
