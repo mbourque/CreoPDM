@@ -4030,124 +4030,53 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     ];
   }
 
+  function filesContextMenuApi() {
+    const api = window.CreoPdmFilesContextMenu;
+    if (!api || typeof api.capabilities !== "function") {
+      throw new Error("files_context_menu.js failed to load (CreoPdmFilesContextMenu missing).");
+    }
+    return api;
+  }
+
   function filesContextMenuCapabilities() {
+    // Shared with Creo navigator embed — do not fork hide rules here.
     const selected = selectedRows();
     const roleCanCheckout = userCanCheckout();
     const roleCanCheckin = userCanCheckin();
-    const canOpen = Boolean(openBtn) && Boolean(selectedOpenSpec());
-    const one = selected.length === 1 ? selected[0] : null;
-    const canDetails = Boolean(historyBtn) && Boolean(rowHistoryHref(one));
-    const canCheckout =
-      Boolean(checkoutBtn) &&
-      roleCanCheckout &&
-      selected.length > 0 &&
-      selected.every((row) => row.dataset.canCheckout === "1");
-    const canUndo =
-      Boolean(undoBtn) &&
-      roleCanCheckout &&
-      selected.length > 0 &&
-      selected.every((row) => row.dataset.owned === "1");
-    const addOnly = selectionIsAddOnly(selected);
-    // New files only + objects.add (Add menu present). Never for Modified / Files.
-    const canAddSelected = canOfferAdd() && addOnly;
-    // Check in selected for Modified/checkout work — not New-files-only (Add selected).
-    const canCheckin =
-      Boolean(checkinBtn) &&
-      roleCanCheckin &&
-      selectionCanCheckin(selected) &&
-      !addOnly;
-    // Modified "Newer local save" / New file (local) are already in the agent workspace.
-    const alreadyLocal =
-      selected.length > 0 && selected.every((row) => row.dataset.localCache === "1");
-    // Download/export: role caps ∩ product_ui (data-allows-content / Export DOM).
-    const canDownload =
-      canViewObjects() &&
-      productAllowsContent() &&
-      selectedDownloadIds().length > 0 &&
-      !alreadyLocal;
-    const canExportObjects = document.body?.dataset?.canExportObjects === "1";
-    const exportHasSelection =
-      selected.flatMap(rowObjectIds).length > 0 || selectedFolderPaths().length > 0;
-    const canExport =
-      Boolean(exportSelectedBtn) &&
-      canExportObjects &&
-      exportHasSelection;
-    // Same rule as Remove ▾ → Remove from Workspace (local New files only).
-    const canDiscardLocal =
-      Boolean(discardLocalBtn) &&
-      selected.some((row) => isNewFileQueueRow(row) && row.dataset.localCache === "1");
-    return {
-      canOpen,
-      canDetails,
-      canCheckout,
-      canUndo,
-      canAddSelected,
-      canCheckin,
-      canDownload,
-      canExport,
-      canDiscardLocal,
-    };
+    const rows = selected.map((row) => ({
+      uuid: String(row.dataset.uuid || "").trim(),
+      relativePath: String(row.dataset.relativePath || "").trim(),
+      canCheckout: row.dataset.canCheckout === "1",
+      owned: row.dataset.owned === "1",
+      canCheckin: row.dataset.canCheckin === "1",
+      localCache: row.dataset.localCache === "1",
+      isNewFile: isNewFileQueueRow(row),
+      hasDetails: Boolean(historyBtn) && Boolean(rowHistoryHref(row)),
+      hasCheckinWork: rowHasCheckinWork(row),
+      isFolder: row.classList.contains("folder-row"),
+    }));
+    // Folder selection contributes export paths (not row uuids alone).
+    if (selectedFolderPaths().length && !rows.some((row) => row.isFolder)) {
+      rows.push({ isFolder: true });
+    }
+    return filesContextMenuApi().capabilities({
+      rows,
+      hasOpenSpec: Boolean(openBtn) && Boolean(selectedOpenSpec()),
+      showOpen: Boolean(openBtn),
+      showCheckout: Boolean(checkoutBtn) && roleCanCheckout,
+      showUndo: Boolean(undoBtn) && roleCanCheckout,
+      showCheckin: Boolean(checkinBtn) && roleCanCheckin,
+      showExportObjects:
+        Boolean(exportSelectedBtn) && document.body?.dataset?.canExportObjects === "1",
+      canViewObjects: canViewObjects(),
+      allowsContent: productAllowsContent(),
+      canOfferAdd: canOfferAdd(),
+      canDiscardLocalControl: Boolean(discardLocalBtn),
+    });
   }
 
   function ensureFilesContextMenu() {
     let menu = document.getElementById("files-context-menu");
-    const items = [
-      {
-        id: "files-context-open",
-        action: "open",
-        label: "Open selected",
-        title: "Open the selected file in Creo or its Windows associated program.",
-      },
-      {
-        id: "files-context-details",
-        action: "details",
-        label: "Details",
-        title: "Open Details for the selected file (Overview and History). Same as double-clicking the row.",
-      },
-      {
-        id: "files-context-checkout",
-        action: "checkout",
-        label: "Checkout selected",
-        title: "Check out the selected files and download them to the local workspace.",
-      },
-      {
-        id: "files-context-undo",
-        action: "undo",
-        label: "Undo Checkout",
-        title: "Release your checkout lock. Does not delete the vault file or record a new version. A Creo save still on disk can be checked in afterward.",
-      },
-      {
-        id: "files-context-add-selected",
-        action: "add-selected",
-        label: "Add selected…",
-        title: "Add selected new files to the product (uploads local workspace files first).",
-      },
-      {
-        id: "files-context-checkin",
-        action: "checkin",
-        label: "Check in selected…",
-        title: "Check in selected files.",
-      },
-      {
-        id: "files-context-download",
-        action: "download",
-        label: "Download selected to workspace",
-        title: "Download the selected files into this product’s local workspace on this PC.",
-      },
-      {
-        id: "files-context-export",
-        action: "export",
-        label: "Export selected…",
-        title: "Download the selected vault files or folders as a zip.",
-      },
-      {
-        id: "files-context-discard-local",
-        action: "discard-local",
-        label: "Remove from Workspace…",
-        title:
-          "Move selected files from the local workspace on this PC to the Recycle Bin. Does not affect the vault or product list.",
-      },
-    ];
     if (!menu) {
       menu = document.createElement("div");
       menu.id = "files-context-menu";
@@ -4156,29 +4085,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       menu.hidden = true;
       document.body.appendChild(menu);
     }
-    items.forEach((spec) => {
-      if (menu.querySelector(`#${spec.id}`)) return;
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "toolbar-menu-item";
-      btn.id = spec.id;
-      btn.dataset.action = spec.action;
-      btn.setAttribute("role", "menuitem");
-      btn.textContent = spec.label;
-      btn.title = spec.title;
-      // Keep toolbar-like order when inserting into an older menu node.
-      const order = items.map((item) => item.id);
-      const index = order.indexOf(spec.id);
-      let inserted = false;
-      for (let i = index + 1; i < order.length; i += 1) {
-        const next = menu.querySelector(`#${order[i]}`);
-        if (next) {
-          menu.insertBefore(btn, next);
-          inserted = true;
-          break;
-        }
-      }
-      if (!inserted) menu.appendChild(btn);
+    filesContextMenuApi().ensureItems(menu, {
+      itemClass: "toolbar-menu-item",
+      idPrefix: "files-context-",
     });
     return menu;
   }
@@ -4208,44 +4117,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function openFilesContextMenu(clientX, clientY) {
     syncToolbar();
+    const api = filesContextMenuApi();
     const caps = filesContextMenuCapabilities();
-    if (
-      !caps.canOpen
-      && !caps.canDetails
-      && !caps.canCheckout
-      && !caps.canUndo
-      && !caps.canAddSelected
-      && !caps.canCheckin
-      && !caps.canDownload
-      && !caps.canExport
-      && !caps.canDiscardLocal
-    ) {
-      return false;
-    }
+    if (!api.anyVisible(caps)) return false;
     closeAllToolbarMenus();
     const menu = ensureFilesContextMenu();
-    const openItem = menu.querySelector("#files-context-open");
-    const detailsItem = menu.querySelector("#files-context-details");
-    const checkoutItem = menu.querySelector("#files-context-checkout");
-    const undoItem = menu.querySelector("#files-context-undo");
-    const addSelectedItem = menu.querySelector("#files-context-add-selected");
-    const checkinItem = menu.querySelector("#files-context-checkin");
-    const downloadItem = menu.querySelector("#files-context-download");
-    const exportItem = menu.querySelector("#files-context-export");
-    const discardLocalItem = menu.querySelector("#files-context-discard-local");
-    if (openItem) openItem.hidden = !caps.canOpen;
-    if (detailsItem) detailsItem.hidden = !caps.canDetails;
-    if (checkoutItem) checkoutItem.hidden = !caps.canCheckout;
-    if (undoItem) undoItem.hidden = !caps.canUndo;
-    if (addSelectedItem) addSelectedItem.hidden = !caps.canAddSelected;
-    if (checkinItem) {
-      checkinItem.hidden = !caps.canCheckin;
-      checkinItem.textContent = "Check in selected…";
-      checkinItem.title = "Check in selected files.";
-    }
-    if (downloadItem) downloadItem.hidden = !caps.canDownload;
-    if (exportItem) exportItem.hidden = !caps.canExport;
-    if (discardLocalItem) discardLocalItem.hidden = !caps.canDiscardLocal;
+    api.applyVisibility(menu, caps);
     positionFilesContextMenu(menu, clientX, clientY);
     return true;
   }
@@ -8298,6 +8175,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return;
     }
     selectOnlyForNavigator(row);
+    // Navigator RMB hands off here — run the same toolbar/RMB action as Files.
     if (action === "open") {
       void (async () => {
         const spec = selectedOpenSpec();
@@ -8309,12 +8187,46 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       })();
       return;
     }
+    if (action === "details") {
+      historyBtn?.click();
+      return;
+    }
     if (action === "checkout") {
       void (async () => {
         // Re-assert single selection in case a metric restore raced with us.
         selectOnlyForNavigator(row);
         await (await withCheckoutModule()).checkoutSelected?.();
       })();
+      return;
+    }
+    if (action === "undo") {
+      selectOnlyForNavigator(row);
+      undoBtn?.click();
+      return;
+    }
+    if (action === "checkin") {
+      selectOnlyForNavigator(row);
+      checkinBtn?.click();
+      return;
+    }
+    if (action === "download") {
+      selectOnlyForNavigator(row);
+      void downloadSelectedToWorkspace();
+      return;
+    }
+    if (action === "export") {
+      selectOnlyForNavigator(row);
+      exportSelectedBtn?.click();
+      return;
+    }
+    if (action === "add-selected") {
+      selectOnlyForNavigator(row);
+      $("#add-selected-btn")?.click();
+      return;
+    }
+    if (action === "discard-local") {
+      selectOnlyForNavigator(row);
+      discardLocalBtn?.click();
     }
   }
   if (isListPage) {

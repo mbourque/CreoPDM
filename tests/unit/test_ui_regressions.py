@@ -2019,61 +2019,58 @@ def test_toolbar_hides_inactive_actions():
 
 
 def test_files_context_menu_download_to_workspace():
-    """Right-click selected rows: toolbar-matched actions; hide when not possible."""
+    """Right-click selected rows: shared menu module; hide when not possible."""
     script = _app_js()
+    shared = (ROOT / "src" / "creopdm" / "static" / "js" / "files_context_menu.js").read_text(
+        encoding="utf-8"
+    )
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     css = APP_CSS.read_text(encoding="utf-8")
+    base = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
+    assert "files_context_menu.js" in base
+    assert "CreoPdmFilesContextMenu" in shared
+    assert 'label: "Open selected"' in shared
+    assert 'label: "Details"' in shared
+    assert 'label: "Checkout selected"' in shared
+    assert 'label: "Undo Checkout"' in shared
+    assert 'label: "Add selected…"' in shared
+    assert 'label: "Check in selected…"' in shared
+    assert 'label: "Download selected to workspace"' in shared
+    assert 'label: "Export selected…"' in shared
+    assert 'label: "Remove from Workspace…"' in shared
+    assert "Open selected…" not in shared
+    assert "function capabilities(" in shared
+    assert "alreadyLocal" in shared
+    assert "canDiscardLocal" in shared
+    assert "needsEmbedded: true" in shared
     assert "function onFileTableContextMenu(" in script
     assert 'addEventListener("contextmenu", onFileTableContextMenu)' in script
     assert "function openFilesContextMenu(" in script
     assert "function filesContextMenuCapabilities(" in script
+    assert "CreoPdmFilesContextMenu" in script
     assert "function downloadSelectedToWorkspace(" in script
     assert "function runFilesContextMenuAction(" in script
-    assert "Download selected to workspace" in script
-    assert 'label: "Open selected"' in script
-    assert "Open selected…" not in script
-    assert ">Details<" in script or '"Details"' in script
-    assert "Checkout selected" in script
-    assert "Undo Checkout" in script
-    assert "Check in selected…" in script
-    assert "Export selected…" in script
-    assert 'dataset?.canView === "1"' in script
     caps = _between(script, "function filesContextMenuCapabilities(", "function ensureFilesContextMenu(")
+    assert "filesContextMenuApi().capabilities(" in caps
     assert "selectedOpenSpec()" in caps
-    assert "rowHistoryHref(one)" in caps
-    assert "selectionCanCheckin(selected)" in caps
-    assert "canAddSelected" in caps
-    assert "selectionIsAddOnly(selected)" in caps
-    assert "!addOnly" in caps
-    assert "alreadyLocal" in caps
-    assert 'dataset.localCache === "1"' in caps
-    assert "!alreadyLocal" in caps
+    assert "rowHistoryHref(row)" in caps
+    assert "rowHasCheckinWork(row)" in caps
+    assert "isNewFileQueueRow(row)" in caps
     assert 'dataset.canCheckout === "1"' in caps
     assert 'dataset.owned === "1"' in caps
-    assert "canUndo" in caps
-    assert "canExportObjects" in caps
-    assert "canDiscardLocal" in caps
+    assert 'dataset.localCache === "1"' in caps
     assert "discardLocalBtn" in caps
-    assert "isNewFileQueueRow(row) && row.dataset.localCache === \"1\"" in caps
     docs_ctx = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "already local-workspace tips" in docs_ctx or "already in the local workspace" in docs_ctx
     ensure = _between(script, "function ensureFilesContextMenu(", "function closeFilesContextMenu(")
-    assert 'id: "files-context-discard-local"' in ensure
-    assert 'action: "discard-local"' in ensure
-    assert "Remove from Workspace…" in ensure
+    assert 'idPrefix: "files-context-"' in ensure
+    assert "ensureItems(menu" in ensure
     html = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     assert 'id="discard-local-btn"' in html
     assert ">Remove from Workspace…</button>" in html
     open_menu = _between(script, "function openFilesContextMenu(", "async function downloadSelectedToWorkspace(")
-    assert "openItem.hidden = !caps.canOpen" in open_menu
-    assert "detailsItem.hidden = !caps.canDetails" in open_menu
-    assert "checkoutItem.hidden = !caps.canCheckout" in open_menu
-    assert "undoItem.hidden = !caps.canUndo" in open_menu
-    assert "addSelectedItem.hidden = !caps.canAddSelected" in open_menu
-    assert "checkinItem.hidden = !caps.canCheckin" in open_menu
-    assert "downloadItem.hidden = !caps.canDownload" in open_menu
-    assert "exportItem.hidden = !caps.canExport" in open_menu
-    assert "discardLocalItem.hidden = !caps.canDiscardLocal" in open_menu
+    assert "applyVisibility(menu, caps)" in open_menu
+    assert "anyVisible(caps)" in open_menu
     run = _between(script, "function runFilesContextMenuAction(", "function onFileTableContextMenu(")
     assert "openBtn?.click()" in run
     assert "historyBtn?.click()" in run

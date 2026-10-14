@@ -45,8 +45,7 @@ def test_embed_explorer_route_and_assets(client):
     assert 'data-product-uuid="%s"' % product["uuid"] in page.text
     assert 'data-follow-active="0"' in page.text  # pinned ?product= stays put
     assert 'data-initial-folder="CAD"' in page.text
-    assert "data-creo-openable=" in page.text
-    assert ".prt" in page.text  # Creo-openable extensions seeded on the page
+    assert "files_context_menu.js" in page.text
     assert 'id="ex-retry"' in page.text
     # Must not pull in the full Files shell.
     assert 'id="object-table"' not in page.text
@@ -116,10 +115,6 @@ def test_embed_explorer_context_follows_switched_product(client):
     assert "show_checkin" in body1
     assert "show_open" in body1
     assert "allows_content" in body1
-    assert "cad_model_extensions" in body1
-    assert isinstance(body1["cad_model_extensions"], list)
-    assert ".prt" in body1["cad_model_extensions"]
-    assert ".frm" in body1["cad_model_extensions"]
 
     assert client.get(f"/?product={second['uuid']}").status_code == 200
     ctx2 = client.get("/api/embed/explorer/context")
@@ -137,17 +132,11 @@ def test_embed_explorer_context_follows_switched_product(client):
     assert "body.show_checkout" in script
     # Must not enable Checkout from lifecycle-only allows_checkout after sync.
     assert "product.allows_checkout !== false" not in script
-    # Open = permission + Settings → Creo-openable models (not hardcoded .prt only).
-    assert "function canOfferOpen(" in script
-    assert "isCreoOpenableTip" in script
-    assert "creoOpenableExtensions" in script
-    assert "body.cad_model_extensions" in script
-    assert "data-creo-openable" in EMBED_HTML.read_text(encoding="utf-8")
-    open_fn = script.split("function canOfferOpen(", 1)[1].split("function ", 1)[0]
-    assert "obj.uuid" in open_fn
-    assert "showOpen" in open_fn
-    assert "allowsContent" in open_fn
-    assert "isCreoOpenableTip" in open_fn
+    # RMB hide rules come from shared files_context_menu.js (same as Files).
+    assert "CreoPdmFilesContextMenu" in script
+    assert "menuCapabilitiesFor" in script
+    assert "needsEmbeddedBrowser" in script
+    assert "files_context_menu.js" in EMBED_HTML.read_text(encoding="utf-8")
 
 
 @requires_git
@@ -185,27 +174,32 @@ def test_embed_explorer_unknown_product_rejected(client):
 def test_embed_js_never_calls_toolkit_from_browser():
     """Regression: navigator page must not hit 8767 (CORS / credentials)."""
     script = EMBED_JS.read_text(encoding="utf-8")
+    shared = (ROOT / "src/creopdm/static/js/files_context_menu.js").read_text(encoding="utf-8")
     assert "/toolkit/url?" in script
     assert "openInMainEmbeddedBrowser" in script
     assert "tryCreoJsSetUrl" in script
     assert "thumb-preview-target" not in script
-    assert "/api/creo/open" in script  # Download still prepares via server
-    assert "/materialize" in script
+    # RMB actions that need Files hand off — no in-pane prepare/materialize/check-in.
+    assert "/api/creo/open" not in script
+    assert "/materialize" not in script
+    assert "needsEmbeddedBrowser" in script
+    assert "CreoPdmFilesContextMenu" in script
+    assert 'label: "Open selected"' in shared
+    assert "needsEmbedded: true" in shared
     assert 'fetch("http://127.0.0.1:8767' not in script
     assert "fetch(`http://127.0.0.1:8767" not in script
     assert "window.location.href" not in script  # Open/Details must not navigate the pane
     assert 'addEventListener("dblclick"' in script
     assert "void onOpen()" in script
-    assert "Open selected" in script
     assert "function openContextMenu(" in script
     assert "filesDeepLink" in script
-    assert 'filesDeepLink("open")' in script
-    assert 'filesDeepLink("checkout")' in script
+    assert "filesDeepLink(action)" in script
     assert "contextmenu" in script
     assert "ex-open-dialog" not in script
     assert 'agentBase() + "/toolkit/open"' not in script  # Open hand-off is main browser
     html = EMBED_HTML.read_text(encoding="utf-8")
     assert 'id="embed-explorer"' in html
+    assert "files_context_menu.js" in html
     assert "thumbnail_preview.js" not in html
     assert 'data-thumb-place=' not in html
     assert 'id="ex-context-menu"' in html
@@ -223,8 +217,13 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "consumeNavigatorDeepLink" in app_js
     assert "selectOnlyForNavigator" in app_js
     assert "clearStickyMetricSelectionForNavigator" in app_js
+    assert "CreoPdmFilesContextMenu" in app_js
     assert 'action === "open"' in app_js
     assert 'action === "checkout"' in app_js
+    assert 'action === "checkin"' in app_js
+    assert 'action === "download"' in app_js
+    assert 'action === "export"' in app_js
+    assert 'action === "undo"' in app_js
     # Must not use plain selectOnly (sticky Parts pill keeps hundreds selected).
     deep = app_js.split("function consumeNavigatorDeepLink(", 1)[1].split(
         "if (isListPage)", 1
@@ -234,11 +233,9 @@ def test_embed_js_never_calls_toolkit_from_browser():
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "**Double-click** a file" in docs
     assert "**Right-click** a file" in docs
-    assert "how do you want to open" in docs
+    assert "files_context_menu.js" in docs
     assert "main embedded browser" in docs
-    assert "never as a modal inside this navigator pane" in docs or "never a modal in this pane" in docs
-    assert "clear sticky metric pills" in docs or "Clear sticky metric pills" in docs
-    assert ".frm" in docs
+    assert "hands off" in docs.lower() or "hand off" in docs.lower()
     assert "No hover thumbnail" in docs
     assert "one scrollbar" in docs.lower() or "Only the tree scrolls" in docs
 

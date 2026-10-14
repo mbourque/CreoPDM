@@ -29,7 +29,6 @@
   data-can-export="{{ '1' if can_export_objects else '0' }}"
   data-can-checkout="{{ '1' if can_checkout else '0' }}"
   data-can-checkin="{{ '1' if can_checkin else '0' }}"
-  data-creo-openable="{{ cad_model_extensions | join(',') }}"
 >
   <header class="ex-header">
     <div class="ex-title-row">
@@ -62,6 +61,7 @@
 
   <div id="ex-context-menu" class="ex-context-menu" role="menu" hidden></div>
 
+  <script src="/static/js/files_context_menu.js?v={{ app_version }}-files-ctx"></script>
   <script src="/static/js/embed_explorer.js?v={{ app_version }}"></script>
 </body>
 </html>
