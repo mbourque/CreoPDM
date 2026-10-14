@@ -2450,6 +2450,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (searchScope) searchScope.hidden = true;
     if (folderCrumb) folderCrumb.hidden = false;
     updateMetricCounts();
+    // Folder HTML restore must re-honor the active column sort.
+    reapplyActiveTableSorts();
   }
 
   function showSearchMatches(items, productId) {
@@ -2465,6 +2467,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     objectTbody.innerHTML = items.map((item) => searchRowHtml(item, productId)).join("");
     updateMetricCounts();
     syncModifiedStateLabels();
+    // Product-wide search replaces tbody — re-apply Type/Name/… or aria-sort lies.
+    reapplyActiveTableSorts();
   }
 
   async function searchAllFolders(query) {
@@ -3409,7 +3413,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     row.dataset.sortState = tree ? `${tree}/${token}` : token;
   }
 
+  function sortValueLeaf(raw) {
+    const text = String(raw || "");
+    if (!text.includes("/")) return text;
+    return text.slice(text.lastIndexOf("/") + 1);
+  }
+
   function sortValue(row, key, columnIndex) {
+    // Folder browse prefixes rev/state/type/creo/checkout with the parent path so
+    // sibling folders and files interleave. Product-wide search (* / *.prt / …)
+    // is a flat list — sort by the visible column value only (not by folder).
+    const searchFlat =
+      Boolean(row.closest?.("#object-table")) &&
+      row.closest("#object-table")?.dataset?.searching === "1";
     if (key === "state") {
       if (row.classList.contains("folder-row")) {
         const folder = row.dataset.folder || "";
@@ -3418,11 +3434,26 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const state = rowDisplayState(row);
       const tree = row.dataset.tree || "";
       const token = stateSortToken(state);
+      if (searchFlat) return token;
       return tree ? `${tree}/${token}` : token;
+    }
+    if (key === "name" && searchFlat) {
+      const filename = String(row.dataset.filename || "").trim();
+      if (filename) return filename;
+      const relative = String(row.dataset.sortName || row.dataset.relativePath || "");
+      return sortValueLeaf(relative) || relative;
     }
     const dataKey = `sort${key.charAt(0).toUpperCase()}${key.slice(1)}`;
     const fromData = row.dataset[dataKey];
-    if (fromData !== undefined && fromData !== "") return fromData;
+    if (fromData !== undefined && fromData !== "") {
+      if (
+        searchFlat &&
+        (key === "type" || key === "rev" || key === "creo" || key === "checkout")
+      ) {
+        return sortValueLeaf(fromData);
+      }
+      return fromData;
+    }
     const cell = row.children[columnIndex];
     return cell ? cell.textContent.replace(/\s+/g, " ").trim() : "";
   }

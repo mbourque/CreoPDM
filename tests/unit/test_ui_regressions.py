@@ -2126,6 +2126,31 @@ def test_thumb_preview_hides_for_files_context_menu():
     assert "covering the right-click menu" in docs
 
 
+def test_search_results_sort_by_column_not_folder_path():
+    """Regression: * search Type sort must not group by vault folder first."""
+    script = _app_shell_js()
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    sort_fn = _between(script, "function sortValue(row, key, columnIndex) {", "function reapplyActiveTableSorts(")
+    assert 'dataset?.searching === "1"' in sort_fn
+    assert 'key === "type"' in sort_fn
+    assert "sortValueLeaf" in sort_fn
+    assert 'key === "name" && searchFlat' in sort_fn
+    show_search = _between(
+        script,
+        "function showSearchMatches(items, productId) {",
+        "async function searchAllFolders(query) {",
+    )
+    assert "reapplyActiveTableSorts()" in show_search
+    show_folder = _between(
+        script,
+        "function showFolderView() {",
+        "function showSearchMatches(items, productId) {",
+    )
+    assert "reapplyActiveTableSorts()" in show_folder
+    assert "flat** match list" in docs or "flat match list" in docs or "visible column value" in docs
+    assert "grouped by folder" in docs
+
+
 def test_folder_row_click_selects_double_click_opens():
     """Regression: folder name link opens; row chrome selects; double-click opens."""
     script = _app_js()
