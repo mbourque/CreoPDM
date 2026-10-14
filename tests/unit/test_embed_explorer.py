@@ -142,6 +142,8 @@ def test_embed_explorer_context_follows_switched_product(client):
     assert "tipHasCheckinWork" in script
     assert "mergeAgentPendingCheckinIds" in script
     assert "/files?" in script
+    assert "/hash-paths" in script
+    assert "hashAgentCachePaths" in script
     assert "files_context_menu.js" in EMBED_HTML.read_text(encoding="utf-8")
 
 

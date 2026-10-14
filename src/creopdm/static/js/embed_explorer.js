@@ -132,14 +132,20 @@
     return { file: "file.svg", label: "File" };
   }
 
+  function tipCanCheckin(obj) {
+    // Files rows use data-can-checkin; owned + show_checkin is the same eligibility.
+    return Boolean(obj && (obj.can_checkin || (obj.owned_by_me && showCheckin)));
+  }
+
   function tipHasCheckinWork(obj) {
-    // Match Files rowHasCheckinWork: can_checkin + (server Modified or pending set).
-    if (!obj || !obj.can_checkin || !obj.uuid) return false;
+    // Match Files rowHasCheckinWork: eligible + (server Modified or pending set).
+    if (!obj || !obj.uuid || !tipCanCheckin(obj)) return false;
     if (obj.modified_locally) return true;
     return Boolean(pendingCheckinIds[String(obj.uuid)]);
   }
 
   function logicalTipName(filename) {
+    // Strip trailing .N save number (shaft.prt.3 → shaft.prt).
     return String(filename || "")
       .toLowerCase()
       .replace(/\\/g, "/")
@@ -148,29 +154,91 @@
       .replace(/\.\d+$/, "");
   }
 
+  function agentSafeRel(rel) {
+    return String(rel || "")
+      .replace(/\\/g, "/")
+      .replace(/^\/+/, "")
+      .split("/")
+      .filter(function (part) {
+        return part && part !== "." && part !== "..";
+      })
+      .map(function (part) {
+        var text = String(part).trim().replace(/[^A-Za-z0-9._\-]+/g, "_");
+        return (text || "x").slice(0, 180);
+      })
+      .join("/");
+  }
+
+  async function listAgentCacheFiles(vaultOverride) {
+    var params = new URLSearchParams({ product_id: productId });
+    var vault = String(vaultOverride || vaultFolder || "").trim();
+    if (vault) params.set("vault_folder", vault);
+    var response = await fetch(agentBase() + "/files?" + params.toString(), {
+      headers: agentHeaders(),
+      signal: abortAfter(8000),
+    });
+    if (!response.ok) return null;
+    var body = await response.json();
+    return body && Array.isArray(body.files) ? body.files : null;
+  }
+
+  async function hashAgentCachePaths(relativePaths) {
+    var paths = [];
+    var seen = Object.create(null);
+    (relativePaths || []).forEach(function (item) {
+      var rel = String(item || "")
+        .replace(/\\/g, "/")
+        .replace(/^\/+/, "");
+      if (!rel || seen[rel.toLowerCase()]) return;
+      seen[rel.toLowerCase()] = true;
+      paths.push(rel);
+    });
+    var byPath = Object.create(null);
+    if (!productId || !paths.length) return byPath;
+    var response = await fetch(agentBase() + "/hash-paths", {
+      method: "POST",
+      headers: agentHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        product_id: productId,
+        vault_folder: vaultFolder || "",
+        relative_paths: paths,
+      }),
+      signal: abortAfter(30000),
+    });
+    if (!response.ok) return byPath;
+    var body = await response.json();
+    (body && Array.isArray(body.files) ? body.files : []).forEach(function (item) {
+      if (!item || !item.ok) return;
+      var rel = String(item.relative_path || "").replace(/\\/g, "/");
+      var hash = String(item.content_hash || "").trim().toLowerCase();
+      if (rel && hash) byPath[rel.toLowerCase()] = hash;
+    });
+    return byPath;
+  }
+
   async function mergeAgentPendingCheckinIds(into) {
-    // Same ground truth as Files Modified tab: agent /files cache index hash vs vault tip.
+    // Same ground truth as Files Modified: agent /files (+ /hash-paths) vs vault tip hash.
     if (!productId || !into) return;
     agentOnline = await probeAgent();
     if (!agentOnline) return;
     try {
-      var params = new URLSearchParams({ product_id: productId });
-      if (vaultFolder) params.set("vault_folder", vaultFolder);
-      var response = await fetch(agentBase() + "/files?" + params.toString(), {
-        headers: agentHeaders(),
-        signal: abortAfter(8000),
-      });
-      if (!response.ok) return;
-      var body = await response.json();
-      var files = body && Array.isArray(body.files) ? body.files : [];
+      var files = await listAgentCacheFiles(vaultFolder);
+      if ((!files || !files.length) && vaultFolder && vaultFolder !== productId) {
+        files = await listAgentCacheFiles(productId);
+      }
+      if (!files || !files.length) return;
+
       var byRel = Object.create(null);
       var byBase = Object.create(null);
       var baseCounts = Object.create(null);
       files.forEach(function (file) {
-        var rel = String(file.relative_path || "").replace(/\\/g, "/").toLowerCase();
-        var name = String(file.filename || (rel ? rel.split("/").pop() : "") || "").toLowerCase();
+        var rel = String(file.relative_path || "").replace(/\\/g, "/");
+        var relKey = rel.toLowerCase();
+        var name = String(file.filename || (rel ? rel.split("/").pop() : "") || "");
         var base = logicalTipName(name);
-        if (rel) byRel[rel] = file;
+        if (relKey) byRel[relKey] = file;
+        var safe = agentSafeRel(rel).toLowerCase();
+        if (safe && !byRel[safe]) byRel[safe] = file;
         if (base) {
           baseCounts[base] = (baseCounts[base] || 0) + 1;
           byBase[base] = file;
@@ -181,15 +249,20 @@
         var base = logicalTipName(obj.filename || obj.relative_path || "");
         if (base) vaultBaseCounts[base] = (vaultBaseCounts[base] || 0) + 1;
       });
+
+      var needHash = [];
       objects.forEach(function (obj) {
-        if (!obj || !obj.can_checkin || !obj.uuid) return;
+        if (!obj || !obj.uuid) return;
+        // Owned checkout can check in when product allows — match Files can_checkin rows.
+        if (!obj.can_checkin && !(obj.owned_by_me && showCheckin)) return;
         var vaultRel = String(obj.relative_path || "").replace(/\\/g, "/");
-        var local = vaultRel ? byRel[vaultRel.toLowerCase()] : null;
+        var local =
+          (vaultRel && byRel[vaultRel.toLowerCase()]) ||
+          (vaultRel && byRel[agentSafeRel(vaultRel).toLowerCase()]) ||
+          null;
         if (!local) {
           var base = logicalTipName(obj.filename || vaultRel);
-          if (base && vaultBaseCounts[base] === 1 && baseCounts[base] === 1) {
-            local = byBase[base];
-          }
+          if (base && vaultBaseCounts[base] === 1) local = byBase[base];
         }
         if (!local) return;
         var vaultHash = String(
@@ -197,9 +270,28 @@
         )
           .trim()
           .toLowerCase();
+        if (!vaultHash) return;
         var localHash = String(local.content_hash || "").trim().toLowerCase();
-        if (vaultHash && localHash && localHash !== vaultHash) {
+        var localRel = String(local.relative_path || "").replace(/\\/g, "/");
+        if (localHash && localHash !== vaultHash) {
           into[String(obj.uuid)] = true;
+          return;
+        }
+        if (localHash && localHash === vaultHash) return;
+        // Missing / stale index — same as Files: verify via /hash-paths.
+        needHash.push({ uuid: String(obj.uuid), rel: localRel, vaultHash: vaultHash });
+      });
+
+      if (!needHash.length) return;
+      var hashes = await hashAgentCachePaths(
+        needHash.map(function (item) {
+          return item.rel;
+        })
+      );
+      needHash.forEach(function (item) {
+        var localHash = hashes[String(item.rel || "").toLowerCase()] || "";
+        if (localHash && localHash !== item.vaultHash) {
+          into[item.uuid] = true;
         }
       });
     } catch (err) {
@@ -251,7 +343,7 @@
       relativePath: String(obj.relative_path || "").trim(),
       canCheckout: Boolean(obj.can_checkout),
       owned: Boolean(obj.owned_by_me),
-      canCheckin: Boolean(obj.can_checkin),
+      canCheckin: tipCanCheckin(obj),
       localCache: false,
       isNewFile: false,
       hasDetails: Boolean(obj.uuid && productId),
@@ -593,9 +685,11 @@
     selectObject(obj);
     var x = ev.clientX;
     var y = ev.clientY;
-    // Refresh pending Modified set before hide rules (same checkin-preview as Files).
+    // Refresh pending Modified set before hide rules (same signals as Files).
     void refreshPendingCheckinIds().then(function () {
       if (selected !== obj) return;
+      // Paint MOD badge from the fresh pending set, then show matching RMB.
+      renderTree();
       if (!openContextMenu(x, y)) closeContextMenu();
     });
   }
