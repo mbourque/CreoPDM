@@ -61,34 +61,6 @@
 
   <div id="ex-context-menu" class="ex-context-menu" role="menu" hidden></div>
 
-  <dialog id="ex-open-dialog" class="ex-dialog">
-    <!-- No method=dialog — Creo CEF has auto-closed that pattern; same as Files. -->
-    <form id="ex-open-form" action="#" method="post">
-      <h2>Open file</h2>
-      <p id="ex-open-lead"></p>
-      <p class="ex-muted">Check out if you plan to edit and check in later. Open without checking out to view only.</p>
-      <div class="ex-choices">
-        <label class="ex-choice">
-          <input type="radio" name="ex_open_action" value="open" id="ex-open-action-open" checked>
-          Open without checking out
-        </label>
-        <label class="ex-choice" id="ex-open-checkout-file-wrap">
-          <input type="radio" name="ex_open_action" value="checkout-file" id="ex-open-action-checkout-file">
-          Check out this file, then open
-        </label>
-        <label class="ex-choice" id="ex-open-checkout-deps-wrap">
-          <input type="radio" name="ex_open_action" value="checkout-dependencies" id="ex-open-action-checkout-deps">
-          Check out this file and its dependencies, then open
-        </label>
-      </div>
-      <p class="ex-muted" id="ex-open-deps-note">Dependencies are related models Creo needs nearby. Checking them out takes locks on those files too.</p>
-      <div class="ex-dialog-actions">
-        <button type="button" class="ex-btn" id="ex-open-cancel">Cancel</button>
-        <button type="submit" class="ex-btn is-primary" id="ex-open-continue">Continue</button>
-      </div>
-    </form>
-  </dialog>
-
   <script src="/static/js/embed_explorer.js?v={{ app_version }}"></script>
 </body>
 </html>

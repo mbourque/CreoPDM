@@ -8240,6 +8240,54 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   const pendingProductId = checkinBtn?.dataset.product || openWorkspaceBtn?.dataset.product;
   if (isListPage && pendingProductId) void refreshPendingCheckinIds(pendingProductId);
 
+  // Navigator /embed/explorer deep-link: select a tip and run Open (chooser dialog)
+  // or Checkout in this main embedded browser — never in the narrow pane.
+  function consumeNavigatorDeepLink() {
+    if (!isListPage) return;
+    let params;
+    try {
+      params = new URLSearchParams(window.location.search);
+    } catch {
+      return;
+    }
+    const selectId = String(params.get("select") || "").trim();
+    const action = String(params.get("action") || "").trim().toLowerCase();
+    if (!selectId && !action) return;
+    params.delete("select");
+    params.delete("action");
+    const qs = params.toString();
+    const next = `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash || ""}`;
+    try {
+      history.replaceState(history.state, "", next);
+    } catch {
+      /* ignore */
+    }
+    if (!selectId) return;
+    const row = rows().find((item) => String(item.dataset.uuid || "") === selectId);
+    if (!row || rowIsHidden(row)) return;
+    selectOnly(row);
+    if (action === "open") {
+      void (async () => {
+        const spec = selectedOpenSpec();
+        if (!spec) {
+          showError($("#toolbar-error"), "Select one file to open.");
+          return;
+        }
+        await openPdmObjectFromUi(spec, row);
+      })();
+      return;
+    }
+    if (action === "checkout") {
+      void (async () => {
+        await (await withCheckoutModule()).checkoutSelected?.();
+      })();
+    }
+  }
+  if (isListPage) {
+    // After restoreWatchView / toolbar sync so selection sticks.
+    window.setTimeout(consumeNavigatorDeepLink, 0);
+  }
+
   } finally {
     EventTarget.prototype.addEventListener = origAddEventListener;
   }

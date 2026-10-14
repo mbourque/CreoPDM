@@ -202,7 +202,7 @@
     agentOnline = await probeAgent();
     if (!agentOnline) {
       toolkitOk = false;
-      toolkitReason = "Start creopdm-agent on this PC (Open needs the agent to reach Toolkit).";
+      toolkitReason = "Start creopdm-agent on this PC (Download / Check In and main-browser Open need it).";
       setBanner(toolkitReason, true);
       syncActionButtons();
       return;
@@ -212,7 +212,9 @@
     toolkitReason = tk.reason || "Creo Toolkit Companion is not reachable on 127.0.0.1:8767.";
     if (!toolkitOk) {
       setBanner(
-        "Open disabled: " + toolkitReason + " List/search still work.",
+        "Toolkit offline: " +
+          toolkitReason +
+          " List/search still work; Open in the main browser may need Toolkit /url.",
         true
       );
     } else {
@@ -393,13 +395,9 @@
   }
 
   function menuCapabilities() {
+    // Open/Checkout run in the main CreoPDM browser (chooser dialog lives there).
     var canOpen =
-      Boolean(selected) &&
-      allowsContent &&
-      isCreoOpenable(selected) &&
-      toolkitOk &&
-      agentOnline &&
-      !busy;
+      Boolean(selected) && allowsContent && isCreoOpenable(selected) && !busy;
     var canDetails = Boolean(selected && selected.uuid && productId);
     var canCheckout =
       Boolean(selected) &&
@@ -801,23 +799,6 @@
     return response.json();
   }
 
-  async function toolkitOpen(fileName, path) {
-    var query = new URLSearchParams();
-    if (fileName) query.set("fileName", fileName);
-    if (path) query.set("path", path);
-    var response = await fetch(agentBase() + "/toolkit/open?" + query.toString(), {
-      headers: agentHeaders(),
-    });
-    if (!response.ok) {
-      throw new Error(await readError(response));
-    }
-    var body = await response.json();
-    if (body && body.ok === false) {
-      throw new Error(String(body.error || body.detail || "Toolkit open failed."));
-    }
-    return body;
-  }
-
   function tryCreoJsSetUrl(absoluteUrl) {
     try {
       if (typeof pfcGetProESession !== "function") return false;
@@ -872,167 +853,15 @@
     await openInMainEmbeddedBrowser(absolute);
   }
 
-  function rowOffersCheckout(obj) {
-    if (!obj) return false;
-    if (!canCheckoutRole || !productAllowsCheckout) return false;
-    if (obj.owned_by_me) return false;
-    if (obj.checkout_user && !obj.owned_by_me) return false;
-    return Boolean(obj.can_checkout);
-  }
-
-  function promptOpenCheckout(filename, canCheckout) {
-    var dialog = document.getElementById("ex-open-dialog");
-    var form = document.getElementById("ex-open-form");
-    var lead = document.getElementById("ex-open-lead");
-    var fileWrap = document.getElementById("ex-open-checkout-file-wrap");
-    var depsWrap = document.getElementById("ex-open-checkout-deps-wrap");
-    var depsNote = document.getElementById("ex-open-deps-note");
-    var openRadio = document.getElementById("ex-open-action-open");
-    var cancelBtn = document.getElementById("ex-open-cancel");
-    if (!canCheckout) {
-      return Promise.resolve("open");
-    }
-    if (!dialog || !form || !openRadio) {
-      setMsg("Could not show the Open dialog. Refresh the pane and try again.", "err");
-      return Promise.resolve("cancel");
-    }
-    if (lead) {
-      lead.textContent = "How do you want to open " + (filename || "this file") + "?";
-    }
-    if (fileWrap) fileWrap.hidden = false;
-    if (depsWrap) depsWrap.hidden = false;
-    if (depsNote) depsNote.hidden = false;
-    openRadio.checked = true;
-    return new Promise(function (resolve) {
-      var finished = false;
-      function finish(action) {
-        if (finished) return;
-        finished = true;
-        form.removeEventListener("submit", onSubmit);
-        if (cancelBtn) cancelBtn.removeEventListener("click", onCancel);
-        dialog.removeEventListener("cancel", onCancel);
-        try {
-          if (dialog.open) dialog.close();
-          else dialog.removeAttribute("open");
-        } catch (err) {
-          try {
-            dialog.removeAttribute("open");
-          } catch (err2) {
-            /* ignore */
-          }
-        }
-        resolve(action);
-      }
-      function onCancel(ev) {
-        if (ev && ev.preventDefault) ev.preventDefault();
-        finish("cancel");
-      }
-      function onSubmit(ev) {
-        ev.preventDefault();
-        var picked = form.querySelector('input[name="ex_open_action"]:checked');
-        finish((picked && picked.value) || "open");
-      }
-      form.addEventListener("submit", onSubmit);
-      if (cancelBtn) cancelBtn.addEventListener("click", onCancel);
-      dialog.addEventListener("cancel", onCancel);
-      try {
-        if (typeof dialog.showModal === "function") {
-          if (!dialog.open) dialog.showModal();
-        } else {
-          dialog.setAttribute("open", "");
-        }
-      } catch (err) {
-        dialog.setAttribute("open", "");
-      }
-      if (!dialog.open && !dialog.hasAttribute("open")) {
-        setMsg("Could not show the Open dialog. Refresh the pane and try again.", "err");
-        finish("cancel");
-      }
-    });
-  }
-
-  async function checkoutBeforeOpen(withDependencies) {
-    if (!selected || !selected.uuid) return null;
-    if (withDependencies) {
-      var prepared = await fetch("/api/creo/open", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          object_id: selected.uuid,
-          launch: false,
-          include_dependencies: true,
-        }),
-      });
-      if (!prepared.ok) throw new Error(await readError(prepared));
-      var body = await prepared.json();
-      var ids = [selected.uuid].concat(
-        (Array.isArray(body.dependencies) ? body.dependencies : [])
-          .map(function (dep) {
-            return dep && dep.object_id ? dep.object_id : "";
-          })
-          .filter(Boolean)
-      );
-      var unique = [];
-      ids.forEach(function (id) {
-        if (id && unique.indexOf(id) < 0) unique.push(id);
-      });
-      if (unique.length === 1) {
-        var one = await fetch(
-          "/api/objects/" + encodeURIComponent(unique[0]) + "/checkout",
-          { method: "POST" }
-        );
-        if (!one.ok) throw new Error(await readError(one));
-        return unique;
-      }
-      var batch = await fetch("/api/objects/batch/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ object_ids: unique }),
-      });
-      if (!batch.ok) throw new Error(await readError(batch));
-      var batchBody = await batch.json();
-      var okIds = Array.isArray(batchBody.ok)
-        ? batchBody.ok
-            .map(function (item) {
-              return item && item.uuid ? item.uuid : "";
-            })
-            .filter(Boolean)
-        : [];
-      if (!okIds.length) throw new Error("Checkout failed.");
-      return okIds;
-    }
-    var response = await fetch(
-      "/api/objects/" + encodeURIComponent(selected.uuid) + "/checkout",
-      { method: "POST" }
-    );
-    if (!response.ok) throw new Error(await readError(response));
-    return [selected.uuid];
-  }
-
-  async function openSelectedNow() {
-    await refreshConnectivity();
-    if (!agentOnline || !toolkitOk) {
-      throw new Error(toolkitReason);
-    }
-    setMsg("Preparing…");
-    var prepare = await fetch("/api/creo/open", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        object_id: selected.uuid,
-        launch: false,
-        include_dependencies: true,
-      }),
-    });
-    if (!prepare.ok) throw new Error(await readError(prepare));
-    var prepared = await prepare.json();
-    setMsg("Updating local workspace…");
-    var local = await materializePrepared(prepared);
-    var tipName = prepared.filename || selected.filename;
-    var tipPath = local.path || "";
-    setMsg("Opening in Creo (Toolkit)…");
-    await toolkitOpen(tipName, tipPath);
-    setMsg("Opened " + tipName + " in Creo.", "ok");
+  function filesDeepLink(action) {
+    if (!selected || !selected.uuid || !productId) return "";
+    var folder = folderOf(selected.relative_path);
+    var q = new URLSearchParams();
+    q.set("product", productId);
+    if (folder) q.set("folder", folder);
+    q.set("select", selected.uuid);
+    if (action) q.set("action", action);
+    return new URL("/?" + q.toString(), window.location.origin).href;
   }
 
   async function onOpen() {
@@ -1041,38 +870,8 @@
       setMsg("Open is not available for this file.", "err");
       return;
     }
-    // Same as Files: already mine → open without chooser.
-    if (selected.owned_by_me) {
-      busy = true;
-      try {
-        await openSelectedNow();
-      } catch (err) {
-        setMsg(String(err && err.message ? err.message : err), "err");
-      } finally {
-        busy = false;
-      }
-      return;
-    }
-    var canCheckout = rowOffersCheckout(selected);
-    var action = await promptOpenCheckout(selected.filename || selected.name || "file", canCheckout);
-    if (action === "cancel") return;
-    busy = true;
-    try {
-      if (action === "checkout-file" || action === "checkout-dependencies") {
-        setMsg(
-          action === "checkout-dependencies"
-            ? "Checking out with dependencies…"
-            : "Checking out…"
-        );
-        await checkoutBeforeOpen(action === "checkout-dependencies");
-        await loadObjects({ quiet: true });
-      }
-      await openSelectedNow();
-    } catch (err) {
-      setMsg(String(err && err.message ? err.message : err), "err");
-    } finally {
-      busy = false;
-    }
+    // Open chooser + Toolkit Open live in the main CreoPDM browser — not this pane.
+    await openInMainEmbeddedBrowser(filesDeepLink("open"));
   }
 
   async function onDownload() {
@@ -1171,41 +970,8 @@
 
   async function onCheckout() {
     if (!selected || busy) return;
-    busy = true;
-    setMsg("Checking out…");
-    try {
-      var response = await fetch(
-        "/api/objects/" + encodeURIComponent(selected.uuid) + "/checkout",
-        { method: "POST" }
-      );
-      if (!response.ok) throw new Error(await readError(response));
-      var updated = await response.json();
-      selected = updated;
-      objects = objects.map(function (row) {
-        return row.uuid === updated.uuid ? updated : row;
-      });
-      if (agentOnline) {
-        setMsg("Downloading to workspace…");
-        var prepare = await fetch("/api/creo/open", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            object_id: selected.uuid,
-            launch: false,
-            include_dependencies: true,
-          }),
-        });
-        if (prepare.ok) {
-          await materializePrepared(await prepare.json());
-        }
-      }
-      renderTree();
-      setMsg("Checked out " + (selected.filename || "") + ".", "ok");
-    } catch (err) {
-      setMsg(String(err && err.message ? err.message : err), "err");
-    } finally {
-      busy = false;
-    }
+    // Checkout UI lives on Files in the main embedded browser.
+    await openInMainEmbeddedBrowser(filesDeepLink("checkout"));
   }
 
   async function onCheckin() {
