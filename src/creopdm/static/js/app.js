@@ -8242,6 +8242,30 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   // Navigator /embed/explorer deep-link: select a tip and run Open (chooser dialog)
   // or Checkout in this main embedded browser — never in the narrow pane.
+  function clearStickyMetricSelectionForNavigator() {
+    // Sticky Parts/Files pills keep hundreds selected; selectOnly() refuses to
+    // collapse that group. Navigator hand-off must force a single-file select.
+    let cleared = false;
+    metricButtons().forEach((btn) => {
+      const mode = metricMode(btn);
+      if (mode === "off") return;
+      setMetricMode(btn, "off");
+      cleared = true;
+    });
+    if (cleared) {
+      applyMetricVisibility();
+      // Do not call applyMetricSelection — that would re-select the filter group.
+    }
+    return cleared;
+  }
+
+  function selectOnlyForNavigator(row) {
+    clearStickyMetricSelectionForNavigator();
+    lastSelectRow = row;
+    rows().forEach((item) => markRowSelected(item, item === row));
+    syncToolbar();
+  }
+
   function consumeNavigatorDeepLink() {
     if (!isListPage) return;
     let params;
@@ -8263,9 +8287,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       /* ignore */
     }
     if (!selectId) return;
+    // Clear sticky metric first so a filtered-away tip becomes visible again.
+    clearStickyMetricSelectionForNavigator();
     const row = rows().find((item) => String(item.dataset.uuid || "") === selectId);
-    if (!row || rowIsHidden(row)) return;
-    selectOnly(row);
+    if (!row) {
+      showError(
+        $("#toolbar-error"),
+        "Could not find that file on Files (wrong folder or product)."
+      );
+      return;
+    }
+    selectOnlyForNavigator(row);
     if (action === "open") {
       void (async () => {
         const spec = selectedOpenSpec();
@@ -8279,6 +8311,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     if (action === "checkout") {
       void (async () => {
+        // Re-assert single selection in case a metric restore raced with us.
+        selectOnlyForNavigator(row);
         await (await withCheckoutModule()).checkoutSelected?.();
       })();
     }

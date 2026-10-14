@@ -194,14 +194,23 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "ex-loading" in css
     app_js = (ROOT / "src/creopdm/static/js/app.js").read_text(encoding="utf-8")
     assert "consumeNavigatorDeepLink" in app_js
+    assert "selectOnlyForNavigator" in app_js
+    assert "clearStickyMetricSelectionForNavigator" in app_js
     assert 'action === "open"' in app_js
     assert 'action === "checkout"' in app_js
+    # Must not use plain selectOnly (sticky Parts pill keeps hundreds selected).
+    deep = app_js.split("function consumeNavigatorDeepLink(", 1)[1].split(
+        "if (isListPage)", 1
+    )[0]
+    assert "selectOnlyForNavigator(row)" in deep
+    assert "selectOnly(row)" not in deep
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "**Double-click** a file" in docs
     assert "**Right-click** a file" in docs
     assert "how do you want to open" in docs
     assert "main embedded browser" in docs
     assert "never as a modal inside this navigator pane" in docs
+    assert "clear sticky metric pills" in docs
     assert "No hover thumbnail" in docs
     assert "one scrollbar" in docs.lower() or "Only the tree scrolls" in docs
 
