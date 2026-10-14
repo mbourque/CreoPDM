@@ -64,6 +64,19 @@ def test_extract_thumbnail_marker_plus_jpeg(tmp_path: Path):
     assert out.endswith(b"\xff\xd9")
 
 
+def test_extract_thumbnail_jpeg_far_after_marker(tmp_path: Path):
+    """Regression: 600630031046.prt had SOI ~2933 bytes after THMB_IMG_MAIN."""
+    jpeg = _minimal_jpeg()
+    pad = b"\x00" * 2933
+    path = tmp_path / "far.prt"
+    path.write_bytes(b"H" + MARKER + pad + jpeg + b"T")
+    out = extract_thumbnail(path)
+    assert out == jpeg
+    report = diagnose_thumbnail(path)
+    assert report["reason"] == "ok"
+    assert report["nearest_jpeg_gap"] == 2933
+
+
 def test_extract_thumbnail_marker_but_no_jpeg(tmp_path: Path):
     path = tmp_path / "empty.prt"
     path.write_bytes(b"xx" + MARKER + b"not a jpeg here" + b"yy" * 600)

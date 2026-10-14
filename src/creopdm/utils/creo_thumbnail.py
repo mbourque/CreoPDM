@@ -20,8 +20,8 @@ MARKER = b"THMB_IMG_MAIN"
 JPEG_SOI = b"\xff\xd8\xff"
 JPEG_JFIF = b"\xff\xd8\xff\xe0"
 JPEG_EOI = b"\xff\xd9"
-# Verified ~64 on Creo 13; allow more pad for other releases / asm / drw.
-MARKER_WINDOW = 256
+# Gap marker→SOI is often tiny (~0–64); AI Testing tip 600630031046.prt was 2933.
+MARKER_WINDOW = 8192
 MIN_JPEG_BYTES = 1024
 MAX_JPEG_BYTES = 2 * 1024 * 1024
 THUMBNAIL_EXTENSIONS = frozenset({".prt", ".asm", ".drw"})
@@ -195,8 +195,10 @@ def diagnose_thumbnail(path: Path | str) -> dict[str, object]:
                         break
                     marker_count += 1
                     start_search = at + len(MARKER)
-                    # Look for SOI in a wider band for diagnostics.
-                    probe = _slice(mm, start_search, min(n, start_search + 4096))
+                    # Probe a bit past MARKER_WINDOW so jpeg_outside_window is visible.
+                    probe = _slice(
+                        mm, start_search, min(n, start_search + MARKER_WINDOW + 8192)
+                    )
                     jfif = probe.find(JPEG_JFIF)
                     soi = probe.find(JPEG_SOI) if jfif < 0 else jfif
                     if soi >= 0:
