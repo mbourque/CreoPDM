@@ -172,23 +172,30 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "void onOpen()" in script
     assert "Open selected" in script
     assert "function openContextMenu(" in script
+    assert "function promptOpenCheckout(" in script
+    assert "checkout-file" in script
+    assert "checkout-dependencies" in script
     assert "contextmenu" in script
     html = EMBED_HTML.read_text(encoding="utf-8")
     assert 'id="embed-explorer"' in html
     assert "thumbnail_preview.js" not in html
     assert 'data-thumb-place=' not in html
     assert 'id="ex-context-menu"' in html
+    assert 'id="ex-open-dialog"' in html
+    assert "Check out this file, then open" in html
     assert 'id="ex-open"' not in html
     assert 'id="ex-actions"' not in html
     css = (ROOT / "src/creopdm/static/css/embed_explorer.css").read_text(encoding="utf-8")
     assert "ex-tree" in css
     assert "ex-context-menu" in css
+    assert "ex-dialog" in css
     assert "thumb-preview" not in css
     assert "overflow: hidden" in css
     assert "ex-loading" in css
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "**Double-click** a file" in docs
     assert "**Right-click** a file" in docs
+    assert "how do you want to open" in docs
     assert "main embedded browser" in docs
     assert "No hover thumbnail" in docs
     assert "one scrollbar" in docs.lower() or "Only the tree scrolls" in docs
