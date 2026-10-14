@@ -162,7 +162,7 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "/toolkit/url?" in script
     assert "openInMainEmbeddedBrowser" in script
     assert "tryCreoJsSetUrl" in script
-    assert "thumb-preview-target" in script
+    assert "thumb-preview-target" not in script
     assert "/api/creo/open" in script
     assert "/materialize" in script
     assert 'fetch("http://127.0.0.1:8767' not in script
@@ -175,29 +175,22 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "contextmenu" in script
     html = EMBED_HTML.read_text(encoding="utf-8")
     assert 'id="embed-explorer"' in html
-    assert 'data-thumb-place="right"' in html
-    assert "thumbnail_preview.js" in html
+    assert "thumbnail_preview.js" not in html
+    assert 'data-thumb-place=' not in html
     assert 'id="ex-context-menu"' in html
     assert 'id="ex-open"' not in html
     assert 'id="ex-actions"' not in html
     css = (ROOT / "src/creopdm/static/css/embed_explorer.css").read_text(encoding="utf-8")
     assert "ex-tree" in css
     assert "ex-context-menu" in css
-    assert "thumb-preview" in css
-    assert "pointer-events: none" in css
+    assert "thumb-preview" not in css
     assert "overflow: hidden" in css
     assert "ex-loading" in css
-    thumb_js = (ROOT / "src/creopdm/static/js/thumbnail_preview.js").read_text(encoding="utf-8")
-    assert 'data-thumb-place") === "right"' in thumb_js
-    assert "overlapsRect" in thumb_js
-    assert "never slide up over it" in thumb_js or "Never flip" in thumb_js or "never flip" in thumb_js
-    assert "rect.bottom + margin" in thumb_js
-    assert "overlay.hidden = true" in thumb_js  # last resort: hide rather than cover name
-    assert "128px" in css
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "**Double-click** a file" in docs
     assert "**Right-click** a file" in docs
     assert "main embedded browser" in docs
+    assert "No hover thumbnail" in docs
     assert "one scrollbar" in docs.lower() or "Only the tree scrolls" in docs
 
 

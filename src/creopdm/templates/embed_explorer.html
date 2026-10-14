@@ -8,7 +8,6 @@
 </head>
 <body
   id="embed-explorer"
-  data-thumb-place="right"
   data-agent-base="{{ agent_base_url | default('http://127.0.0.1:8766') }}"
   data-agent-token="{{ agent_token | default('') }}"
   data-product-uuid="{{ selected.uuid if selected else '' }}"
@@ -62,7 +61,6 @@
 
   <div id="ex-context-menu" class="ex-context-menu" role="menu" hidden></div>
 
-  <script src="/static/js/thumbnail_preview.js?v={{ app_version }}-thumb-preview"></script>
   <script src="/static/js/embed_explorer.js?v={{ app_version }}"></script>
 </body>
 </html>

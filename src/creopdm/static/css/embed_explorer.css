@@ -314,31 +314,3 @@ body#embed-explorer {
 }
 .ex-context-menu .ex-menu-item:hover { background: #eef2f6; }
 .ex-context-menu .ex-menu-item[hidden] { display: none !important; }
-
-/* Compact thumbs so they fit to the right of names in a ~350–450 px pane. */
-.thumb-preview {
-  position: fixed;
-  z-index: 1200;
-  width: 128px;
-  max-width: calc(100vw - 16px);
-  padding: 0.25rem;
-  background: var(--ex-surface);
-  border: 1px solid var(--ex-line);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
-  pointer-events: none;
-}
-.thumb-preview img {
-  display: block;
-  width: 100%;
-  height: auto;
-  max-height: 128px;
-  object-fit: contain;
-  background: #f4f4f4;
-}
-.thumb-preview-caption {
-  margin-top: 0.25rem;
-  font-size: 0.7rem;
-  line-height: 1.25;
-  color: var(--ex-muted);
-  word-break: break-all;
-}

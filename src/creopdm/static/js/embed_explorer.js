@@ -366,20 +366,10 @@
           icon.file +
           '" alt="' +
           icon.label +
-          '"><span class="ex-name thumb-preview-target"></span><span class="ex-badges">' +
+          '"><span class="ex-name"></span><span class="ex-badges">' +
           badges +
           "</span>";
-        var nameEl = row.querySelector(".ex-name");
-        nameEl.textContent = obj.filename || obj.name || "file";
-        nameEl.setAttribute("data-uuid", obj.uuid || "");
-        nameEl.setAttribute("data-filename", obj.filename || obj.name || "");
-        nameEl.setAttribute("data-extension", obj.extension || "");
-        nameEl.setAttribute("data-object-type", obj.object_type || "");
-        var hash =
-          (obj.current_version && obj.current_version.content_hash) ||
-          obj.content_hash ||
-          "";
-        if (hash) nameEl.setAttribute("data-content-hash", String(hash));
+        row.querySelector(".ex-name").textContent = obj.filename || obj.name || "file";
         row.title =
           (obj.relative_path || obj.filename || "") + " — double-click to Open";
         row.addEventListener("click", function () {

@@ -343,7 +343,7 @@ Open still uses the agent to **materialize** files and Creo.JS / File > Open to 
 
 ### Creo navigator embed explorer
 
-Compact list for Creo’s navigator pane (~350–450 px wide): **`/embed/explorer?product=<uuid or name>&file=<tip>&folder=<path>`**. It is a separate page (not the full Files UI). **Open** prepares on the CreoPDM server, materializes through creopdm-agent, then the agent calls Toolkit `http://127.0.0.1:8767/open?fileName=…&path=…` (the browser never talks to 8767). **Details** opens the full CreoPDM page in Creo’s **main** embedded browser (Creo.JS `SetURL`, or agent→Toolkit `GET /url?url=…` → `ProWindowURLShow`) so the navigator pane stays put. Hover a Creo tip name for the same thumbnail preview as Files (to the right of the name). If Toolkit is down, the list stays usable and Open is disabled with a reason. See [docs/user-interactions.md](docs/user-interactions.md) §18.
+Compact list for Creo’s navigator pane (~350–450 px wide): **`/embed/explorer?product=<uuid or name>&file=<tip>&folder=<path>`**. It is a separate page (not the full Files UI). **Open** prepares on the CreoPDM server, materializes through creopdm-agent, then the agent calls Toolkit `http://127.0.0.1:8767/open?fileName=…&path=…` (the browser never talks to 8767). **Details** opens the full CreoPDM page in Creo’s **main** embedded browser (Creo.JS `SetURL`, or agent→Toolkit `GET /url?url=…` → `ProWindowURLShow`) so the navigator pane stays put. No hover thumbnails here (too narrow — they covered names). If Toolkit is down, the list stays usable and Open is disabled with a reason. See [docs/user-interactions.md](docs/user-interactions.md) §18.
 
 ## AI (Ask AI / check-in comments)
 
