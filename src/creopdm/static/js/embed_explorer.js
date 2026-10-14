@@ -26,12 +26,18 @@
   var vaultFolder = (root.getAttribute("data-vault-folder") || "").trim();
   var initialFolder = (root.getAttribute("data-initial-folder") || "").trim();
   var focusUuid = (root.getAttribute("data-focus-uuid") || "").trim();
+  var followActive = root.getAttribute("data-follow-active") === "1";
+  var queryProduct = (root.getAttribute("data-query-product") || "").trim();
+  var queryFile = (root.getAttribute("data-query-file") || "").trim();
+  var queryFolder = (root.getAttribute("data-query-folder") || "").trim();
   var allowsContent = root.getAttribute("data-allows-content") === "1";
   var showOpen = root.getAttribute("data-show-open") === "1";
   var showCheckout = root.getAttribute("data-show-checkout") === "1";
   var showCheckin = root.getAttribute("data-show-checkin") === "1";
   var canCheckoutRole = root.getAttribute("data-can-checkout") === "1";
   var canCheckinRole = root.getAttribute("data-can-checkin") === "1";
+  var productNameEl = document.getElementById("ex-product-name");
+  var productStateEl = document.getElementById("ex-product-state");
 
   var objects = [];
   var selected = null;
@@ -44,6 +50,8 @@
   var listState = "loading";
   var listError = "";
   var listLoadSeq = 0;
+  var contextSeq = 0;
+  var syncingContext = false;
 
   function agentBase() {
     return (root.getAttribute("data-agent-base") || "http://127.0.0.1:8766").replace(/\/$/, "");
@@ -406,6 +414,115 @@
     }
   }
 
+  function applyProductChrome(product, stateKey, stateLabel) {
+    var name = product && product.name ? product.name : "No product";
+    if (productNameEl) {
+      productNameEl.textContent = name;
+      productNameEl.title = name;
+    }
+    if (productStateEl) {
+      if (stateLabel) {
+        productStateEl.hidden = false;
+        productStateEl.textContent = stateLabel;
+        productStateEl.setAttribute("data-state", stateKey || "");
+      } else {
+        productStateEl.hidden = true;
+        productStateEl.textContent = "";
+      }
+    }
+    if (searchEl) searchEl.disabled = !product;
+    document.title = name + " — Explorer";
+  }
+
+  function contextQuery() {
+    var q = new URLSearchParams();
+    // Follow Files' last-used product when Toolkit opened with no ?product=.
+    if (!followActive) {
+      if (queryProduct) q.set("product", queryProduct);
+      else if (productId) q.set("product", productId);
+    }
+    if (queryFile) q.set("file", queryFile);
+    if (queryFolder) q.set("folder", queryFolder);
+    q.set("_", String(Date.now()));
+    return q;
+  }
+
+  async function syncActiveProduct(options) {
+    var opts = options || {};
+    var quiet = Boolean(opts.quiet);
+    var seq = ++contextSeq;
+    syncingContext = true;
+    try {
+      var response = await fetch(
+        "/api/embed/explorer/context?" + contextQuery().toString(),
+        {
+          credentials: "same-origin",
+          cache: "no-store",
+          headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+        }
+      );
+      if (seq !== contextSeq) return false;
+      if (!response.ok) {
+        listState = "error";
+        listError = await readError(response);
+        renderTree();
+        setMsg(listError, "err");
+        return false;
+      }
+      var body = await response.json();
+      if (seq !== contextSeq) return false;
+      var product = body && body.product ? body.product : null;
+      var nextId = product && product.uuid ? String(product.uuid) : "";
+      var switched = Boolean(nextId && nextId !== productId);
+      productId = nextId;
+      vaultFolder = product
+        ? String(product.vault_folder || product.uuid || "")
+        : "";
+      focusUuid = String((body && body.focus_uuid) || "").trim();
+      initialFolder = String((body && body.initial_folder) || "").trim();
+      if (initialFolder) ensureExpandedPath(initialFolder);
+      root.setAttribute("data-product-uuid", productId);
+      root.setAttribute("data-vault-folder", vaultFolder);
+      root.setAttribute("data-product-name", product ? product.name || "" : "");
+      root.setAttribute("data-focus-uuid", focusUuid);
+      root.setAttribute("data-initial-folder", initialFolder);
+      if (product) {
+        allowsContent = product.allows_content !== false;
+        root.setAttribute("data-allows-content", allowsContent ? "1" : "0");
+      }
+      applyProductChrome(
+        product,
+        (body && body.product_state_key) || "",
+        (body && body.product_state_label) || ""
+      );
+      if (switched) {
+        selected = null;
+        objects = [];
+        expanded = Object.create(null);
+        if (initialFolder) ensureExpandedPath(initialFolder);
+        if (actionsEl) actionsEl.hidden = true;
+        if (!quiet) setMsg("Switched to " + (product.name || "product") + ".", "ok");
+      }
+      if (!productId) {
+        listState = "error";
+        listError = "No product selected.";
+        renderTree();
+        return false;
+      }
+      await loadObjects({ quiet: quiet && !switched });
+      return switched;
+    } catch (err) {
+      if (seq !== contextSeq) return false;
+      listState = "error";
+      listError = String(err && err.message ? err.message : err || "Network error");
+      renderTree();
+      setMsg(listError, "err");
+      return false;
+    } finally {
+      if (seq === contextSeq) syncingContext = false;
+    }
+  }
+
   async function loadObjects(options) {
     var opts = options || {};
     var quiet = Boolean(opts.quiet);
@@ -467,8 +584,17 @@
   }
 
   async function refreshObjects() {
-    await loadObjects({ quiet: false });
+    // Always re-resolve active product (Files last-used) then reload files.
+    await syncActiveProduct({ quiet: false });
     await refreshConnectivity();
+  }
+
+  function onPaneShown() {
+    if (syncingContext || busy) return;
+    if (!followActive) return;
+    void syncActiveProduct({ quiet: true }).then(function () {
+      return refreshConnectivity();
+    });
   }
 
   async function materializePrepared(prepared) {
@@ -680,7 +806,7 @@
     }
     if (retryBtn) {
       retryBtn.addEventListener("click", function () {
-        void loadObjects({ quiet: false });
+        void syncActiveProduct({ quiet: false });
       });
     }
     if (openBtn) openBtn.addEventListener("click", function () {
@@ -692,16 +818,19 @@
     if (checkinBtn) checkinBtn.addEventListener("click", function () {
       void onCheckin();
     });
-    // Product uuid is resolved server-side (last used / first / query). Fetch the
-    // list after listeners are wired — do not paint "no files" from an empty SSR.
-    listState = productId ? "loading" : "error";
-    if (!productId) {
-      listError = "No product selected.";
-      renderTree();
-      return;
-    }
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "visible") onPaneShown();
+    });
+    window.addEventListener("pageshow", function () {
+      onPaneShown();
+    });
+    window.addEventListener("focus", function () {
+      onPaneShown();
+    });
+    // Re-resolve last-used product (Files may have switched) then load files.
+    listState = "loading";
     renderTree();
-    void loadObjects({ quiet: true }).then(function () {
+    void syncActiveProduct({ quiet: true }).then(function () {
       return refreshConnectivity();
     });
   }

@@ -26,9 +26,32 @@ from creopdm.product_state import (
     product_state_label,
     product_state_value,
 )
+from creopdm.schemas.common import EmbedExplorerContextResponse
 from creopdm.utils.folders import folder_of, normalize_folder_query
 
 router = APIRouter()
+
+
+def _explorer_context_payload(
+    product: Product | None,
+    focus: EngineeringObject | None,
+    *,
+    file_q: str | None,
+    folder_q: str | None,
+) -> EmbedExplorerContextResponse:
+    selected = product_to_response(product) if product is not None else None
+    initial_folder = normalize_folder_query(folder_q)
+    if not initial_folder and focus is not None:
+        initial_folder = folder_of(str(focus.relative_path or ""))
+    state_key = product_state_value(product) if product else ""
+    return EmbedExplorerContextResponse(
+        product=selected,
+        product_state_key=state_key,
+        product_state_label=product_state_label(state_key) if state_key else "",
+        focus_uuid=focus.uuid if focus else "",
+        focus_filename=(focus.filename if focus else "") or (file_q or ""),
+        initial_folder=initial_folder,
+    )
 
 
 def _norm_name(value: str | None) -> str:
@@ -142,6 +165,33 @@ def resolve_embed_product(
     return chosen, focus
 
 
+@router.get("/api/embed/explorer/context", response_model=EmbedExplorerContextResponse)
+def embed_explorer_context(
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> EmbedExplorerContextResponse:
+    """Resolve the product the navigator pane should show (last used / query / file).
+
+    The embed page calls this on show/Refresh so switching products in Files is
+    picked up without a hard reload of a stale pane.
+    """
+    require_permission(request, ctx, PERMISSION_PRODUCTS_VIEW)
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    product_q = request.query_params.get("product")
+    file_q = request.query_params.get("file")
+    folder_q = request.query_params.get("folder")
+    product, focus = resolve_embed_product(
+        request,
+        ctx,
+        db,
+        product_q=product_q,
+        file_q=file_q,
+        folder_q=folder_q,
+    )
+    return _explorer_context_payload(product, focus, file_q=file_q, folder_q=folder_q)
+
+
 @router.get("/embed/explorer", response_class=HTMLResponse)
 def embed_explorer(
     request: Request,
@@ -168,7 +218,6 @@ def embed_explorer(
     except (ValidationAppError, ProductNotFoundError, PermissionDeniedError):
         raise
 
-    selected = product_to_response(product) if product is not None else None
     # File rows are loaded by the page via /api/products/…/objects (cache-bust) so
     # Creo's embedded browser does not stick on a stale empty SSR payload.
     if product is not None:
@@ -182,13 +231,15 @@ def embed_explorer(
             get_logger("embed").exception(
                 "Vault-name migrate failed for product %s", product.uuid
             )
-        ctx.config.remember_product(product.uuid)
+        # Only remember when the opener named a product/file — bare navigator
+        # opens follow last-used and must not clobber it with a stale default.
+        if (product_q or "").strip() or (file_q or "").strip() or (folder_q or "").strip():
+            ctx.config.remember_product(product.uuid)
 
-    initial_folder = normalize_folder_query(folder_q)
-    if not initial_folder and focus is not None:
-        initial_folder = folder_of(str(focus.relative_path or ""))
-
-    state_key = product_state_value(product) if product else ""
+    ctx_payload = _explorer_context_payload(
+        product, focus, file_q=file_q, folder_q=folder_q
+    )
+    selected = ctx_payload.product
     return render(
         request,
         "embed_explorer.html",
@@ -198,14 +249,15 @@ def embed_explorer(
             **_creo_page(ctx),
             "selected": selected,
             "product": selected,
-            "focus_uuid": focus.uuid if focus else "",
-            "focus_filename": (focus.filename if focus else "") or (file_q or ""),
-            "initial_folder": initial_folder,
-            "product_state_key": state_key,
-            "product_state_label": product_state_label(state_key) if state_key else "",
+            "focus_uuid": ctx_payload.focus_uuid,
+            "focus_filename": ctx_payload.focus_filename,
+            "initial_folder": ctx_payload.initial_folder,
+            "product_state_key": ctx_payload.product_state_key,
+            "product_state_label": ctx_payload.product_state_label,
             "query_product": (product_q or "").strip(),
             "query_file": (file_q or "").strip(),
-            "query_folder": initial_folder,
+            "query_folder": ctx_payload.initial_folder,
+            "follow_active": not bool((product_q or "").strip()),
             "object_types": [item.value for item in ObjectType],
         },
     )

@@ -189,6 +189,17 @@ class ProductResponse(BaseModel):
     allows_download: bool = True
 
 
+class EmbedExplorerContextResponse(BaseModel):
+    """Active product (+ optional focus) for the Creo navigator embed explorer."""
+
+    product: ProductResponse | None = None
+    product_state_key: str = ""
+    product_state_label: str = ""
+    focus_uuid: str = ""
+    focus_filename: str = ""
+    initial_folder: str = ""
+
+
 class ProductWatchResponse(BaseModel):
     watching: bool
     can_watch: bool

@@ -16,6 +16,10 @@
   data-initial-folder="{{ initial_folder or '' }}"
   data-focus-uuid="{{ focus_uuid or '' }}"
   data-focus-filename="{{ focus_filename or '' }}"
+  data-follow-active="{{ '1' if follow_active else '0' }}"
+  data-query-product="{{ query_product or '' }}"
+  data-query-file="{{ query_file or '' }}"
+  data-query-folder="{{ query_folder or '' }}"
   data-allows-content="{{ '1' if product_ui.allows_content else '0' }}"
   data-show-open="{{ '1' if product_ui.show_open else '0' }}"
   data-show-checkout="{{ '1' if product_ui.show_checkout else '0' }}"
@@ -25,13 +29,11 @@
 >
   <header class="ex-header">
     <div class="ex-title-row">
-      <h1 class="ex-product" title="{{ selected.name if selected else 'No product' }}">
+      <h1 class="ex-product" id="ex-product-name" title="{{ selected.name if selected else 'No product' }}">
         {% if selected %}{{ selected.name }}{% else %}No product{% endif %}
       </h1>
-      {% if selected and product_state_label %}
-      <span class="ex-state" data-state="{{ product_state_key }}" title="Product state">{{ product_state_label }}</span>
-      {% endif %}
-      <button type="button" class="ex-icon-btn" id="ex-refresh" title="Refresh file list">↻</button>
+      <span class="ex-state" id="ex-product-state" data-state="{{ product_state_key or '' }}" title="Product state"{% if not selected or not product_state_label %} hidden{% endif %}>{{ product_state_label or '' }}</span>
+      <button type="button" class="ex-icon-btn" id="ex-refresh" title="Refresh to the active product / file list">↻</button>
     </div>
     <label class="ex-search">
       <span class="visually-hidden">Search</span>

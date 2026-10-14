@@ -43,6 +43,7 @@ def test_embed_explorer_route_and_assets(client):
     assert "embed_explorer.js" in page.text
     assert "Loading files" in page.text
     assert 'data-product-uuid="%s"' % product["uuid"] in page.text
+    assert 'data-follow-active="0"' in page.text  # pinned ?product= stays put
     assert 'data-initial-folder="CAD"' in page.text
     assert 'id="ex-retry"' in page.text
     # Must not pull in the full Files shell.
@@ -63,6 +64,7 @@ def test_embed_explorer_no_query_defaults_product_and_autoload(client):
     page = client.get("/embed/explorer")
     assert page.status_code == 200, page.text
     assert f'data-product-uuid="{product["uuid"]}"' in page.text
+    assert 'data-follow-active="1"' in page.text
     assert "Default Embed" in page.text
     assert empty["name"] not in page.text  # last-used wins over newer empty product
     assert "Loading files" in page.text
@@ -71,21 +73,48 @@ def test_embed_explorer_no_query_defaults_product_and_autoload(client):
     # Client auto-fetches after DOM ready (not only on Refresh click).
     script = EMBED_JS.read_text(encoding="utf-8")
     assert "function loadObjects(" in script
+    assert "function syncActiveProduct(" in script
     assert "DOMContentLoaded" in script
     boot = script.split("function boot()", 1)[1].split("if (document.readyState", 1)[0]
-    assert "loadObjects(" in boot
+    assert "syncActiveProduct(" in boot
     assert 'refreshBtn.addEventListener("click"' in script
-    assert boot.index("loadObjects(") > 0  # auto-load in boot, not only via refresh listener
     assert "This product has no files yet." in script
     assert 'listState = "ok"' in script
     assert 'credentials: "same-origin"' in script
     assert 'cache: "no-store"' in script
+    assert "visibilitychange" in script
+    assert "pageshow" in script
 
     # File list API for that default product already has the tip (page will fetch it).
     listing = client.get(f"/api/products/{product['uuid']}/objects")
     assert listing.status_code == 200, listing.text
     names = {row["filename"] for row in listing.json()}
     assert "bracket.prt" in names
+
+
+@requires_git
+def test_embed_explorer_context_follows_switched_product(client):
+    """After Files switches product, context API (and Refresh) must follow last-used."""
+    first = client.post("/api/products", json={"name": "Alpha Pane"}).json()
+    second = client.post("/api/products", json={"name": "Beta Pane"}).json()
+    _add_prt(client, first["uuid"], name="a.prt", relative_path="a.prt")
+    _add_prt(client, second["uuid"], name="b.prt", relative_path="b.prt")
+
+    assert client.get(f"/?product={first['uuid']}").status_code == 200
+    ctx1 = client.get("/api/embed/explorer/context")
+    assert ctx1.status_code == 200, ctx1.text
+    assert ctx1.json()["product"]["uuid"] == first["uuid"]
+
+    assert client.get(f"/?product={second['uuid']}").status_code == 200
+    ctx2 = client.get("/api/embed/explorer/context")
+    assert ctx2.status_code == 200, ctx2.text
+    assert ctx2.json()["product"]["uuid"] == second["uuid"]
+    assert ctx2.json()["product"]["name"] == "Beta Pane"
+
+    script = EMBED_JS.read_text(encoding="utf-8")
+    assert "/api/embed/explorer/context" in script
+    assert "followActive" in script
+    assert "Switched to " in script
 
 
 @requires_git
