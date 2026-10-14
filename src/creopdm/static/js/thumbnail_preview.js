@@ -46,6 +46,15 @@
     if (overlay) overlay.hidden = true;
   }
 
+  function preferRightOfLink() {
+    // Narrow panes (Creo navigator) must not flip the preview over the name —
+    // that covers the link and fights double-click.
+    return (
+      document.body &&
+      document.body.getAttribute("data-thumb-place") === "right"
+    );
+  }
+
   function positionNear(el) {
     if (!overlay || !el) return;
     var rect = el.getBoundingClientRect();
@@ -54,8 +63,15 @@
     var h = overlay.offsetHeight || PREVIEW_WIDTH;
     var left = rect.right + margin;
     var top = rect.top;
-    if (left + w > window.innerWidth - margin) {
+    var rightOnly = preferRightOfLink();
+    if (!rightOnly && left + w > window.innerWidth - margin) {
       left = rect.left - w - margin;
+    }
+    if (rightOnly && left + w > window.innerWidth - margin) {
+      // No room to the right inside this viewport — sit under the name instead
+      // of covering it (never flip to the left over the filename).
+      left = Math.max(margin, Math.min(rect.left, window.innerWidth - w - margin));
+      top = rect.bottom + margin;
     }
     if (left < margin) left = margin;
     if (top + h > window.innerHeight - margin) {

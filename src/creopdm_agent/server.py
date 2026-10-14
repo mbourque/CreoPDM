@@ -3074,6 +3074,30 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             "path": disk_path,
         }
 
+    @app.get("/toolkit/url")
+    def toolkit_url(url: str = "") -> dict[str, object]:
+        """Proxy Toolkit /url?url=… (ProWindowURLShow) for the main embedded browser.
+
+        Used by /embed/explorer when Details (or other full-app pages) must open in
+        Creo's main CreoPDM browser — never navigate the narrow navigator pane.
+        Loopback only — the browser must not call 8767 directly.
+        """
+        target = (url or "").strip()
+        if not target:
+            raise HTTPException(status_code=400, detail="Pass url=… for Toolkit browser navigate.")
+        body = _proxy_toolkit_get(f"/url?url={quote(target, safe='')}", timeout=30.0)
+        if body.get("ok") is False:
+            raise HTTPException(
+                status_code=502,
+                detail=str(body.get("error") or "toolkit_url_failed"),
+            )
+        return {
+            "ok": bool(body.get("ok", True)),
+            "toolkit_base_url": _toolkit_base(),
+            "toolkit": body,
+            "url": target,
+        }
+
     @app.get("/toolkit/collect")
     def toolkit_collect(domains: str = "") -> dict[str, object]:
         """Proxy Toolkit /collect?domains=… (raw JSON)."""

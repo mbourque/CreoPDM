@@ -366,10 +366,20 @@
           icon.file +
           '" alt="' +
           icon.label +
-          '"><span class="ex-name"></span><span class="ex-badges">' +
+          '"><span class="ex-name thumb-preview-target"></span><span class="ex-badges">' +
           badges +
           "</span>";
-        row.querySelector(".ex-name").textContent = obj.filename || obj.name || "file";
+        var nameEl = row.querySelector(".ex-name");
+        nameEl.textContent = obj.filename || obj.name || "file";
+        nameEl.setAttribute("data-uuid", obj.uuid || "");
+        nameEl.setAttribute("data-filename", obj.filename || obj.name || "");
+        nameEl.setAttribute("data-extension", obj.extension || "");
+        nameEl.setAttribute("data-object-type", obj.object_type || "");
+        var hash =
+          (obj.current_version && obj.current_version.content_hash) ||
+          obj.content_hash ||
+          "";
+        if (hash) nameEl.setAttribute("data-content-hash", String(hash));
         row.title =
           (obj.relative_path || obj.filename || "") + " — double-click to Open";
         row.addEventListener("click", function () {
@@ -818,13 +828,58 @@
     return body;
   }
 
-  function onDetails() {
+  function tryCreoJsSetUrl(absoluteUrl) {
+    try {
+      if (typeof pfcGetProESession !== "function") return false;
+      var session = pfcGetProESession();
+      if (!session || typeof session.GetCurrentWindow !== "function") return false;
+      var win = session.GetCurrentWindow();
+      if (!win || typeof win.SetURL !== "function") return false;
+      win.SetURL(absoluteUrl);
+      return true;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  async function openInMainEmbeddedBrowser(absoluteUrl) {
+    // Full CreoPDM pages must load in Creo's main embedded browser — never replace
+    // this narrow navigator pane (location.href would squash the explorer UI).
+    if (tryCreoJsSetUrl(absoluteUrl)) {
+      setMsg("Opened in CreoPDM browser.", "ok");
+      return true;
+    }
+    try {
+      var response = await fetch(
+        agentBase() +
+          "/toolkit/url?" +
+          new URLSearchParams({ url: absoluteUrl }).toString(),
+        { headers: agentHeaders(), signal: abortAfter(15000) }
+      );
+      if (!response.ok) throw new Error(await readError(response));
+      setMsg("Opened in CreoPDM browser.", "ok");
+      return true;
+    } catch (err) {
+      setMsg(
+        "Could not open the main CreoPDM browser (" +
+          String(err && err.message ? err.message : err) +
+          "). Keep this navigator pane and use Creo’s embedded browser for Details.",
+        "err"
+      );
+      return false;
+    }
+  }
+
+  async function onDetails() {
     if (!selected || !selected.uuid || !productId) return;
-    window.location.href =
+    var absolute = new URL(
       "/products/" +
-      encodeURIComponent(productId) +
-      "/objects/" +
-      encodeURIComponent(selected.uuid);
+        encodeURIComponent(productId) +
+        "/objects/" +
+        encodeURIComponent(selected.uuid),
+      window.location.origin
+    ).href;
+    await openInMainEmbeddedBrowser(absolute);
   }
 
   async function onOpen() {

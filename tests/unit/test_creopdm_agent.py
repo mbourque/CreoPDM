@@ -2339,6 +2339,8 @@ def test_agent_toolkit_health_and_snapshot_proxy(tmp_path, monkeypatch):
                     200,
                     {"ok": True, "fileName": "wedge.prt", "opened": True},
                 )
+            if "/url?url=" in url:
+                return FakeResponse(200, {"ok": True, "url": url.split("url=", 1)[-1]})
             return FakeResponse(404, {"ok": False, "error": "not found"})
 
     monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
@@ -2375,6 +2377,15 @@ def test_agent_toolkit_health_and_snapshot_proxy(tmp_path, monkeypatch):
         assert opened.status_code == 200, opened.text
         assert opened.json()["ok"] is True
         assert any("/open?" in u and "fileName=" in u for u in seen)
+
+        seen.clear()
+        browsed = client.get(
+            "/toolkit/url",
+            params={"url": "http://127.0.0.1:52113/products/abc/objects/def"},
+        )
+        assert browsed.status_code == 200, browsed.text
+        assert browsed.json()["ok"] is True
+        assert any("/url?url=" in u for u in seen)
 
 
 def test_agent_toolkit_unavailable_returns_502(tmp_path, monkeypatch):
