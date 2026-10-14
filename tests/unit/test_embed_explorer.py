@@ -84,6 +84,10 @@ def test_embed_explorer_no_query_defaults_product_and_autoload(client):
     assert 'cache: "no-store"' in script
     assert "visibilitychange" in script
     assert "pageshow" in script
+    assert "startFollowActivePoll" in script
+    assert "FOLLOW_POLL_MS" in script
+    assert "onlyIfChanged" in script
+    assert 'root.addEventListener("mouseenter"' in script
 
     # File list API for that default product already has the tip (page will fetch it).
     listing = client.get(f"/api/products/{product['uuid']}/objects")
@@ -94,7 +98,7 @@ def test_embed_explorer_no_query_defaults_product_and_autoload(client):
 
 @requires_git
 def test_embed_explorer_context_follows_switched_product(client):
-    """After Files switches product, context API (and Refresh) must follow last-used."""
+    """After Files switches product, context API (and poll/Refresh) must follow last-used."""
     first = client.post("/api/products", json={"name": "Alpha Pane"}).json()
     second = client.post("/api/products", json={"name": "Beta Pane"}).json()
     _add_prt(client, first["uuid"], name="a.prt", relative_path="a.prt")
@@ -115,6 +119,8 @@ def test_embed_explorer_context_follows_switched_product(client):
     assert "/api/embed/explorer/context" in script
     assert "followActive" in script
     assert "Switched to " in script
+    assert "setInterval" in script
+    assert "onlyIfChanged" in script
 
 
 @requires_git

@@ -173,8 +173,8 @@ def embed_explorer_context(
 ) -> EmbedExplorerContextResponse:
     """Resolve the product the navigator pane should show (last used / query / file).
 
-    The embed page calls this on show/Refresh so switching products in Files is
-    picked up without a hard reload of a stale pane.
+    The embed page polls this (and on mouse/focus/Refresh) so switching products
+    in Files is picked up while the Creo navigator pane stays loaded.
     """
     require_permission(request, ctx, PERMISSION_PRODUCTS_VIEW)
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)

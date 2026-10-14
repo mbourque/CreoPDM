@@ -52,6 +52,9 @@
   var listLoadSeq = 0;
   var contextSeq = 0;
   var syncingContext = false;
+  /** Creo CEF often never fires focus/visibility when the pane stays loaded. */
+  var followPollTimer = null;
+  var FOLLOW_POLL_MS = 2000;
 
   function agentBase() {
     return (root.getAttribute("data-agent-base") || "http://127.0.0.1:8766").replace(/\/$/, "");
@@ -450,6 +453,7 @@
   async function syncActiveProduct(options) {
     var opts = options || {};
     var quiet = Boolean(opts.quiet);
+    var onlyIfChanged = Boolean(opts.onlyIfChanged);
     var seq = ++contextSeq;
     syncingContext = true;
     try {
@@ -474,6 +478,9 @@
       var product = body && body.product ? body.product : null;
       var nextId = product && product.uuid ? String(product.uuid) : "";
       var switched = Boolean(nextId && nextId !== productId);
+      if (onlyIfChanged && !switched && productId) {
+        return false;
+      }
       productId = nextId;
       vaultFolder = product
         ? String(product.vault_folder || product.uuid || "")
@@ -592,9 +599,18 @@
   function onPaneShown() {
     if (syncingContext || busy) return;
     if (!followActive) return;
-    void syncActiveProduct({ quiet: true }).then(function () {
-      return refreshConnectivity();
+    void syncActiveProduct({ quiet: true, onlyIfChanged: true }).then(function (switched) {
+      if (switched) return refreshConnectivity();
     });
+  }
+
+  function startFollowActivePoll() {
+    if (!followActive || followPollTimer != null) return;
+    // Navigator pane stays loaded while you use Files — poll last-used product.
+    followPollTimer = window.setInterval(function () {
+      if (syncingContext || busy) return;
+      void syncActiveProduct({ quiet: true, onlyIfChanged: true });
+    }, FOLLOW_POLL_MS);
   }
 
   async function materializePrepared(prepared) {
@@ -827,6 +843,10 @@
     window.addEventListener("focus", function () {
       onPaneShown();
     });
+    // CEF often skips focus/visibility; mouse into the pane still syncs immediately.
+    root.addEventListener("mouseenter", onPaneShown);
+    root.addEventListener("pointerdown", onPaneShown, true);
+    startFollowActivePoll();
     // Re-resolve last-used product (Files may have switched) then load files.
     listState = "loading";
     renderTree();
