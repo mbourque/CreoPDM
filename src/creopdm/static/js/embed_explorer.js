@@ -691,12 +691,12 @@
         row.title =
           (obj.relative_path || obj.filename || "") + " — double-click to Open";
         row.addEventListener("click", function () {
-          // Soft-select + timed second click Open. Native dblclick on <button>
-          // is unreliable in Creo CEF once type filters expand a deep tree.
+          // Soft-select + timed second-click Open. Creo CEF click gaps are often
+          // wider than Windows' ~500ms default — use 2s so a normal double-click
+          // still counts (accidental Open from two slow clicks is acceptable).
           var id = String(obj.uuid || obj.relative_path || "");
           var now = Date.now();
-          // Windows default double-click is ~500ms; Creo CEF click gaps run longer.
-          if (id && id === lastFileClickId && now - lastFileClickAt < 900) {
+          if (id && id === lastFileClickId && now - lastFileClickAt < 2000) {
             lastFileClickAt = 0;
             lastFileClickId = "";
             selected = obj;
@@ -709,8 +709,12 @@
           selectObject(obj);
         });
         row.addEventListener("dblclick", function (ev) {
-          // Suppress default; Open already handled by timed second click above.
           ev.preventDefault();
+          lastFileClickAt = 0;
+          lastFileClickId = "";
+          selected = obj;
+          paintSelection();
+          void onOpen();
         });
         row.addEventListener("contextmenu", function (ev) {
           onFileContextMenu(ev, obj);
