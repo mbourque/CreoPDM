@@ -136,14 +136,22 @@ def test_embed_explorer_context_follows_switched_product(client):
     assert "CreoPdmFilesContextMenu" in script
     assert "menuCapabilitiesFor" in script
     assert "needsEmbeddedBrowser" in script
-    # Check In: navigator detects Modified itself (agent + checkin-preview), no cookie.
+    # Check In: navigator detects Modified itself (shared local_cache_pending + agent), no cookie.
     assert "checkin-preview" in script
     assert "pendingCheckinIds" in script
     assert "tipHasCheckinWork" in script
     assert "mergeAgentPendingCheckinIds" in script
+    assert "CreoPdmLocalCachePending" in script
+    assert "resolvePendingCheckinUuids" in script
+    assert "listAgentCacheFilesPreferringVault" in script
     assert "/files?" in script
     assert "/hash-paths" in script
     assert "hashAgentCachePaths" in script
+    # Must not abort /files early (large workspaces; Files has no abort on list).
+    list_fn = script.split("async function listAgentCacheFiles(", 1)[1].split(
+      "async function listAgentCacheFilesPreferringVault(", 1
+    )[0]
+    assert "abortAfter" not in list_fn
     refresh_fn = script.split("async function refreshPendingCheckinIds(", 1)[1].split(
       "function rowStateFromObject(", 1
     )[0]
@@ -157,7 +165,10 @@ def test_embed_explorer_context_follows_switched_product(client):
     assert "readPendingCheckinIds" not in shared
     app_js = (ROOT / "src/creopdm/static/js/app.js").read_text(encoding="utf-8")
     assert "writePendingCheckinIds" not in app_js
-    assert "files_context_menu.js" in EMBED_HTML.read_text(encoding="utf-8")
+    html = EMBED_HTML.read_text(encoding="utf-8")
+    assert "files_context_menu.js" in html
+    assert "local_cache_pending.js" in html
+    assert "data-purgeable=" in html
 
 
 @requires_git

@@ -144,42 +144,46 @@
     return Boolean(pendingCheckinIds[String(obj.uuid)]);
   }
 
-  function logicalTipName(filename) {
-    // Strip trailing .N save number (shaft.prt.3 → shaft.prt).
-    return String(filename || "")
-      .toLowerCase()
-      .replace(/\\/g, "/")
-      .split("/")
-      .pop()
-      .replace(/\.\d+$/, "");
+  function localCachePendingApi() {
+    var api = window.CreoPdmLocalCachePending;
+    if (!api || typeof api.resolvePendingCheckinUuids !== "function") {
+      throw new Error("local_cache_pending.js failed to load.");
+    }
+    return api;
   }
 
-  function agentSafeRel(rel) {
-    return String(rel || "")
-      .replace(/\\/g, "/")
-      .replace(/^\/+/, "")
-      .split("/")
-      .filter(function (part) {
-        return part && part !== "." && part !== "..";
-      })
-      .map(function (part) {
-        var text = String(part).trim().replace(/[^A-Za-z0-9._\-]+/g, "_");
-        return (text || "x").slice(0, 180);
-      })
-      .join("/");
+  function purgeableFromDom() {
+    return (root.getAttribute("data-purgeable") || "").trim();
   }
 
   async function listAgentCacheFiles(vaultOverride) {
+    // No short abort — large workspaces can take longer than Files' list (Files has none).
     var params = new URLSearchParams({ product_id: productId });
     var vault = String(vaultOverride || vaultFolder || "").trim();
     if (vault) params.set("vault_folder", vault);
     var response = await fetch(agentBase() + "/files?" + params.toString(), {
       headers: agentHeaders(),
-      signal: abortAfter(8000),
     });
     if (!response.ok) return null;
     var body = await response.json();
     return body && Array.isArray(body.files) ? body.files : null;
+  }
+
+  async function listAgentCacheFilesPreferringVault() {
+    var candidates = [];
+    [vaultFolder, productId].forEach(function (item) {
+      var key = String(item || "").trim();
+      if (key && candidates.indexOf(key) < 0) candidates.push(key);
+    });
+    var lastEmpty = null;
+    var i;
+    for (i = 0; i < candidates.length; i += 1) {
+      var files = await listAgentCacheFiles(candidates[i]);
+      if (files == null) continue;
+      if (files.length) return { files: files, vaultFolder: candidates[i] };
+      lastEmpty = { files: files, vaultFolder: candidates[i] };
+    }
+    return lastEmpty || { files: [], vaultFolder: vaultFolder || "" };
   }
 
   async function hashAgentCachePaths(relativePaths, vaultOverride) {
@@ -204,7 +208,6 @@
         vault_folder: vault,
         relative_paths: paths,
       }),
-      signal: abortAfter(30000),
     });
     if (!response.ok) return byPath;
     var body = await response.json();
@@ -218,90 +221,30 @@
   }
 
   async function mergeAgentPendingCheckinIds(into) {
-    // Self-sufficient Modified detection — must work before Files has opened.
+    // Same algorithm as Files (shared local_cache_pending.js) — no Files handoff.
     if (!productId || !into) return;
     agentOnline = await probeAgent();
     if (!agentOnline) return;
     try {
-      var vaultCandidates = [];
-      [vaultFolder, productId, ""].forEach(function (item) {
-        var key = String(item || "").trim();
-        if (vaultCandidates.indexOf(key) < 0) vaultCandidates.push(key);
+      var listed = await listAgentCacheFilesPreferringVault();
+      if (!listed.files || !listed.files.length) return;
+      var listedVault = listed.vaultFolder || vaultFolder || "";
+      // Match Files eligibility: can_checkin, or owned + product show_checkin.
+      var tips = (objects || []).map(function (obj) {
+        if (!obj || Boolean(obj.can_checkin) === tipCanCheckin(obj)) return obj;
+        return Object.assign({}, obj, { can_checkin: tipCanCheckin(obj) });
       });
-      var files = null;
-      var listedVault = vaultFolder || "";
-      var vi;
-      for (vi = 0; vi < vaultCandidates.length; vi += 1) {
-        var listed = await listAgentCacheFiles(vaultCandidates[vi]);
-        if (listed && listed.length) {
-          files = listed;
-          listedVault = vaultCandidates[vi];
-          break;
-        }
-      }
-      if (!files || !files.length) return;
-
-      var byRel = Object.create(null);
-      var byBase = Object.create(null);
-      files.forEach(function (file) {
-        var rel = String(file.relative_path || "").replace(/\\/g, "/");
-        var relKey = rel.toLowerCase();
-        var name = String(file.filename || (rel ? rel.split("/").pop() : "") || "");
-        var base = logicalTipName(name);
-        if (relKey) byRel[relKey] = file;
-        var safe = agentSafeRel(rel).toLowerCase();
-        if (safe && !byRel[safe]) byRel[safe] = file;
-        if (base) byBase[base] = file;
-      });
-      var vaultBaseCounts = Object.create(null);
-      objects.forEach(function (obj) {
-        var base = logicalTipName(obj.filename || obj.relative_path || "");
-        if (base) vaultBaseCounts[base] = (vaultBaseCounts[base] || 0) + 1;
-      });
-
-      var needHash = [];
-      objects.forEach(function (obj) {
-        if (!obj || !obj.uuid) return;
-        if (!tipCanCheckin(obj)) return;
-        var vaultRel = String(obj.relative_path || "").replace(/\\/g, "/");
-        var local =
-          (vaultRel && byRel[vaultRel.toLowerCase()]) ||
-          (vaultRel && byRel[agentSafeRel(vaultRel).toLowerCase()]) ||
-          null;
-        if (!local) {
-          var base = logicalTipName(obj.filename || vaultRel);
-          if (base && vaultBaseCounts[base] === 1) local = byBase[base];
-        }
-        if (!local) return;
-        var vaultHash = String(
-          (obj.current_version && obj.current_version.content_hash) || ""
-        )
-          .trim()
-          .toLowerCase();
-        if (!vaultHash) return;
-        var indexHash = String(local.content_hash || "").trim().toLowerCase();
-        var localRel = String(local.relative_path || "").replace(/\\/g, "/");
-        if (indexHash && indexHash !== vaultHash) {
-          into[String(obj.uuid)] = true;
-          return;
-        }
-        // Always hash owned/check-in tips: cache index can still say "matches vault"
-        // after a same-size Creo save — verify so MOD / Check In work without Files.
-        needHash.push({ uuid: String(obj.uuid), rel: localRel, vaultHash: vaultHash });
-      });
-
-      if (!needHash.length) return;
-      var hashes = await hashAgentCachePaths(
-        needHash.map(function (item) {
-          return item.rel;
-        }),
-        listedVault
+      var uuids = await localCachePendingApi().resolvePendingCheckinUuids(
+        listed.files,
+        tips,
+        function (paths) {
+          return hashAgentCachePaths(paths, listedVault);
+        },
+        { purgeable: purgeableFromDom() }
       );
-      needHash.forEach(function (item) {
-        var localHash = hashes[String(item.rel || "").toLowerCase()] || "";
-        if (localHash && localHash !== item.vaultHash) {
-          into[item.uuid] = true;
-        }
+      (uuids || []).forEach(function (id) {
+        var key = String(id || "").trim();
+        if (key) into[key] = true;
       });
     } catch (err) {
       /* agent offline / old agent — keep server pending set */
