@@ -270,10 +270,11 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "ex-type-toggles" in css
     assert "is-on" in css
     type_css = css.split(".ex-type-toggles", 1)[1].split(".ex-search", 1)[0]
-    assert "background: transparent" in type_css
-    assert "border: 1px solid transparent" in type_css
+    assert "appearance: none" in type_css
+    assert "border: 0" in type_css
+    assert "flex-wrap: nowrap" in type_css
     assert "width: 36px" not in type_css
-    assert "width: 22px" in type_css
+    assert "width: 20px" in type_css
     # Type toggles: none on = all; part/asm/drw OR; top_level exclusive.
     assert "typeFilters" in script
     assert "matchesTypeFilter" in script

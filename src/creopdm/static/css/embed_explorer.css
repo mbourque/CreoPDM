@@ -53,6 +53,7 @@ body#embed-explorer {
 
 .ex-title-row {
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 0.35rem;
   min-width: 0;
@@ -60,7 +61,7 @@ body#embed-explorer {
 
 .ex-product {
   margin: 0;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-width: 0;
   font-size: 0.95rem;
   font-weight: 650;
@@ -95,53 +96,63 @@ body#embed-explorer {
 }
 .ex-icon-btn:hover { color: var(--ex-text); border-color: #aeb9c5; }
 
-/* Type toggles in title row: bare icons off; pressed = light recessed cell. */
+/*
+ * Type filters beside the product name — match Files-in-Creo chrome:
+ * bare glyphs in one row (no tile / no UA button border). Pressed = small recess.
+ */
 .ex-type-toggles {
   flex: 0 0 auto;
   display: inline-flex;
+  flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 1px;
+  gap: 2px;
   margin: 0;
   border: 0;
   background: transparent;
   padding: 0;
+  white-space: nowrap;
 }
 .ex-type-toggle {
+  -webkit-appearance: none;
+  appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   margin: 0;
   padding: 0;
-  border: 1px solid transparent;
-  border-radius: 2px;
+  border: 0;
+  border-radius: 0;
   background: transparent;
   box-shadow: none;
+  outline: none;
   cursor: pointer;
+  flex: 0 0 auto;
 }
 .ex-type-toggle img {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   display: block;
   pointer-events: none;
 }
 .ex-type-toggle:hover:not(.is-on) {
-  background: rgba(26, 35, 48, 0.06);
+  opacity: 0.75;
 }
 .ex-type-toggle.is-on {
-  background: #cfd5dc;
-  border-color: #8a939c;
-  box-shadow: inset 1px 1px 0 rgba(90, 98, 108, 0.55);
+  /* Creo pressed cell — only when active; still tiny so it stays one row */
+  background: #c8ced6;
+  border: 1px solid #7a8490;
+  box-shadow: inset 1px 1px 0 #5c6670;
 }
-.ex-type-toggle.is-on:hover {
-  background: #c5ccd4;
+.ex-type-toggle.is-on img {
+  width: 14px;
+  height: 14px;
 }
-/* Adjacent pressed cells share a divider (Creo strip). */
 .ex-type-toggle.is-on + .ex-type-toggle.is-on {
-  border-left-color: #8a939c;
+  margin-left: -1px;
 }
 
 .ex-search {
