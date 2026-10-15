@@ -991,11 +991,15 @@ window.__creopdmModules.modifications = {
       return "No modifications to compare.";
     }
 
-    function aiSnapshotPendingGatherFailedPlaceholder() {
+    function aiSnapshotPendingGatherFailedPlaceholder(detail) {
+      const why = String(detail || "").trim();
+      const head = why
+        ? `Could not disk-retrieve the local tip (${why}).`
+        : "Could not disk-retrieve the local tip.";
       return (
-        "Could not gather a live workspace outline.\n\n"
-        + "Keep the model open in Creo (Connected), or Save so a local tip "
-        + "is in the workspace, then reopen this tab."
+        `${head}\n\n`
+        + "The model does not need to be open. Creo must be running with "
+        + "creopdm-agent online so Toolkit can retrieve the workspace .N."
       );
     }
 
@@ -1043,31 +1047,39 @@ window.__creopdmModules.modifications = {
       }
       const gatherName =
         pending.logicalName || logicalUploadName(filename) || filename;
-      // Session when open (unsaved edits); else Retrieve the latest .N path.
-      let snapshot = await gatherCreoMetadataForFilename(
-        gatherName,
-        pending.path || "",
-        {
-          featureNames: true,
-          preferDisk: Boolean(pending.path),
-        }
-      );
-      if (snapshot && snapshot.__error) snapshot = null;
-      let gatherSource = "unknown";
-      if (snapshot) {
-        gatherSource = pending.path ? "session_or_disk" : "session";
+      const diskPath = String(pending.path || "").trim();
+      // Always Toolkit disk-retrieve the workspace .N. The model does not
+      // need a window open — session-only gather missed .asm.3 on disk.
+      if (!diskPath) {
+        throw new Error(
+          pending.diskName
+            ? `No local path for ${pending.diskName}. Is creopdm-agent running?`
+            : "No local workspace path for this modified tip."
+        );
       }
-      if (!snapshot && pending.path) {
-        snapshot = await gatherCreoMetadataForFilename(gatherName, pending.path, {
-          featureNames: true,
-          preferDisk: true,
-        });
-        if (snapshot && snapshot.__error) snapshot = null;
-        if (snapshot) gatherSource = "disk";
+      if (!canGatherCreoMetadata()) {
+        throw new Error("Creo is not Connected in this browser.");
       }
-      if (!snapshot) return null;
+      const snapshot = await gatherCreoMetadataForFilename(gatherName, diskPath, {
+        featureNames: true,
+        preferDisk: true,
+      });
+      if (!snapshot || snapshot.__error) {
+        throw new Error(
+          String(
+            snapshot?.__detail
+              || snapshot?.__error
+              || `Toolkit did not retrieve ${pending.diskName || gatherName}.`
+          )
+        );
+      }
+      const gatherSource = "disk";
       const body = aiSnapshotBodyFromGather(snapshot);
-      if (!body) return null;
+      if (!body) {
+        throw new Error(
+          `Toolkit retrieved ${pending.diskName || gatherName} but returned no outline.`
+        );
+      }
       // Show Model: base-plate.prt.6 (PART) — Creo identity is usually logical tip.
       try {
         if (!body.identity || typeof body.identity !== "object") body.identity = {};
@@ -1429,8 +1441,7 @@ window.__creopdmModules.modifications = {
         setAiSnapshotPendingPlaceholder(
           bodyB,
           copyB,
-          `Could not build live workspace outline (${err?.message || "error"}).\n\n`
-            + "Keep the model open in Creo (Connected), or Save a local tip, then retry."
+          aiSnapshotPendingGatherFailedPlaceholder(err?.message || "error")
         );
         return;
       }

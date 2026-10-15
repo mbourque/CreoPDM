@@ -4429,9 +4429,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function canGatherCreoMetadata() {
     try {
       if (!window.CreoJS) return false;
-      if (typeof window.CreoJS.gatherModelMetadata !== "function") return false;
-      // Require a real Creo.JS bridge — same rule as Set Working Directory
-      // (Chrome/Edge must not pretend to gather).
+      // Toolkit disk retrieve (agent /toolkit/snapshot) does not use
+      // CreoJS.gatherModelMetadata — that function is not on CreoJS, and
+      // requiring it skipped every Collect / Modifications gather.
+      // Still require a real Creo session (Chrome/Edge must not pretend).
       return hostedCreoJS();
     } catch {
       return false;

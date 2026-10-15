@@ -431,6 +431,12 @@ def test_app_js_posts_ai_snapshot_soft_fail():
         "async function postAiSnapshotOutline(", 1
     )[0]
     assert "waitForCreoMetadataBridge" in gather_fn
+    assert "disk-retrieve" in gather_fn
+    assert "pending.path" in gather_fn
+    assert "preferDisk: true" in gather_fn
+    assert "snapshot.__error" in gather_fn
+    assert "if (snapshot && snapshot.__error) snapshot = null" not in gather_fn
+    assert "need a window open" in gather_fn
     assert "latestLocalCacheTipForObject" in script.split(
         "async function resolvePendingCheckinLocalPath(", 1
     )[1].split("async function askAiCheckinCommentForOne(", 1)[0]
@@ -554,6 +560,11 @@ def test_app_js_posts_ai_snapshot_soft_fail():
         "onPage($(\"#checkin-ask-ai\")", 1
     )[0]
     assert "dataset.aiCandidates" in script
+    can_gather = app_script.split("function canGatherCreoMetadata(", 1)[1].split(
+        "async function tryEraseModelsFromCreoSession(", 1
+    )[0]
+    assert "hostedCreoJS()" in can_gather
+    assert "CreoJS.gatherModelMetadata" not in can_gather
     assert "function aiFeaturesEnabled(" in app_script
     assert "aiFeaturesEnabled()" in script
     assert "AI features are turned off" in script
