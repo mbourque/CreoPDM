@@ -247,20 +247,28 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "window.location.href" not in script  # Open/Details must not navigate the pane
     assert 'addEventListener("dblclick"' in script
     assert "void onOpen()" in script
-    # Click soft-selects; Open is timed second click (CEF dblclick on <button> is flaky
-    # after type filters expand the tree — and auto-expands must clear when filters off).
+    # Native dblclick Open: soft-select on click (no renderTree), never soft-refresh on
+    # pointerdown (that replaced the row mid double-click so only ultra-fast clicks worked).
     assert "function paintSelection(" in script
-    assert "lastFileClickId" in script
+    assert "noteUserInteract" in script
+    assert "interactGraceUntil" in script
+    assert "objectsPaintFingerprint" in script
+    assert "scheduleSoftRefresh" in script
+    assert 'addEventListener("pointerdown"' not in script
+    assert "lastFileClickId" not in script
+    assert "lastFileClickAt" not in script
     assert "ensureFilterExpandedPath" in script
     assert "clearFilterAutoExpanded" in script
     assert "filterAutoExpanded" in script
     select_fn = script.split("function selectObject(", 1)[1].split(
-        "function menuCapabilities(", 1
+        "function objectsPaintFingerprint(", 1
     )[0]
     assert "paintSelection()" in select_fn
     assert "renderTree()" not in select_fn
-    assert "now - lastFileClickAt < 2000" in script
-    assert "void onOpen()" in script
+    dbl = script.split('addEventListener("dblclick"', 1)[1].split(
+        'addEventListener("contextmenu"', 1
+    )[0]
+    assert "void onOpen()" in dbl
     assert "function openContextMenu(" in script
     assert "filesDeepLink" in script
     assert "filesDeepLink(action)" in script

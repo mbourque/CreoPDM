@@ -27,10 +27,11 @@
   };
   /** Paths expanded only to reveal type/search matches — cleared when filters go off. */
   var filterAutoExpanded = Object.create(null);
-  /** Timed double-click Open — Creo CEF often skips native dblclick on <button> rows. */
-  var lastFileClickAt = 0;
-  var lastFileClickId = "";
   var topLevelAssemblyIds = Object.create(null);
+  /** Skip soft-refresh rebuilds that would replace the row mid double-click. */
+  var interactGraceUntil = 0;
+  var softRefreshTimer = null;
+  var lastPaintFingerprint = "";
 
   var productId = (root.getAttribute("data-product-uuid") || "").trim();
   var vaultFolder = (root.getAttribute("data-vault-folder") || "").trim();
@@ -691,36 +692,28 @@
         row.title =
           (obj.relative_path || obj.filename || "") + " — double-click to Open";
         row.addEventListener("click", function () {
-          // Soft-select + timed second-click Open. Creo CEF click gaps are often
-          // wider than Windows' ~500ms default — use 2s so a normal double-click
-          // still counts (accidental Open from two slow clicks is acceptable).
-          var id = String(obj.uuid || obj.relative_path || "");
-          var now = Date.now();
-          if (id && id === lastFileClickId && now - lastFileClickAt < 2000) {
-            lastFileClickAt = 0;
-            lastFileClickId = "";
-            selected = obj;
-            paintSelection();
-            void onOpen();
-            return;
-          }
-          lastFileClickAt = now;
-          lastFileClickId = id;
+          noteUserInteract();
+          // Soft-select only — never renderTree() here (that kills dblclick).
           selectObject(obj);
         });
         row.addEventListener("dblclick", function (ev) {
           ev.preventDefault();
-          lastFileClickAt = 0;
-          lastFileClickId = "";
+          noteUserInteract();
           selected = obj;
           paintSelection();
           void onOpen();
         });
         row.addEventListener("contextmenu", function (ev) {
+          noteUserInteract();
           onFileContextMenu(ev, obj);
         });
         parent.appendChild(row);
       });
+  }
+
+  function noteUserInteract() {
+    // Hold off soft-refresh tree rebuilds while the user is clicking / opening.
+    interactGraceUntil = Date.now() + 800;
   }
 
   function paintSelection() {
@@ -735,6 +728,25 @@
   function selectObject(obj) {
     selected = obj;
     paintSelection();
+  }
+
+  function objectsPaintFingerprint() {
+    var pending = Object.keys(pendingCheckinIds)
+      .sort()
+      .join(",");
+    var rows = (objects || [])
+      .map(function (o) {
+        if (!o) return "";
+        return [
+          o.uuid || "",
+          o.filename || "",
+          o.checkout_user || "",
+          o.owned_by_me ? "1" : "0",
+          tipHasCheckinWork(o) ? "1" : "0",
+        ].join(":");
+      })
+      .join("|");
+    return rows + "#" + pending;
   }
 
   function menuCapabilities() {
@@ -1007,6 +1019,15 @@
             return row.uuid === selected.uuid;
           }) || null;
       }
+      var fp = objectsPaintFingerprint();
+      // keepPaint soft-refresh: skip DOM rebuild when CO/MOD/list unchanged so a
+      // mid-flight double-click still hits the same row (native dblclick).
+      if (keepPaint && listState === "ok" && fp === lastPaintFingerprint) {
+        if (selected) paintSelection();
+        if (!quiet) setMsg(objects.length ? "Updated." : "", objects.length ? "ok" : "");
+        return;
+      }
+      lastPaintFingerprint = fp;
       renderTree();
       if (selected) selectObject(selected);
       if (!quiet) setMsg(objects.length ? "Updated." : "", objects.length ? "ok" : "");
@@ -1023,7 +1044,19 @@
   async function softRefreshList() {
     // Reload checkout / Modified badges without "Loading files…" flash.
     if (!productId || busy || syncingContext) return;
+    if (Date.now() < interactGraceUntil) {
+      scheduleSoftRefresh(300);
+      return;
+    }
     await loadObjects({ quiet: true, keepPaint: true });
+  }
+
+  function scheduleSoftRefresh(delayMs) {
+    if (softRefreshTimer != null) window.clearTimeout(softRefreshTimer);
+    softRefreshTimer = window.setTimeout(function () {
+      softRefreshTimer = null;
+      void softRefreshList();
+    }, delayMs == null ? 400 : delayMs);
   }
 
   async function refreshObjects() {
@@ -1042,23 +1075,24 @@
       postHandoffRefreshTimers.push(
         window.setTimeout(function () {
           if (busy || syncingContext) return;
-          void softRefreshList();
+          scheduleSoftRefresh(0);
         }, ms)
       );
     });
   }
 
   function onPaneShown() {
+    // Debounced — never refresh synchronously on the same gesture as a click
+    // (pointerdown→refresh used to replace the row and kill native dblclick).
     if (syncingContext || busy) return;
     if (followActive) {
       void syncActiveProduct({ quiet: true, onlyIfChanged: true }).then(function (switched) {
         if (switched) return refreshConnectivity();
-        // Same product — still refresh CO/MOD after Files mutations.
-        return softRefreshList();
+        scheduleSoftRefresh(400);
       });
       return;
     }
-    void softRefreshList();
+    scheduleSoftRefresh(400);
   }
 
   function startFollowActivePoll() {
@@ -1066,12 +1100,13 @@
     // Poll product follow (when enabled) and always refresh CO/MOD while pane stays open.
     followPollTimer = window.setInterval(function () {
       if (syncingContext || busy) return;
+      if (Date.now() < interactGraceUntil) return;
       if (followActive) {
         void syncActiveProduct({ quiet: true, onlyIfChanged: true }).then(function (switched) {
-          if (!switched) void softRefreshList();
+          if (!switched) scheduleSoftRefresh(0);
         });
       } else {
-        void softRefreshList();
+        scheduleSoftRefresh(0);
       }
     }, FOLLOW_POLL_MS);
   }
@@ -1217,9 +1252,10 @@
     window.addEventListener("focus", function () {
       onPaneShown();
     });
-    // CEF often skips focus/visibility; mouse into the pane still syncs immediately.
+    // CEF often skips focus/visibility; mouse into the pane still syncs.
+    // Do NOT soft-refresh on pointerdown — that rebuilt the tree mid double-click
+    // so only an ultra-fast dblclick could open before the row was replaced.
     root.addEventListener("mouseenter", onPaneShown);
-    root.addEventListener("pointerdown", onPaneShown, true);
     startFollowActivePoll();
     // Re-resolve last-used product (Files may have switched) then load files.
     listState = "loading";
