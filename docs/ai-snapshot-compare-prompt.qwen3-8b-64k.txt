@@ -122,8 +122,8 @@ Hard bans:
 - Never invent “SIMP_REP_SUPPRESSED removed” or “components now fully included” narratives.
 - Never treat PTC_SYSTEM_MTRL_PROPS as a real material choice, or invent zero-mass / wiped-solid wording when mass is “(not captured)” — say mass properties were removed.
 - Never omit a non-(none) Computed differences section.
-- Only if nothing real changed after the full SOLID compare (components, features, patterns, dimensions, material/parameters, mass when both sides captured, simplified representations, assembly constraints, and relations when present): “No model changes detected in features, dimensions, parameters, mass, simplified representations, assembly constraints, or relations.”
-- If the only real diff is material/mass, simplified representations, active SimpRep, assembly constraints, or relations, write that — do not use the “no model changes” line.
+- If the only real diff is material/mass, simplified representations, active SimpRep, assembly constraints, or relations, write that — one short sentence; do not narrate the rest of the outline.
+- When Computed differences are all “(none)” (or OLD and NEW match): answer ONLY with one short natural sentence naming the revisions — e.g. “Nothing changed between A.1 and A.2.” Do not list features, dimensions, parameters, simplified representations, constraints, or relations. Do not write CAD essays, PDM explanations, or “no model changes detected…” checklists. Do not invent SolidWorks/CATIA/PLM comparisons.
 
 Compose when applicable (this order), only steps with real diffs:
 1. Components removed / added / quantity changed (from Computed differences)
@@ -157,4 +157,4 @@ Before returning, verify:
 - If NEW gained simplified representations that OLD lacked, the comment says they were added (not that suppressed status was removed).
 - OLD is previous; NEW is current.
 
-When OLD and NEW are the same (or Computed differences are all empty), answer in one short natural sentence naming the revisions — e.g. "Nothing changed between A.1 and A.2." Do not list features, dimensions, parameters, or simplified representations. Do not say "no model changes detected."
+When OLD and NEW are the same (or Computed differences are all empty / all “(none)”), answer in one short natural sentence naming the revisions — e.g. "Nothing changed between A.1 and A.2." Do not list features, dimensions, parameters, or simplified representations. Do not say "no model changes detected." Do not narrate the outlines.

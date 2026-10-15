@@ -14,11 +14,13 @@ from creopdm.ai_prompts import (
     CHECKIN_BATCH_COMMENT_SYSTEM,
     build_checkin_batch_comment_user_prompt,
     build_snapshot_compare_user_prompt,
+    empty_snapshot_compare_summary,
     format_checkin_batch_comment_fallback,
     format_snapshot_compare_diff_text,
     format_snapshot_compare_text,
     prepare_snapshot_for_compare,
     resolve_snapshot_compare_prompt,
+    snapshot_compare_diff_is_empty,
 )
 from creopdm.config import AppSettings
 from creopdm.exceptions import NotFoundError, ValidationAppError
@@ -530,6 +532,24 @@ class AiSnapshotService:
         if not model:
             raise ValidationAppError(
                 "No Ollama model selected. Open System Settings → AI, Refresh models, choose a model, and Save."
+            )
+        # Empty Computed differences (same as What changed → "No computed
+        # differences.") — never send the full OLD/NEW outlines to Ollama;
+        # models invent encyclopedia essays from identical trees.
+        older_prepared = prepare_snapshot_for_compare(older_snapshot)
+        newer_prepared = prepare_snapshot_for_compare(newer_snapshot)
+        diff_text = format_snapshot_compare_diff_text(older_prepared, newer_prepared)
+        if snapshot_compare_diff_is_empty(diff_text):
+            return AiSnapshotCompareResponse(
+                object_id=object_uuid,
+                older_version_id=older_version_id,
+                newer_version_id=newer_version_id,
+                older_display_revision=older_revision,
+                newer_display_revision=newer_revision,
+                model=model,
+                summary=empty_snapshot_compare_summary(
+                    older_revision, newer_revision
+                ),
             )
         # One prompt path for Modifications Ask AI and Check In Ask AI
         # (parts, assemblies, drawings) — prepare lives inside build_*.

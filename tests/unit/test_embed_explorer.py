@@ -177,7 +177,11 @@ def test_embed_explorer_context_follows_switched_product(client):
     pane = script.split("function onPaneShown(", 1)[1].split(
       "function startFollowActivePoll(", 1
     )[0]
-    assert "softRefreshList()" in pane
+    # Debounced — must not call softRefreshList() synchronously (kills dblclick).
+    assert "scheduleSoftRefresh(400)" in pane
+    assert "softRefreshList()" not in pane
+    assert "function scheduleSoftRefresh(" in script
+    assert "interactGraceUntil" in script
     shared = (ROOT / "src/creopdm/static/js/files_context_menu.js").read_text(encoding="utf-8")
     assert "creopdm_pending_checkin" not in shared
     assert "writePendingCheckinIds" not in shared
@@ -370,8 +374,10 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "one scrollbar" in docs.lower() or "Only the tree scrolls" in docs
     assert "Parts / Assemblies / Drawings / Top Level" in docs
     assert "all off" in docs
-    assert "bare icons" in docs
+    assert "never shift" in docs
     assert "exclusive" in docs.lower()
+    assert "pointerdown" in docs
+    assert "native" in docs.lower() and "dblclick" in docs.lower()
     assert "Could not find that file" in docs
 
 

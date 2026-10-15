@@ -651,10 +651,13 @@ def test_product_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "roleCanCheckout" in script.text
     assert "roleCanCheckin" in script.text
     assert "rowOffersCheckout(row)" in script.text
-    assert 'selected.every((row) => row.dataset.canCheckout === "1")' in script.text
+    assert "selected.every((row) => rowOffersCheckout(row))" in script.text
     assert "function selectionCanCheckin" in script.text
     assert 'row.dataset.canCheckin === "1"' in script.text
-    assert 'selected.every((row) => row.dataset.owned === "1")' in script.text
+    assert (
+        'selected.every((row) => rowCheckoutKind(row) === "mine" || dataFlag(row, "owned"))'
+        in script.text
+    )
     assert 'return row.classList.contains("is-row-hidden")' in script.text
     assert "/checkouts" in script.text
     assert "queue-row" in script.text

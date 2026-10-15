@@ -1537,6 +1537,38 @@ def _count_labels(labels: list[str]) -> dict[str, int]:
     return counts
 
 
+def snapshot_compare_diff_is_empty(diff_text: str) -> bool:
+    """True when Computed differences has only the banner and ``(none)`` rows.
+
+    Matches Modifications UI ``formatAiWhatChangedDisplay`` →
+    ``No computed differences.`` Ask AI must not call Ollama in that case.
+    """
+    for raw in str(diff_text or "").splitlines():
+        text = raw.strip()
+        if not text:
+            continue
+        if re.match(r"^=== Computed differences ===$", text, re.IGNORECASE):
+            continue
+        if re.search(r":\s*\(none\)\s*$", text, re.IGNORECASE):
+            continue
+        return False
+    return True
+
+
+def empty_snapshot_compare_summary(
+    older_revision: str = "",
+    newer_revision: str = "",
+) -> str:
+    """One-line Ask AI / check-in comment when Computed differences are empty."""
+    older_label = (older_revision or "").strip()
+    newer_label = (newer_revision or "").strip()
+    if not older_label or older_label in {"—", "-"}:
+        older_label = "older"
+    if not newer_label or newer_label in {"—", "-"}:
+        newer_label = "newer"
+    return f"Nothing changed between {older_label} and {newer_label}."
+
+
 def format_snapshot_compare_diff_text(
     older_snapshot: dict[str, Any] | None,
     newer_snapshot: dict[str, Any] | None,

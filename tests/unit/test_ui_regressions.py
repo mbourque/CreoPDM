@@ -152,7 +152,14 @@ def test_add_toolbar_is_menu_with_modes():
     # Add selected… only for New files queue rows (never Modified / Files).
     assert "function beginAddSelected" in script
     assert "selectionIsAddOnly(selected)" in script
-    assert 'id: "files-context-add-selected"' in script or 'action: "add-selected"' in script
+    shared_menu = (ROOT / "src/creopdm/static/js/files_context_menu.js").read_text(
+        encoding="utf-8"
+    )
+    assert (
+        'id: "files-context-add-selected"' in script
+        or 'action: "add-selected"' in script
+        or 'action: "add-selected"' in shared_menu
+    )
     sync = _between(script, "function syncToolbar(", "function setCheckinQueueCounts(")
     assert "canAddSelected" in sync
     assert "addOnly" in sync

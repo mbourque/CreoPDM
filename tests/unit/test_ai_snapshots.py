@@ -11,11 +11,13 @@ import pytest
 
 from creopdm.ai_prompts import (
     build_snapshot_compare_user_prompt,
+    empty_snapshot_compare_summary,
     format_snapshot_compare_diff_text,
     format_snapshot_compare_text,
     prepare_snapshot_for_compare,
     resolve_snapshot_compare_prompt,
     slim_snapshot_for_compare,
+    snapshot_compare_diff_is_empty,
 )
 from creopdm.exceptions import ValidationAppError
 from creopdm.services.ai_snapshot_service import (
@@ -182,6 +184,12 @@ def test_computed_diff_and_outline_include_mass_properties():
     assert "volume: 100 → 125" in diff
     same = format_snapshot_compare_diff_text(newer, dict(newer))
     assert "Mass properties changed:" not in same
+    assert snapshot_compare_diff_is_empty(same)
+    assert not snapshot_compare_diff_is_empty(diff)
+    assert (
+        empty_snapshot_compare_summary("A.1", "A.2")
+        == "Nothing changed between A.1 and A.2."
+    )
 
 
 def test_gather_ai_snapshot_contract_in_creo_js():
@@ -652,6 +660,15 @@ def test_snapshot_tab_template_and_docs():
     assert "root: dialog" in script
     assert "Simplified representations added" in script
     assert "No computed differences." in script
+    assert "snapshot_compare_diff_is_empty" in (
+        ROOT / "src" / "creopdm" / "services" / "ai_snapshot_service.py"
+    ).read_text(encoding="utf-8")
+    assert "empty_snapshot_compare_summary" in (
+        ROOT / "src" / "creopdm" / "services" / "ai_snapshot_service.py"
+    ).read_text(encoding="utf-8")
+    assert "Nothing changed between" in (
+        ROOT / "docs" / "ai-snapshot-compare-prompt.qwen3-8b-64k.txt"
+    ).read_text(encoding="utf-8")
     assert "overflow-x: hidden" in css
     assert ".ai-snapshot-result-para" in css
     assert 'div class="ai-snapshot-result-body"' in html or "<div class=\"ai-snapshot-result-body\"" in html
@@ -1902,6 +1919,75 @@ def test_ai_snapshot_compare_pending_uses_tip_and_client_newer(
     )
     assert blocked.status_code == 400, blocked.text
     assert "AI features are turned off" in blocked.text
+
+
+@requires_git
+def test_ai_snapshot_compare_pending_empty_diff_skips_ollama(
+    client, repo_parent, tmp_path, monkeypatch
+):
+    """Identical tip vs gather → one-line summary; never call Ollama (no CAD essays)."""
+    product = client.post(
+        "/api/products",
+        json={"name": "Snap Empty Diff", "number": "SNAP-EMPTY"},
+    )
+    assert product.status_code == 201, product.text
+    product_id = product.json()["uuid"]
+    prt = tmp_path / "unchanged.prt.1"
+    prt.write_bytes(b"FAKE CREO PART")
+    added = client.post(
+        f"/api/products/{product_id}/objects",
+        files={"file": ("unchanged.prt.1", prt.read_bytes(), "application/octet-stream")},
+        data={"comment": "v1"},
+    )
+    assert added.status_code == 201, added.text
+    object_id = added.json()["uuid"]
+    tip_version_id = added.json()["current_version"]["uuid"]
+
+    snap_body = {
+        "identity": {"filename": "unchanged.prt", "model_type": "PART"},
+        "features": [{"id": 1, "name": "RIGHT", "type": "DATUM_PLANE"}],
+        "dimensions": [{"symbol": "d0", "value": 10.0, "units": "mm"}],
+        "parameters": [],
+    }
+    tip_snap = {
+        "version_id": tip_version_id,
+        "schema_version": AI_SNAPSHOT_SCHEMA_VERSION,
+        "capture_status": "ok",
+        "snapshot": snap_body,
+    }
+    assert client.post(f"/api/objects/{object_id}/ai-snapshot", json=tip_snap).status_code == 200
+
+    assert (
+        client.put(
+            "/api/settings",
+            json={
+                "ollama_model": "qwen3-8b-64k:latest",
+                "snapshot_compare_prompt": "Facts only.",
+            },
+        ).status_code
+        == 200
+    )
+
+    def boom(*_args, **_kwargs):
+        raise AssertionError("Ollama must not run when Computed differences are empty")
+
+    monkeypatch.setattr(
+        "creopdm.services.ai_snapshot_service.chat_ollama",
+        boom,
+    )
+
+    pending = client.post(
+        f"/api/objects/{object_id}/ai-snapshot/compare-pending",
+        json={
+            "newer_display_revision": "A.2",
+            "newer_snapshot": dict(snap_body),
+        },
+    )
+    assert pending.status_code == 200, pending.text
+    body = pending.json()
+    assert body["summary"] == "Nothing changed between A.1 and A.2."
+    assert body["older_version_id"] == tip_version_id
+    assert body["newer_display_revision"] == "A.2"
 
 
 @requires_git
