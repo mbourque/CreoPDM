@@ -25,6 +25,11 @@
     drawing: false,
     top_level: false,
   };
+  /** Paths expanded only to reveal type/search matches — cleared when filters go off. */
+  var filterAutoExpanded = Object.create(null);
+  /** Timed double-click Open — Creo CEF often skips native dblclick on <button> rows. */
+  var lastFileClickAt = 0;
+  var lastFileClickId = "";
   var topLevelAssemblyIds = Object.create(null);
 
   var productId = (root.getAttribute("data-product-uuid") || "").trim();
@@ -196,8 +201,31 @@
     });
   }
 
+  function ensureFilterExpandedPath(folderPath) {
+    var parts = String(folderPath || "")
+      .split("/")
+      .filter(Boolean);
+    var acc = [];
+    parts.forEach(function (part) {
+      acc.push(part);
+      var path = acc.join("/");
+      if (!expanded[path]) {
+        expanded[path] = true;
+        filterAutoExpanded[path] = true;
+      }
+    });
+  }
+
+  function clearFilterAutoExpanded() {
+    Object.keys(filterAutoExpanded).forEach(function (path) {
+      if (filterAutoExpanded[path]) delete expanded[path];
+    });
+    filterAutoExpanded = Object.create(null);
+  }
+
   function toggleTypeFilter(key) {
     if (!Object.prototype.hasOwnProperty.call(typeFilters, key)) return;
+    var wasOn = anyTypeFilterOn();
     if (key === "top_level") {
       // Exclusive: Top Level clears type filters and only shows WU roots.
       var next = !typeFilters.top_level;
@@ -210,6 +238,9 @@
       typeFilters.top_level = false;
       typeFilters[key] = !typeFilters[key];
     }
+    // Turning the last filter off: collapse paths we only opened for the filter
+    // (left expanded, double-click Open kept missing the same row).
+    if (wasOn && !anyTypeFilterOn()) clearFilterAutoExpanded();
     syncTypeToggleButtons();
     if (listState === "ok") renderTree();
   }
@@ -571,14 +602,21 @@
       return matchesQuery(obj, q) && matchesTypeFilter(obj);
     });
     // Search or type filter: expand ancestor folders so matches are visible.
+    // Track auto-expands separately so clearing filters can collapse them again.
     if (q || typeOn) {
       filtered.forEach(function (obj) {
-        ensureExpandedPath(folderOf(obj.relative_path));
+        ensureFilterExpandedPath(folderOf(obj.relative_path));
       });
+    } else if (!q) {
+      // Search cleared with no type filter — drop search-only auto-expands too.
+      clearFilterAutoExpanded();
     }
     var tree = buildTree(filtered);
     treeEl.innerHTML = "";
-    appendFolderKids(treeEl, tree, 0, q || typeOn);
+    // Open from expanded{} only (ensureFilterExpandedPath already filled it).
+    // Do not force-open with || typeOn — that left folders stuck open and made
+    // click targets drift so double-click Open missed the file row.
+    appendFolderKids(treeEl, tree, 0, false);
     // Empty copy only after a successful list response (listState === "ok").
     if (!filtered.length) {
       var empty = document.createElement("p");
@@ -653,15 +691,25 @@
         row.title =
           (obj.relative_path || obj.filename || "") + " — double-click to Open";
         row.addEventListener("click", function () {
-          // Soft-select only — full renderTree() replaces this button and kills
-          // the pending dblclick (worse after type filters expand many folders).
+          // Soft-select + timed second click Open. Native dblclick on <button>
+          // is unreliable in Creo CEF once type filters expand a deep tree.
+          var id = String(obj.uuid || obj.relative_path || "");
+          var now = Date.now();
+          if (id && id === lastFileClickId && now - lastFileClickAt < 450) {
+            lastFileClickAt = 0;
+            lastFileClickId = "";
+            selected = obj;
+            paintSelection();
+            void onOpen();
+            return;
+          }
+          lastFileClickAt = now;
+          lastFileClickId = id;
           selectObject(obj);
         });
         row.addEventListener("dblclick", function (ev) {
+          // Suppress default; Open already handled by timed second click above.
           ev.preventDefault();
-          selected = obj;
-          paintSelection();
-          void onOpen();
         });
         row.addEventListener("contextmenu", function (ev) {
           onFileContextMenu(ev, obj);
@@ -1023,27 +1071,13 @@
     }, FOLLOW_POLL_MS);
   }
 
-  function tryCreoJsSetUrl(absoluteUrl) {
-    try {
-      if (typeof pfcGetProESession !== "function") return false;
-      var session = pfcGetProESession();
-      if (!session || typeof session.GetCurrentWindow !== "function") return false;
-      var win = session.GetCurrentWindow();
-      if (!win || typeof win.SetURL !== "function") return false;
-      win.SetURL(absoluteUrl);
-      return true;
-    } catch (err) {
-      return false;
-    }
-  }
-
   async function openInMainEmbeddedBrowser(absoluteUrl) {
-    // Full CreoPDM pages must load in Creo's main embedded browser — never replace
-    // this narrow navigator pane (location.href would squash the explorer UI).
-    if (tryCreoJsSetUrl(absoluteUrl)) {
-      setMsg("Opened in CreoPDM browser.", "ok");
-      schedulePostHandoffRefresh();
-      return true;
+    // Full CreoPDM pages must load in Creo's main embedded browser — never
+    // Creo.JS SetURL on this pane (would replace the explorer with Files).
+    // Toolkit /url → ProWindowURLShow on the main browser.
+    if (!absoluteUrl) {
+      setMsg("Could not build Open link for this file.", "err");
+      return false;
     }
     try {
       var response = await fetch(

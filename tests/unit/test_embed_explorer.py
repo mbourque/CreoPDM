@@ -231,7 +231,9 @@ def test_embed_js_never_calls_toolkit_from_browser():
     shared = (ROOT / "src/creopdm/static/js/files_context_menu.js").read_text(encoding="utf-8")
     assert "/toolkit/url?" in script
     assert "openInMainEmbeddedBrowser" in script
-    assert "tryCreoJsSetUrl" in script
+    # Navigator must not SetURL on GetCurrentWindow (that pane is the explorer).
+    assert "tryCreoJsSetUrl" not in script
+    assert "GetCurrentWindow" not in script
     assert "thumb-preview-target" not in script
     # RMB actions that need Files hand off — no in-pane prepare/materialize/check-in.
     assert "/api/creo/open" not in script
@@ -245,20 +247,20 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "window.location.href" not in script  # Open/Details must not navigate the pane
     assert 'addEventListener("dblclick"' in script
     assert "void onOpen()" in script
-    # Click must soft-select (paintSelection) — full renderTree on click kills dblclick,
-    # especially after type filters expand many folders and leave them expanded.
+    # Click soft-selects; Open is timed second click (CEF dblclick on <button> is flaky
+    # after type filters expand the tree — and auto-expands must clear when filters off).
     assert "function paintSelection(" in script
+    assert "lastFileClickId" in script
+    assert "ensureFilterExpandedPath" in script
+    assert "clearFilterAutoExpanded" in script
+    assert "filterAutoExpanded" in script
     select_fn = script.split("function selectObject(", 1)[1].split(
         "function menuCapabilities(", 1
     )[0]
     assert "paintSelection()" in select_fn
     assert "renderTree()" not in select_fn
-    dbl = script.split('addEventListener("dblclick"', 1)[1].split(
-        'addEventListener("contextmenu"', 1
-    )[0]
-    assert "paintSelection()" in dbl
-    assert "selectObject(obj)" not in dbl
-    assert "void onOpen()" in dbl
+    assert "now - lastFileClickAt < 450" in script
+    assert "void onOpen()" in script
     assert "function openContextMenu(" in script
     assert "filesDeepLink" in script
     assert "filesDeepLink(action)" in script
