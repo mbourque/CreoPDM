@@ -47,6 +47,13 @@ def test_embed_explorer_route_and_assets(client):
     assert 'data-initial-folder="CAD"' in page.text
     assert "files_context_menu.js" in page.text
     assert 'id="ex-retry"' in page.text
+    assert 'id="ex-type-toggles"' in page.text
+    assert 'id="ex-filter-part"' in page.text
+    assert 'id="ex-filter-assembly"' in page.text
+    assert 'id="ex-filter-drawing"' in page.text
+    assert "/static/icons/part.png" in page.text
+    assert "/static/icons/assembly.png" in page.text
+    assert "/static/icons/drawing.png" in page.text
     # Must not pull in the full Files shell.
     assert 'id="object-table"' not in page.text
     assert "/client/app.js" not in page.text
@@ -257,6 +264,17 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "thumb-preview" not in css
     assert "overflow: hidden" in css
     assert "ex-loading" in css
+    assert "ex-type-toggles" in css
+    assert 'aria-pressed="true"' in css or "[aria-pressed=\"true\"]" in css
+    # Type toggles: none on = all files; any on = OR filter of those kinds.
+    assert "typeFilters" in script
+    assert "matchesTypeFilter" in script
+    assert "anyTypeFilterOn" in script
+    assert "syncTypeToggleButtons" in script
+    assert 'kind: "part"' in script
+    assert 'kind: "assembly"' in script
+    assert 'kind: "drawing"' in script
+    assert 'id="ex-type-toggles"' in html
     app_js = (ROOT / "src/creopdm/static/js/app.js").read_text(encoding="utf-8")
     assert "consumeNavigatorDeepLink" in app_js
     assert "selectOnlyForNavigator" in app_js
@@ -300,6 +318,8 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "hands off" in docs.lower() or "hand off" in docs.lower()
     assert "No hover thumbnail" in docs
     assert "one scrollbar" in docs.lower() or "Only the tree scrolls" in docs
+    assert "Parts / Assemblies / Drawings" in docs
+    assert "all off" in docs
     assert "Could not find that file" in docs
 
 

@@ -17,6 +17,9 @@
   var listErrorEl = document.getElementById("ex-list-error");
   var listErrorText = document.getElementById("ex-list-error-text");
   var retryBtn = document.getElementById("ex-retry");
+  var typeToggleRoot = document.getElementById("ex-type-toggles");
+  /** None pressed → show all. Any pressed → OR of those kinds (part/assembly/drawing). */
+  var typeFilters = { part: false, assembly: false, drawing: false };
 
   var productId = (root.getAttribute("data-product-uuid") || "").trim();
   var vaultFolder = (root.getAttribute("data-vault-folder") || "").trim();
@@ -122,15 +125,35 @@
     var ext = String(obj.extension || "").toLowerCase().replace(/^\./, "");
     var name = String(obj.filename || "").toLowerCase();
     if (typ === "CREO_ASSEMBLY" || ext === "asm" || /\.asm(\.\d+)?$/.test(name)) {
-      return { file: "assembly.png", label: "Assembly" };
+      return { kind: "assembly", file: "assembly.png", label: "Assembly" };
     }
     if (typ === "CREO_DRAWING" || ext === "drw" || /\.drw(\.\d+)?$/.test(name)) {
-      return { file: "drawing.png", label: "Drawing" };
+      return { kind: "drawing", file: "drawing.png", label: "Drawing" };
     }
     if (typ === "CREO_PART" || ext === "prt" || /\.prt(\.\d+)?$/.test(name)) {
-      return { file: "part.png", label: "Part" };
+      return { kind: "part", file: "part.png", label: "Part" };
     }
-    return { file: "file.svg", label: "File" };
+    return { kind: "other", file: "file.svg", label: "File" };
+  }
+
+  function anyTypeFilterOn() {
+    return Boolean(typeFilters.part || typeFilters.assembly || typeFilters.drawing);
+  }
+
+  function matchesTypeFilter(obj) {
+    if (!anyTypeFilterOn()) return true;
+    var kind = iconKind(obj).kind;
+    return Boolean(typeFilters[kind]);
+  }
+
+  function syncTypeToggleButtons() {
+    if (!typeToggleRoot) return;
+    typeToggleRoot.querySelectorAll(".ex-type-toggle[data-type]").forEach(function (btn) {
+      var key = String(btn.getAttribute("data-type") || "");
+      var on = Boolean(typeFilters[key]);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+      btn.classList.toggle("is-on", on);
+    });
   }
 
   function tipCanCheckin(obj) {
@@ -485,22 +508,25 @@
     setListErrorVisible(false);
     treeEl.hidden = false;
     var q = (searchEl && searchEl.value ? searchEl.value : "").trim().toLowerCase();
+    var typeOn = anyTypeFilterOn();
     var filtered = objects.filter(function (obj) {
-      return matchesQuery(obj, q);
+      return matchesQuery(obj, q) && matchesTypeFilter(obj);
     });
-    if (q) {
+    // Search or type filter: expand ancestor folders so matches are visible.
+    if (q || typeOn) {
       filtered.forEach(function (obj) {
         ensureExpandedPath(folderOf(obj.relative_path));
       });
     }
     var tree = buildTree(filtered);
     treeEl.innerHTML = "";
-    appendFolderKids(treeEl, tree, 0, q);
+    appendFolderKids(treeEl, tree, 0, q || typeOn);
     // Empty copy only after a successful list response (listState === "ok").
     if (!filtered.length) {
       var empty = document.createElement("p");
       empty.className = "ex-empty";
-      empty.textContent = q ? "No matching files." : "This product has no files yet.";
+      empty.textContent =
+        q || typeOn ? "No matching files." : "This product has no files yet.";
       treeEl.appendChild(empty);
     }
   }
@@ -1005,6 +1031,18 @@
 
   function boot() {
     if (initialFolder) ensureExpandedPath(initialFolder);
+    syncTypeToggleButtons();
+    if (typeToggleRoot) {
+      typeToggleRoot.addEventListener("click", function (ev) {
+        var btn = ev.target && ev.target.closest ? ev.target.closest(".ex-type-toggle[data-type]") : null;
+        if (!btn || !typeToggleRoot.contains(btn)) return;
+        var key = String(btn.getAttribute("data-type") || "");
+        if (!Object.prototype.hasOwnProperty.call(typeFilters, key)) return;
+        typeFilters[key] = !typeFilters[key];
+        syncTypeToggleButtons();
+        if (listState === "ok") renderTree();
+      });
+    }
     if (searchEl) {
       searchEl.addEventListener("input", function () {
         if (listState === "ok") renderTree();

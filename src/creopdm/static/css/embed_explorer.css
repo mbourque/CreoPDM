@@ -95,6 +95,43 @@ body#embed-explorer {
 }
 .ex-icon-btn:hover { color: var(--ex-text); border-color: #aeb9c5; }
 
+/* Parts / Assemblies / Drawings toggles — none on = show everything. */
+.ex-type-toggles {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--ex-line);
+  border-radius: 4px;
+  overflow: hidden;
+  background: #eef1f4;
+}
+.ex-type-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.55rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-right: 1px solid var(--ex-line);
+  background: transparent;
+  cursor: pointer;
+}
+.ex-type-toggle:last-child { border-right: 0; }
+.ex-type-toggle img {
+  width: 14px;
+  height: 14px;
+  display: block;
+  pointer-events: none;
+}
+.ex-type-toggle:hover { background: #e4e8ed; }
+.ex-type-toggle[aria-pressed="true"] {
+  background: #c5ccd4;
+  box-shadow: inset 0 1px 2px rgba(26, 35, 48, 0.18);
+}
+.ex-type-toggle[aria-pressed="true"]:hover { background: #b8c0c9; }
+
 .ex-search {
   display: block;
   margin-top: 0.4rem;
