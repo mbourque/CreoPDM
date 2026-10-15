@@ -259,7 +259,7 @@ def test_embed_js_never_calls_toolkit_from_browser():
     )[0]
     assert "paintSelection()" in select_fn
     assert "renderTree()" not in select_fn
-    assert "now - lastFileClickAt < 450" in script
+    assert "now - lastFileClickAt < 900" in script
     assert "void onOpen()" in script
     assert "function openContextMenu(" in script
     assert "filesDeepLink" in script

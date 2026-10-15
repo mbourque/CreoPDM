@@ -695,7 +695,8 @@
           // is unreliable in Creo CEF once type filters expand a deep tree.
           var id = String(obj.uuid || obj.relative_path || "");
           var now = Date.now();
-          if (id && id === lastFileClickId && now - lastFileClickAt < 450) {
+          // Windows default double-click is ~500ms; Creo CEF click gaps run longer.
+          if (id && id === lastFileClickId && now - lastFileClickAt < 900) {
             lastFileClickAt = 0;
             lastFileClickId = "";
             selected = obj;
