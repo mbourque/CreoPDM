@@ -144,6 +144,14 @@ def test_embed_explorer_context_follows_switched_product(client):
     assert "/files?" in script
     assert "/hash-paths" in script
     assert "hashAgentCachePaths" in script
+    # Must probe agent before relying on Files-published ids.
+    refresh_fn = script.split("async function refreshPendingCheckinIds(", 1)[1].split(
+      "function rowStateFromObject(", 1
+    )[0]
+    assert "mergeAgentPendingCheckinIds(next)" in refresh_fn
+    assert refresh_fn.index("mergeAgentPendingCheckinIds") < refresh_fn.index(
+      "readPendingCheckinIds"
+    )
     assert "readPendingCheckinIds" in script
     assert "writePendingCheckinIds" in script
     shared = (ROOT / "src/creopdm/static/js/files_context_menu.js").read_text(encoding="utf-8")

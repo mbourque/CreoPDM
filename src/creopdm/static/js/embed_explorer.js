@@ -182,7 +182,7 @@
     return body && Array.isArray(body.files) ? body.files : null;
   }
 
-  async function hashAgentCachePaths(relativePaths) {
+  async function hashAgentCachePaths(relativePaths, vaultOverride) {
     var paths = [];
     var seen = Object.create(null);
     (relativePaths || []).forEach(function (item) {
@@ -195,12 +195,13 @@
     });
     var byPath = Object.create(null);
     if (!productId || !paths.length) return byPath;
+    var vault = String(vaultOverride || vaultFolder || "").trim();
     var response = await fetch(agentBase() + "/hash-paths", {
       method: "POST",
       headers: agentHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         product_id: productId,
-        vault_folder: vaultFolder || "",
+        vault_folder: vault,
         relative_paths: paths,
       }),
       signal: abortAfter(30000),
@@ -217,20 +218,31 @@
   }
 
   async function mergeAgentPendingCheckinIds(into) {
-    // Same ground truth as Files Modified: agent /files (+ /hash-paths) vs vault tip hash.
+    // Self-sufficient Modified detection — must work before Files has opened.
     if (!productId || !into) return;
     agentOnline = await probeAgent();
     if (!agentOnline) return;
     try {
-      var files = await listAgentCacheFiles(vaultFolder);
-      if ((!files || !files.length) && vaultFolder && vaultFolder !== productId) {
-        files = await listAgentCacheFiles(productId);
+      var vaultCandidates = [];
+      [vaultFolder, productId, ""].forEach(function (item) {
+        var key = String(item || "").trim();
+        if (vaultCandidates.indexOf(key) < 0) vaultCandidates.push(key);
+      });
+      var files = null;
+      var listedVault = vaultFolder || "";
+      var vi;
+      for (vi = 0; vi < vaultCandidates.length; vi += 1) {
+        var listed = await listAgentCacheFiles(vaultCandidates[vi]);
+        if (listed && listed.length) {
+          files = listed;
+          listedVault = vaultCandidates[vi];
+          break;
+        }
       }
       if (!files || !files.length) return;
 
       var byRel = Object.create(null);
       var byBase = Object.create(null);
-      var baseCounts = Object.create(null);
       files.forEach(function (file) {
         var rel = String(file.relative_path || "").replace(/\\/g, "/");
         var relKey = rel.toLowerCase();
@@ -239,10 +251,7 @@
         if (relKey) byRel[relKey] = file;
         var safe = agentSafeRel(rel).toLowerCase();
         if (safe && !byRel[safe]) byRel[safe] = file;
-        if (base) {
-          baseCounts[base] = (baseCounts[base] || 0) + 1;
-          byBase[base] = file;
-        }
+        if (base) byBase[base] = file;
       });
       var vaultBaseCounts = Object.create(null);
       objects.forEach(function (obj) {
@@ -253,8 +262,7 @@
       var needHash = [];
       objects.forEach(function (obj) {
         if (!obj || !obj.uuid) return;
-        // Owned checkout can check in when product allows — match Files can_checkin rows.
-        if (!obj.can_checkin && !(obj.owned_by_me && showCheckin)) return;
+        if (!tipCanCheckin(obj)) return;
         var vaultRel = String(obj.relative_path || "").replace(/\\/g, "/");
         var local =
           (vaultRel && byRel[vaultRel.toLowerCase()]) ||
@@ -271,14 +279,15 @@
           .trim()
           .toLowerCase();
         if (!vaultHash) return;
-        var localHash = String(local.content_hash || "").trim().toLowerCase();
+        var indexHash = String(local.content_hash || "").trim().toLowerCase();
         var localRel = String(local.relative_path || "").replace(/\\/g, "/");
-        if (localHash && localHash !== vaultHash) {
+        if (indexHash && indexHash !== vaultHash) {
           into[String(obj.uuid)] = true;
           return;
         }
-        if (localHash && localHash === vaultHash) return;
-        // Missing / stale index — same as Files: verify via /hash-paths.
+        // Always hash owned/check-in tips: cache index can still say "matches vault"
+        // after a same-size Creo save (Files only skips when not newer .N — we still
+        // verify so navigator does not need the Files pane open first).
         needHash.push({ uuid: String(obj.uuid), rel: localRel, vaultHash: vaultHash });
       });
 
@@ -286,7 +295,8 @@
       var hashes = await hashAgentCachePaths(
         needHash.map(function (item) {
           return item.rel;
-        })
+        }),
+        listedVault
       );
       needHash.forEach(function (item) {
         var localHash = hashes[String(item.rel || "").toLowerCase()] || "";
@@ -306,16 +316,9 @@
     }
     var seq = ++pendingCheckinSeq;
     var next = Object.create(null);
-    // Prefer the set Files already computed (same Modified tips the right pane shows).
-    try {
-      filesCtx()
-        .readPendingCheckinIds(productId)
-        .forEach(function (id) {
-          next[id] = true;
-        });
-    } catch (err) {
-      /* shared helper missing */
-    }
+    // Agent first — navigator must not depend on Files having opened.
+    await mergeAgentPendingCheckinIds(next);
+    if (seq !== pendingCheckinSeq) return;
     try {
       var response = await fetch(
         "/api/products/" +
@@ -340,8 +343,16 @@
     } catch (err) {
       if (seq !== pendingCheckinSeq) return;
     }
-    // Fallback when Files has not published yet: probe agent like Files Modified tab.
-    await mergeAgentPendingCheckinIds(next);
+    // Merge anything Files already published (optional; not required).
+    try {
+      filesCtx()
+        .readPendingCheckinIds(productId)
+        .forEach(function (id) {
+          next[id] = true;
+        });
+    } catch (err) {
+      /* shared helper missing */
+    }
     if (seq !== pendingCheckinSeq) return;
     pendingCheckinIds = next;
     try {
