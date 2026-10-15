@@ -30,24 +30,29 @@
   data-can-export="{{ '1' if can_export_objects else '0' }}"
   data-can-checkout="{{ '1' if can_checkout else '0' }}"
   data-can-checkin="{{ '1' if can_checkin else '0' }}"
+  data-top-level-assemblies="{{ top_level_assembly_uuids | default([]) | join(',') }}"
 >
   <header class="ex-header">
     <div class="ex-title-row">
       <h1 class="ex-product" id="ex-product-name" title="{{ selected.name if selected else 'No product' }}">
         {% if selected %}{{ selected.name }}{% else %}No product{% endif %}
       </h1>
-      <div class="ex-type-toggles" id="ex-type-toggles" role="group" aria-label="Filter by type" title="Show only Parts, Assemblies, and/or Drawings. None on = all files.">
+      <div class="ex-type-toggles" id="ex-type-toggles" role="group" aria-label="Filter by type" title="Show only Parts, Assemblies, Drawings, and/or Top Level assemblies. None on = all files.">
         <button type="button" class="ex-type-toggle" id="ex-filter-part" data-type="part" aria-pressed="false" title="Parts">
-          <img src="/static/icons/part.png" alt="" width="14" height="14" decoding="async">
+          <img src="/static/icons/part.png" alt="" width="16" height="16" decoding="async">
           <span class="visually-hidden">Parts</span>
         </button>
         <button type="button" class="ex-type-toggle" id="ex-filter-assembly" data-type="assembly" aria-pressed="false" title="Assemblies">
-          <img src="/static/icons/assembly.png" alt="" width="14" height="14" decoding="async">
+          <img src="/static/icons/assembly.png" alt="" width="16" height="16" decoding="async">
           <span class="visually-hidden">Assemblies</span>
         </button>
         <button type="button" class="ex-type-toggle" id="ex-filter-drawing" data-type="drawing" aria-pressed="false" title="Drawings">
-          <img src="/static/icons/drawing.png" alt="" width="14" height="14" decoding="async">
+          <img src="/static/icons/drawing.png" alt="" width="16" height="16" decoding="async">
           <span class="visually-hidden">Drawings</span>
+        </button>
+        <button type="button" class="ex-type-toggle" id="ex-filter-top-level" data-type="top_level" aria-pressed="false" title="Top Level assemblies">
+          <img src="/static/icons/top_level.svg" alt="" width="16" height="16" decoding="async">
+          <span class="visually-hidden">Top Level assemblies</span>
         </button>
       </div>
       <span class="ex-state" id="ex-product-state" data-state="{{ product_state_key or '' }}" title="Product state"{% if not selected or not product_state_label %} hidden{% endif %}>{{ product_state_label or '' }}</span>

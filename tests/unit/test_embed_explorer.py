@@ -51,9 +51,12 @@ def test_embed_explorer_route_and_assets(client):
     assert 'id="ex-filter-part"' in page.text
     assert 'id="ex-filter-assembly"' in page.text
     assert 'id="ex-filter-drawing"' in page.text
+    assert 'id="ex-filter-top-level"' in page.text
+    assert 'data-top-level-assemblies=' in page.text
     assert "/static/icons/part.png" in page.text
     assert "/static/icons/assembly.png" in page.text
     assert "/static/icons/drawing.png" in page.text
+    assert "/static/icons/top_level.svg" in page.text
     # Must not pull in the full Files shell.
     assert 'id="object-table"' not in page.text
     assert "/client/app.js" not in page.text
@@ -265,16 +268,26 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "overflow: hidden" in css
     assert "ex-loading" in css
     assert "ex-type-toggles" in css
-    assert 'aria-pressed="true"' in css or "[aria-pressed=\"true\"]" in css
+    assert "is-on" in css
+    assert "is-on-joined-left" in css
+    # Off state must not use a bordered group chrome.
+    assert "border: 1px solid var(--ex-line);" not in css.split(".ex-type-toggles", 1)[1].split(
+        ".ex-search", 1
+    )[0]
     # Type toggles: none on = all files; any on = OR filter of those kinds.
     assert "typeFilters" in script
     assert "matchesTypeFilter" in script
     assert "anyTypeFilterOn" in script
     assert "syncTypeToggleButtons" in script
+    assert "toggleTypeFilter" in script
+    assert "isTopLevelAssembly" in script
+    assert "top_level" in script
     assert 'kind: "part"' in script
     assert 'kind: "assembly"' in script
     assert 'kind: "drawing"' in script
     assert 'id="ex-type-toggles"' in html
+    assert 'id="ex-filter-top-level"' in html
+    assert (ROOT / "src/creopdm/static/icons/top_level.svg").is_file()
     app_js = (ROOT / "src/creopdm/static/js/app.js").read_text(encoding="utf-8")
     assert "consumeNavigatorDeepLink" in app_js
     assert "selectOnlyForNavigator" in app_js
@@ -318,8 +331,9 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "hands off" in docs.lower() or "hand off" in docs.lower()
     assert "No hover thumbnail" in docs
     assert "one scrollbar" in docs.lower() or "Only the tree scrolls" in docs
-    assert "Parts / Assemblies / Drawings" in docs
+    assert "Parts / Assemblies / Drawings / Top Level" in docs
     assert "all off" in docs
+    assert "recessed pressed" in docs
     assert "Could not find that file" in docs
 
 

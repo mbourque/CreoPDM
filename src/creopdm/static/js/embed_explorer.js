@@ -18,8 +18,14 @@
   var listErrorText = document.getElementById("ex-list-error-text");
   var retryBtn = document.getElementById("ex-retry");
   var typeToggleRoot = document.getElementById("ex-type-toggles");
-  /** None pressed → show all. Any pressed → OR of those kinds (part/assembly/drawing). */
-  var typeFilters = { part: false, assembly: false, drawing: false };
+  /** None pressed → show all. Any pressed → OR of those filters. */
+  var typeFilters = {
+    part: false,
+    assembly: false,
+    drawing: false,
+    top_level: false,
+  };
+  var topLevelAssemblyIds = Object.create(null);
 
   var productId = (root.getAttribute("data-product-uuid") || "").trim();
   var vaultFolder = (root.getAttribute("data-vault-folder") || "").trim();
@@ -136,24 +142,75 @@
     return { kind: "other", file: "file.svg", label: "File" };
   }
 
+  function readTopLevelAssemblyIds(raw) {
+    var next = Object.create(null);
+    String(raw || "")
+      .split(",")
+      .forEach(function (item) {
+        var id = String(item || "").trim();
+        if (id) next[id] = true;
+      });
+    topLevelAssemblyIds = next;
+  }
+
+  function setTopLevelAssemblyIds(ids) {
+    var next = Object.create(null);
+    (ids || []).forEach(function (item) {
+      var id = String(item || "").trim();
+      if (id) next[id] = true;
+    });
+    topLevelAssemblyIds = next;
+    root.setAttribute("data-top-level-assemblies", Object.keys(next).join(","));
+  }
+
+  function isTopLevelAssembly(obj) {
+    if (!obj || !obj.uuid) return false;
+    return Boolean(topLevelAssemblyIds[String(obj.uuid)]);
+  }
+
   function anyTypeFilterOn() {
-    return Boolean(typeFilters.part || typeFilters.assembly || typeFilters.drawing);
+    return Boolean(
+      typeFilters.part ||
+        typeFilters.assembly ||
+        typeFilters.drawing ||
+        typeFilters.top_level
+    );
   }
 
   function matchesTypeFilter(obj) {
     if (!anyTypeFilterOn()) return true;
+    if (typeFilters.top_level && isTopLevelAssembly(obj)) return true;
     var kind = iconKind(obj).kind;
     return Boolean(typeFilters[kind]);
   }
 
   function syncTypeToggleButtons() {
     if (!typeToggleRoot) return;
+    var buttons = [];
     typeToggleRoot.querySelectorAll(".ex-type-toggle[data-type]").forEach(function (btn) {
+      buttons.push(btn);
+    });
+    buttons.forEach(function (btn) {
       var key = String(btn.getAttribute("data-type") || "");
       var on = Boolean(typeFilters[key]);
       btn.setAttribute("aria-pressed", on ? "true" : "false");
       btn.classList.toggle("is-on", on);
     });
+    // Adjacent pressed toggles share edges (Creo-style recessed strip).
+    buttons.forEach(function (btn, i) {
+      var on = btn.classList.contains("is-on");
+      var prevOn = i > 0 && buttons[i - 1].classList.contains("is-on");
+      var nextOn = i < buttons.length - 1 && buttons[i + 1].classList.contains("is-on");
+      btn.classList.toggle("is-on-joined-left", on && prevOn);
+      btn.classList.toggle("is-on-joined-right", on && nextOn);
+    });
+  }
+
+  function toggleTypeFilter(key) {
+    if (!Object.prototype.hasOwnProperty.call(typeFilters, key)) return;
+    typeFilters[key] = !typeFilters[key];
+    syncTypeToggleButtons();
+    if (listState === "ok") renderTree();
   }
 
   function tipCanCheckin(obj) {
@@ -793,6 +850,11 @@
       root.setAttribute("data-show-undo", showUndo ? "1" : "0");
       root.setAttribute("data-show-checkin", showCheckin ? "1" : "0");
       root.setAttribute("data-show-export", showExport ? "1" : "0");
+      setTopLevelAssemblyIds(
+        body && Array.isArray(body.top_level_assembly_uuids)
+          ? body.top_level_assembly_uuids
+          : []
+      );
       applyProductChrome(
         product,
         (body && body.product_state_key) || "",
@@ -1031,16 +1093,15 @@
 
   function boot() {
     if (initialFolder) ensureExpandedPath(initialFolder);
+    readTopLevelAssemblyIds(root.getAttribute("data-top-level-assemblies") || "");
     syncTypeToggleButtons();
     if (typeToggleRoot) {
-      typeToggleRoot.addEventListener("click", function (ev) {
-        var btn = ev.target && ev.target.closest ? ev.target.closest(".ex-type-toggle[data-type]") : null;
-        if (!btn || !typeToggleRoot.contains(btn)) return;
-        var key = String(btn.getAttribute("data-type") || "");
-        if (!Object.prototype.hasOwnProperty.call(typeFilters, key)) return;
-        typeFilters[key] = !typeFilters[key];
-        syncTypeToggleButtons();
-        if (listState === "ok") renderTree();
+      typeToggleRoot.querySelectorAll(".ex-type-toggle[data-type]").forEach(function (btn) {
+        btn.addEventListener("click", function (ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          toggleTypeFilter(String(btn.getAttribute("data-type") || ""));
+        });
       });
     }
     if (searchEl) {

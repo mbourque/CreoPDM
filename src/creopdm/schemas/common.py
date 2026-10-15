@@ -205,6 +205,8 @@ class EmbedExplorerContextResponse(BaseModel):
     show_undo_checkout: bool = False
     show_checkin: bool = False
     show_export_objects: bool = False
+    # Where Used roots — navigator Top Level toggle (same set as Files metric).
+    top_level_assembly_uuids: list[str] = Field(default_factory=list)
 
 
 class ProductWatchResponse(BaseModel):

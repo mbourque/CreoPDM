@@ -41,6 +41,8 @@ def _explorer_context_payload(
     *,
     file_q: str | None,
     folder_q: str | None,
+    ctx: AppContext | None = None,
+    db: Session | None = None,
 ) -> EmbedExplorerContextResponse:
     selected = product_to_response(product) if product is not None else None
     initial_folder = normalize_folder_query(folder_q)
@@ -64,6 +66,12 @@ def _explorer_context_payload(
         can_update_metadata=bool(caps.get("can_update_metadata")),
         can_revert_objects=bool(caps.get("can_revert_objects")),
     )
+    top_level: list[str] = []
+    if product is not None and ctx is not None and db is not None:
+        try:
+            top_level = list(ctx.metadata.top_level_assembly_uuids(db, product.id) or [])
+        except Exception:
+            top_level = []
     return EmbedExplorerContextResponse(
         product=selected,
         product_state_key=state_key,
@@ -77,6 +85,7 @@ def _explorer_context_payload(
         show_undo_checkout=bool(ui.show_undo_checkout),
         show_checkin=bool(ui.show_checkin),
         show_export_objects=bool(ui.show_export_objects),
+        top_level_assembly_uuids=top_level,
     )
 
 
@@ -216,7 +225,13 @@ def embed_explorer_context(
         folder_q=folder_q,
     )
     return _explorer_context_payload(
-        request, product, focus, file_q=file_q, folder_q=folder_q
+        request,
+        product,
+        focus,
+        file_q=file_q,
+        folder_q=folder_q,
+        ctx=ctx,
+        db=db,
     )
 
 
@@ -265,7 +280,13 @@ def embed_explorer(
             ctx.config.remember_product(product.uuid)
 
     ctx_payload = _explorer_context_payload(
-        request, product, focus, file_q=file_q, folder_q=folder_q
+        request,
+        product,
+        focus,
+        file_q=file_q,
+        folder_q=folder_q,
+        ctx=ctx,
+        db=db,
     )
     selected = ctx_payload.product
     return render(
@@ -287,5 +308,6 @@ def embed_explorer(
             "query_folder": ctx_payload.initial_folder,
             "follow_active": not bool((product_q or "").strip()),
             "object_types": [item.value for item in ObjectType],
+            "top_level_assembly_uuids": list(ctx_payload.top_level_assembly_uuids or []),
         },
     )
