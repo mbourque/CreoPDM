@@ -245,6 +245,20 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "window.location.href" not in script  # Open/Details must not navigate the pane
     assert 'addEventListener("dblclick"' in script
     assert "void onOpen()" in script
+    # Click must soft-select (paintSelection) — full renderTree on click kills dblclick,
+    # especially after type filters expand many folders and leave them expanded.
+    assert "function paintSelection(" in script
+    select_fn = script.split("function selectObject(", 1)[1].split(
+        "function menuCapabilities(", 1
+    )[0]
+    assert "paintSelection()" in select_fn
+    assert "renderTree()" not in select_fn
+    dbl = script.split('addEventListener("dblclick"', 1)[1].split(
+        'addEventListener("contextmenu"', 1
+    )[0]
+    assert "paintSelection()" in dbl
+    assert "selectObject(obj)" not in dbl
+    assert "void onOpen()" in dbl
     assert "function openContextMenu(" in script
     assert "filesDeepLink" in script
     assert "filesDeepLink(action)" in script

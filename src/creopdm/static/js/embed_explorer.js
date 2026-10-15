@@ -653,11 +653,14 @@
         row.title =
           (obj.relative_path || obj.filename || "") + " — double-click to Open";
         row.addEventListener("click", function () {
+          // Soft-select only — full renderTree() replaces this button and kills
+          // the pending dblclick (worse after type filters expand many folders).
           selectObject(obj);
         });
         row.addEventListener("dblclick", function (ev) {
           ev.preventDefault();
-          selectObject(obj);
+          selected = obj;
+          paintSelection();
           void onOpen();
         });
         row.addEventListener("contextmenu", function (ev) {
@@ -667,9 +670,18 @@
       });
   }
 
+  function paintSelection() {
+    if (!treeEl) return;
+    var selId = selected && selected.uuid ? String(selected.uuid) : "";
+    treeEl.querySelectorAll(".ex-node[data-uuid]").forEach(function (row) {
+      var id = String(row.getAttribute("data-uuid") || "");
+      row.classList.toggle("is-selected", Boolean(selId) && id === selId);
+    });
+  }
+
   function selectObject(obj) {
     selected = obj;
-    renderTree();
+    paintSelection();
   }
 
   function menuCapabilities() {
