@@ -95,12 +95,14 @@ body#embed-explorer {
 }
 .ex-icon-btn:hover { color: var(--ex-text); border-color: #aeb9c5; }
 
-/* Type toggles: 36px sharp squares, thin shared borders (Creo toolbar style). */
+/* Type toggles in title row: bare icons off; pressed = light recessed cell. */
 .ex-type-toggles {
   flex: 0 0 auto;
   display: inline-flex;
-  align-items: stretch;
-  gap: 0;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 1px;
+  margin: 0;
   border: 0;
   background: transparent;
   padding: 0;
@@ -110,35 +112,36 @@ body#embed-explorer {
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  width: 36px;
-  height: 36px;
-  margin: 0 0 0 -1px;
+  width: 22px;
+  height: 22px;
+  margin: 0;
   padding: 0;
-  border: 1px solid #8a939c;
-  border-radius: 0;
-  background: #e8ebef;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
   box-shadow: none;
   cursor: pointer;
 }
-.ex-type-toggle:first-child {
-  margin-left: 0;
-}
 .ex-type-toggle img {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   display: block;
   pointer-events: none;
 }
 .ex-type-toggle:hover:not(.is-on) {
-  background: #dde1e6;
+  background: rgba(26, 35, 48, 0.06);
 }
 .ex-type-toggle.is-on {
-  background: #c5ccd4;
-  /* Inset top+left — pressed / recessed */
-  box-shadow: inset 1px 1px 0 #7a8490;
+  background: #cfd5dc;
+  border-color: #8a939c;
+  box-shadow: inset 1px 1px 0 rgba(90, 98, 108, 0.55);
 }
 .ex-type-toggle.is-on:hover {
-  background: #bcc3cb;
+  background: #c5ccd4;
+}
+/* Adjacent pressed cells share a divider (Creo strip). */
+.ex-type-toggle.is-on + .ex-type-toggle.is-on {
+  border-left-color: #8a939c;
 }
 
 .ex-search {

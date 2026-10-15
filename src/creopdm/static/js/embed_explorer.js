@@ -170,18 +170,20 @@
 
   function anyTypeFilterOn() {
     return Boolean(
-      typeFilters.part ||
+      typeFilters.top_level ||
+        typeFilters.part ||
         typeFilters.assembly ||
-        typeFilters.drawing ||
-        typeFilters.top_level
+        typeFilters.drawing
     );
   }
 
   function matchesTypeFilter(obj) {
-    if (!anyTypeFilterOn()) return true;
-    if (typeFilters.top_level && isTopLevelAssembly(obj)) return true;
-    var kind = iconKind(obj).kind;
-    return Boolean(typeFilters[kind]);
+    // Top Level wins alone — exclusive mode, ignore part/asm/drw.
+    if (typeFilters.top_level) return isTopLevelAssembly(obj);
+    if (!typeFilters.part && !typeFilters.assembly && !typeFilters.drawing) {
+      return true;
+    }
+    return Boolean(typeFilters[iconKind(obj).kind]);
   }
 
   function syncTypeToggleButtons() {
@@ -196,7 +198,18 @@
 
   function toggleTypeFilter(key) {
     if (!Object.prototype.hasOwnProperty.call(typeFilters, key)) return;
-    typeFilters[key] = !typeFilters[key];
+    if (key === "top_level") {
+      // Exclusive: Top Level clears type filters and only shows WU roots.
+      var next = !typeFilters.top_level;
+      typeFilters.part = false;
+      typeFilters.assembly = false;
+      typeFilters.drawing = false;
+      typeFilters.top_level = next;
+    } else {
+      // Type filters clear exclusive Top Level.
+      typeFilters.top_level = false;
+      typeFilters[key] = !typeFilters[key];
+    }
     syncTypeToggleButtons();
     if (listState === "ok") renderTree();
   }
