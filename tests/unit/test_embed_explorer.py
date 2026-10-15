@@ -257,11 +257,21 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert 'action === "export"' in app_js
     assert 'action === "undo"' in app_js
     # Must not use plain selectOnly (sticky Parts pill keeps hundreds selected).
-    deep = app_js.split("function consumeNavigatorDeepLink(", 1)[1].split(
+    deep = app_js.split("async function consumeNavigatorDeepLink(", 1)[1].split(
         "if (isListPage)", 1
     )[0]
-    assert "selectOnlyForNavigator(row)" in deep
+    assert "findNavigatorTargetRow" in deep
+    assert "resolveNavigatorTargetFolder" in deep
+    assert "prepareNavigatorFilesView" in deep
+    assert "runNavigatorDeepLinkAction" in deep
+    assert "softNavigate" in deep
     assert "selectOnly(row)" not in deep
+    # Embed always sends folder= (even root) + cache-bust so Files finds the tip.
+    link_fn = script.split("function filesDeepLink(", 1)[1].split(
+        "async function onOpen(", 1
+    )[0]
+    assert 'q.set("folder", folder)' in link_fn
+    assert 'q.set("_nav"' in link_fn
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "**Double-click** a file" in docs
     assert "**Right-click** a file" in docs
@@ -270,6 +280,7 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "hands off" in docs.lower() or "hand off" in docs.lower()
     assert "No hover thumbnail" in docs
     assert "one scrollbar" in docs.lower() or "Only the tree scrolls" in docs
+    assert "Could not find that file" in docs
 
 
 def test_agent_exposes_toolkit_open_proxy():

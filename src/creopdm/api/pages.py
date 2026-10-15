@@ -492,10 +492,15 @@ def home(
         if "folder" not in request.query_params:
             remembered = ctx.config.remembered_folder(product.uuid)
             if remembered:
-                return RedirectResponse(
-                    url=f"/?product={quote(product.uuid)}&folder={quote(remembered)}",
-                    status_code=303,
-                )
+                # Preserve navigator deep-link select/action across the folder redirect.
+                q = [f"product={quote(product.uuid)}", f"folder={quote(remembered)}"]
+                select = (request.query_params.get("select") or "").strip()
+                action = (request.query_params.get("action") or "").strip()
+                if select:
+                    q.append(f"select={quote(select)}")
+                if action:
+                    q.append(f"action={quote(action)}")
+                return RedirectResponse(url="/?" + "&".join(q), status_code=303)
         current_folder = normalize_folder_query(request.query_params.get("folder"))
         ctx.config.remember_folder(product.uuid, current_folder)
     else:

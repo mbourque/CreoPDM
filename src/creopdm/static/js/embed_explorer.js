@@ -943,9 +943,13 @@
     var folder = folderOf(selected.relative_path);
     var q = new URLSearchParams();
     q.set("product", productId);
-    if (folder) q.set("folder", folder);
+    // Always send folder (even "") so Files does not redirect to a remembered
+    // folder that does not contain this tip — that caused "Could not find that file".
+    q.set("folder", folder);
     q.set("select", selected.uuid);
     if (action) q.set("action", action);
+    // Bust CEF same-URL no-reload so Files reboots and consumes select/action.
+    q.set("_nav", String(Date.now()));
     return new URL("/?" + q.toString(), window.location.origin).href;
   }
 

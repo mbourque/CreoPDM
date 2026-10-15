@@ -8139,11 +8139,120 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function selectOnlyForNavigator(row) {
     clearStickyMetricSelectionForNavigator();
     lastSelectRow = row;
-    rows().forEach((item) => markRowSelected(item, item === row));
+    document.querySelectorAll(".object-row, .folder-row, .queue-row").forEach((item) => {
+      markRowSelected(item, item === row);
+    });
     syncToolbar();
   }
 
-  function consumeNavigatorDeepLink() {
+  function findNavigatorTargetRow(selectId) {
+    const id = String(selectId || "").trim();
+    if (!id) return null;
+    return (
+      [...document.querySelectorAll(".object-row[data-uuid], .queue-row[data-uuid]")].find(
+        (item) => String(item.dataset.uuid || "") === id
+      ) || null
+    );
+  }
+
+  function folderOfRelativePath(relative) {
+    const path = String(relative || "").replace(/\\/g, "/");
+    const idx = path.lastIndexOf("/");
+    return idx < 0 ? "" : path.slice(0, idx);
+  }
+
+  async function resolveNavigatorTargetFolder(productId, selectId) {
+    const pid = String(productId || "").trim();
+    const id = String(selectId || "").trim();
+    if (!pid || !id) return null;
+    try {
+      const response = await fetch(`/api/objects/${encodeURIComponent(id)}`, {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) return null;
+      const obj = await response.json().catch(() => null);
+      if (!obj || String(obj.uuid || "") !== id) return null;
+      if (obj.product_uuid && String(obj.product_uuid) !== pid) return null;
+      return folderOfRelativePath(obj.relative_path || obj.filename || "");
+    } catch {
+      return null;
+    }
+  }
+
+  function prepareNavigatorFilesView() {
+    // Hand-off must land on Files list, not a restored Modified/search view.
+    document.querySelector('.tabs .tab[data-tab="files"]')?.click();
+    clearStickyMetricSelectionForNavigator();
+    if (searchInput && String(searchInput.value || "").trim()) {
+      searchInput.value = "";
+      try {
+        sessionStorage.removeItem(LIST_SEARCH_KEY);
+      } catch {
+        /* ignore */
+      }
+      showFolderView();
+      applyMetricVisibility();
+    }
+  }
+
+  async function runNavigatorDeepLinkAction(action, row) {
+    selectOnlyForNavigator(row);
+    if (action === "open") {
+      const spec = selectedOpenSpec();
+      if (!spec) {
+        showError($("#toolbar-error"), "Select one file to open.");
+        return;
+      }
+      await openPdmObjectFromUi(spec, row);
+      return;
+    }
+    if (action === "details") {
+      historyBtn?.click();
+      return;
+    }
+    if (action === "checkout") {
+      selectOnlyForNavigator(row);
+      await (await withCheckoutModule()).checkoutSelected?.();
+      return;
+    }
+    if (action === "undo") {
+      undoBtn?.click();
+      return;
+    }
+    if (action === "checkin") {
+      // Files may still be hashing Modified — wait so Check In is enabled.
+      const pid = currentProductId();
+      if (pid) await refreshPendingCheckinIds(pid);
+      selectOnlyForNavigator(row);
+      if (checkinBtn && !checkinBtn.disabled) {
+        checkinBtn.click();
+      } else {
+        showError(
+          $("#toolbar-error"),
+          "Check In is not available for that file yet (no Modified work detected)."
+        );
+      }
+      return;
+    }
+    if (action === "download") {
+      void downloadSelectedToWorkspace();
+      return;
+    }
+    if (action === "export") {
+      exportSelectedBtn?.click();
+      return;
+    }
+    if (action === "add-selected") {
+      $("#add-selected-btn")?.click();
+      return;
+    }
+    if (action === "discard-local") {
+      discardLocalBtn?.click();
+    }
+  }
+
+  async function consumeNavigatorDeepLink() {
     if (!isListPage) return;
     let params;
     try {
@@ -8156,6 +8265,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!selectId && !action) return;
     params.delete("select");
     params.delete("action");
+    params.delete("_nav");
     const qs = params.toString();
     const next = `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash || ""}`;
     try {
@@ -8164,9 +8274,28 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       /* ignore */
     }
     if (!selectId) return;
-    // Clear sticky metric first so a filtered-away tip becomes visible again.
-    clearStickyMetricSelectionForNavigator();
-    const row = rows().find((item) => String(item.dataset.uuid || "") === selectId);
+
+    prepareNavigatorFilesView();
+    let row = findNavigatorTargetRow(selectId);
+    if (!row) {
+      // Wrong folder / search race — resolve tip folder and soft-nav once.
+      const productId = currentProductId();
+      const tipFolder = await resolveNavigatorTargetFolder(productId, selectId);
+      if (tipFolder != null && tipFolder !== currentFolder()) {
+        const q = new URLSearchParams();
+        q.set("product", productId);
+        q.set("folder", tipFolder);
+        q.set("select", selectId);
+        if (action) q.set("action", action);
+        q.set("_nav", String(Date.now()));
+        await softNavigate(`/?${q.toString()}`, "replace");
+        return;
+      }
+      // Same folder: wait for any in-flight search restore, then re-show folder view.
+      await new Promise((resolve) => window.setTimeout(resolve, 100));
+      prepareNavigatorFilesView();
+      row = findNavigatorTargetRow(selectId);
+    }
     if (!row) {
       showError(
         $("#toolbar-error"),
@@ -8174,64 +8303,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       );
       return;
     }
-    selectOnlyForNavigator(row);
-    // Navigator RMB hands off here — run the same toolbar/RMB action as Files.
-    if (action === "open") {
-      void (async () => {
-        const spec = selectedOpenSpec();
-        if (!spec) {
-          showError($("#toolbar-error"), "Select one file to open.");
-          return;
-        }
-        await openPdmObjectFromUi(spec, row);
-      })();
-      return;
-    }
-    if (action === "details") {
-      historyBtn?.click();
-      return;
-    }
-    if (action === "checkout") {
-      void (async () => {
-        // Re-assert single selection in case a metric restore raced with us.
-        selectOnlyForNavigator(row);
-        await (await withCheckoutModule()).checkoutSelected?.();
-      })();
-      return;
-    }
-    if (action === "undo") {
-      selectOnlyForNavigator(row);
-      undoBtn?.click();
-      return;
-    }
-    if (action === "checkin") {
-      selectOnlyForNavigator(row);
-      checkinBtn?.click();
-      return;
-    }
-    if (action === "download") {
-      selectOnlyForNavigator(row);
-      void downloadSelectedToWorkspace();
-      return;
-    }
-    if (action === "export") {
-      selectOnlyForNavigator(row);
-      exportSelectedBtn?.click();
-      return;
-    }
-    if (action === "add-selected") {
-      selectOnlyForNavigator(row);
-      $("#add-selected-btn")?.click();
-      return;
-    }
-    if (action === "discard-local") {
-      selectOnlyForNavigator(row);
-      discardLocalBtn?.click();
-    }
+    await runNavigatorDeepLinkAction(action, row);
   }
   if (isListPage) {
     // After restoreWatchView / toolbar sync so selection sticks.
-    window.setTimeout(consumeNavigatorDeepLink, 0);
+    window.setTimeout(() => {
+      void consumeNavigatorDeepLink();
+    }, 0);
   }
 
   } finally {
