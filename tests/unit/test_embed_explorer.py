@@ -46,6 +46,9 @@ def test_embed_explorer_route_and_assets(client):
     assert 'data-follow-active="0"' in page.text  # pinned ?product= stays put
     assert 'data-initial-folder="CAD"' in page.text
     assert "files_context_menu.js" in page.text
+    assert "files_search_match.js" in page.text
+    assert 'placeholder="Search all files in product"' in page.text
+    assert 'title="Wildcards:' in page.text
     assert 'id="ex-retry"' in page.text
     assert 'id="ex-type-toggles"' in page.text
     assert 'id="ex-filter-part"' in page.text
@@ -190,11 +193,13 @@ def test_embed_explorer_context_follows_switched_product(client):
     assert "writePendingCheckinIds" not in app_js
     html = EMBED_HTML.read_text(encoding="utf-8")
     assert "files_context_menu.js" in html
+    assert "files_search_match.js" in html
     assert "local_cache_pending.js" in html
     assert "data-purgeable=" in html
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "CO / MOD badges" in docs
     assert "no manual Refresh required" in docs
+    assert "files_search_match.js" in docs
 
 
 @requires_git
@@ -282,6 +287,9 @@ def test_embed_js_never_calls_toolkit_from_browser():
     html = EMBED_HTML.read_text(encoding="utf-8")
     assert 'id="embed-explorer"' in html
     assert "files_context_menu.js" in html
+    assert "files_search_match.js" in html
+    assert "CreoPdmFilesSearchMatch" in script
+    assert "objectMatchesSearchQuery" in script
     assert "thumbnail_preview.js" not in html
     assert 'data-thumb-place=' not in html
     assert 'id="ex-context-menu"' in html

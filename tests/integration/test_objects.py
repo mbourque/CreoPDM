@@ -276,16 +276,24 @@ def test_search_objects_supports_glob_wildcards(client, repo_parent):
 
     script = app_js_with_modules(client.get("/static/js/app.js"))
     assert "function rowMatchesSearchQuery" in script.text
-    assert "dataset.sortType" in script.text
-    assert "Type column" in Path("docs/user-interactions.md").read_text(encoding="utf-8")
-    assert "function parseSearchAnchors" in script.text
-    assert "function globToRegExp" in script.text
+    assert "CreoPdmFilesSearchMatch" in script.text
+    assert "files_search_match.js" in script.text
+    shared = Path("src/creopdm/static/js/files_search_match.js").read_text(
+        encoding="utf-8"
+    )
+    assert "function parseSearchAnchors" in shared
+    assert "function globToRegExp" in shared
+    assert "function fieldsMatchSearchQuery" in shared
+    assert "function objectMatchesSearchQuery" in shared
+    assert "data-sort-type" in shared
     docs = Path("docs/user-interactions.md").read_text(encoding="utf-8")
+    assert "Type column" in docs
     assert "*.prt" in docs
     assert "^CAD/" in docs
     assert "Hover the search box" in docs
     assert "SHEETMETAL" in docs
     assert "SKELETON" in docs
+    assert "files_search_match.js" in docs
 
 
 @requires_git

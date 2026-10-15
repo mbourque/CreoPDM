@@ -531,18 +531,12 @@
   }
 
   function matchesQuery(obj, q) {
-    if (!q) return true;
-    var hay = [
-      obj.filename,
-      obj.relative_path,
-      obj.type_label,
-      obj.revision,
-      obj.lifecycle_state,
-      obj.checkout_status,
-    ]
-      .join(" ")
-      .toLowerCase();
-    return hay.indexOf(q) !== -1;
+    // Same matcher as Files (files_search_match.js) — wildcards / ^ $ / type labels.
+    var api = window.CreoPdmFilesSearchMatch;
+    if (!api || typeof api.objectMatchesSearchQuery !== "function") {
+      throw new Error("files_search_match.js failed to load.");
+    }
+    return api.objectMatchesSearchQuery(obj, q || "");
   }
 
   function buildTree(list) {
@@ -597,7 +591,7 @@
     }
     setListErrorVisible(false);
     treeEl.hidden = false;
-    var q = (searchEl && searchEl.value ? searchEl.value : "").trim().toLowerCase();
+    var q = (searchEl && searchEl.value ? searchEl.value : "").trim();
     var typeOn = anyTypeFilterOn();
     var filtered = objects.filter(function (obj) {
       return matchesQuery(obj, q) && matchesTypeFilter(obj);
