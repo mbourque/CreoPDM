@@ -341,6 +341,7 @@
       <nav aria-label="Help topics">
         <a href="#start">Quick start</a>
         <a href="#agent">Agent tray</a>
+        <a href="#toolkit">Toolkit Companion</a>
         <a href="#files">Files list</a>
         <a href="#folders">Folders &amp; clicks</a>
         <a href="#add">Add files</a>
@@ -352,7 +353,7 @@
         <a href="#details">Details &amp; history</a>
         <a href="#tips">Tips &amp; troubleshooting</a>
       </nav>
-      <p class="note">Prefer working in <strong>Creo’s built-in browser</strong> when you need Creo Connected (Open, Collect metadata, Ask AI). Chrome or Edge is fine for browsing and most toolbar work. New Creo users also need the <a href="#agent">agent tray</a> on this PC.</p>
+      <p class="note">Prefer working in <strong>Creo’s built-in browser</strong> when you need Creo Connected (Open, Collect metadata, Ask AI). Chrome or Edge is fine for browsing and most toolbar work. New Creo users also need the <a href="#agent">agent tray</a> and the <a href="#toolkit">Toolkit Companion</a> on this PC.</p>
     </aside>
 
     <main class="main" id="top">
@@ -365,6 +366,7 @@
         <div class="hero-meta">
           <a class="chip" href="#start">Start here</a>
           <a class="chip" href="#agent">Agent tray</a>
+          <a class="chip" href="#toolkit">Toolkit</a>
           <a class="chip" href="#checkout">Checkout → Check In</a>
           <a class="chip" href="#open">Open assemblies</a>
           <a class="chip" href="#tips">If something fails</a>
@@ -376,7 +378,7 @@
         <p class="lead">A typical edit cycle takes a few minutes once you know the toolbar.</p>
         <div class="panel">
           <ol class="steps">
-            <li>On a Creo PC, start <strong>creopdm-agent-tray</strong> (see <a href="#agent">Agent tray</a>) and open CreoPDM in <strong>Creo’s built-in browser</strong>.</li>
+            <li>On a Creo PC, start <strong>creopdm-agent-tray</strong> (see <a href="#agent">Agent tray</a>), load the <a href="#toolkit">Toolkit Companion</a> in Creo, and open CreoPDM in <strong>Creo’s built-in browser</strong>.</li>
             <li><strong>Pick a product</strong> in the left sidebar.</li>
             <li><strong>Checkout</strong> the file (or files) you will change.</li>
             <li><strong>Open</strong> the model in Creo and save your edits.</li>
@@ -459,6 +461,111 @@
           Run the tray on the <strong>Windows Creo PC</strong>, not on the Linux CreoPDM host.
           If Download is missing or fails, ask an administrator to publish the exe (install README →
           <code>downloads/creopdm-agent-tray.exe</code>).
+          Collect and Modifications also need the <a href="#toolkit">Toolkit Companion</a> loaded inside Creo.
+        </div>
+      </section>
+
+      <section id="toolkit">
+        <h2>Toolkit Companion</h2>
+        <p class="lead">
+          <strong>CreoPDM Toolkit Companion</strong> is a small Creo auxiliary app (Pro/TOOLKIT).
+          It runs <em>inside</em> Creo and answers on <code>http://127.0.0.1:8767</code>.
+          The agent tray calls it when CreoPDM needs model data. It is required on every Creo PC
+          that will Collect metadata. Source and the prebuilt DLL:
+          <a href="https://github.com/mbourque/CreoPDM-Toolkit-Companion" target="_blank" rel="noopener noreferrer">github.com/mbourque/CreoPDM-Toolkit-Companion</a>.
+        </p>
+        <div class="panel">
+          <h3>What it is used for</h3>
+          <ul class="clean">
+            <li><strong>Collect</strong> and gear <strong>Rebuild metadata</strong> — identity, parameters, features, structure, BOM, mass, drawings, and manufacturing data.</li>
+            <li><strong>Details</strong> tabs that show that collected data (Features, Structure, Parameters, and the rest).</li>
+            <li><strong>Modifications</strong> — the NEW side disk-retrieves the local workspace tip (for example <code>shaft.asm.3</code>). The model does <strong>not</strong> need a window open. Creo must be running with the companion loaded, and the agent tray must be up.</li>
+          </ul>
+          <p style="margin-top:0.75rem;margin-bottom:0">
+            Windows x64, Creo Parametric <strong>10 and later</strong>. A Toolkit app cannot run by itself — Creo has to be open.
+            It listens on this PC only and does not open a Creo window to collect.
+          </p>
+        </div>
+        <div class="panel">
+          <h3>Install</h3>
+          <ol class="steps">
+            <li>Download the repo (Code → Download ZIP, or <code>git clone https://github.com/mbourque/CreoPDM-Toolkit-Companion.git</code>). A prebuilt unlocked <code>bin\creopdm_structure.dll</code> is included.</li>
+            <li>Keep these three together in a permanent folder, outside Creo’s install directory. Example <code>C:\CreoPDM\Toolkit\</code>:
+              <code>protk.dat</code>, <code>bin\creopdm_structure.dll</code>, and <code>text\usascii\creopdm_msg.txt</code>.</li>
+            <li>Edit <code>protk.dat</code> so the paths match that folder (the copy in the repo has the author’s paths and must be changed):
+              <pre style="margin:0.6rem 0 0;white-space:pre-wrap">NAME        CreoPDMStructure
+EXEC_FILE   C:\CreoPDM\Toolkit\bin\creopdm_structure.dll
+TEXT_DIR    C:\CreoPDM\Toolkit\text
+STARTUP     dll
+ALLOW_STOP  TRUE
+REVISION    18
+END</pre>
+              Leave <code>REVISION 18</code> unless Creo reports a revision problem.</li>
+            <li>Add one line to a <code>config.pro</code> Creo reads at startup (your startup folder, or <code>&lt;Creo install&gt;\Common Files\text\config.pro</code> for everyone on the machine):
+              <pre style="margin:0.6rem 0 0">protkdat C:\CreoPDM\Toolkit\protk.dat</pre>
+              Creo accepts several <code>protkdat</code> lines if you already load other Toolkit apps.</li>
+            <li><strong>Restart Creo.</strong> <code>config.pro</code> is only read at startup. Close Creo before you replace the DLL later — Creo locks the file while it is loaded.</li>
+          </ol>
+        </div>
+        <div class="grid-2">
+          <article class="tile">
+            <h3>Check that it loaded</h3>
+            <p>
+              On startup the Creo message line should say
+              <em>CreoPDM Structure: HTTP listening on 127.0.0.1.</em>
+              The app also appears in Creo’s Auxiliary Applications list.
+              With Creo running, in PowerShell:
+            </p>
+            <pre style="margin:0.6rem 0 0">Invoke-RestMethod http://127.0.0.1:8767/health</pre>
+            <p style="margin-top:0.6rem;margin-bottom:0">
+              Expect <code>ok: true</code> and <code>service: creopdm-toolkit</code>.
+              Log: <code>%TEMP%\creopdm_toolkit.log</code>.
+            </p>
+          </article>
+          <article class="tile">
+            <h3>How CreoPDM uses it</h3>
+            <p>
+              Start the <a href="#agent">agent tray</a> and Creo (with the companion loaded), then work in Creo’s browser.
+              Collect does not call Toolkit from the browser or from the Linux server.
+              The page asks the agent (<code>127.0.0.1:8766</code>); the agent asks Toolkit (<code>127.0.0.1:8767</code>).
+              Toolkit retrieves the workspace file into memory when it is not already in session — no new window or tab.
+            </p>
+            <p style="margin-bottom:0">
+              Optional ribbon command: File → Options → Customize Ribbon → All Commands →
+              <strong>CreoPDM Structure Export</strong>. The HTTP service does not need that button.
+            </p>
+          </article>
+        </div>
+        <div class="panel">
+          <h3>If it does not start</h3>
+          <table>
+            <thead>
+              <tr><th>What you see</th><th>What to do</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>“was not unlocked before distribution” or startup failed</td>
+                <td>Use the prebuilt DLL from the repo, or unlock a rebuild (see the companion README). Check <code>EXEC_FILE</code> in <code>protk.dat</code>.</td>
+              </tr>
+              <tr>
+                <td>No message line at startup</td>
+                <td>Check the <code>protkdat</code> path, <code>EXEC_FILE</code> / <code>TEXT_DIR</code>, and that you edited a <code>config.pro</code> Creo actually reads. Restart Creo.</td>
+              </tr>
+              <tr>
+                <td>Message line says HTTP was not started</td>
+                <td>Port 8767 is already in use. Set <code>CREOPDM_TOOLKIT_PORT</code> before Creo starts, and point the agent at that URL if it is not 8767. See the log.</td>
+              </tr>
+              <tr>
+                <td>Collect or Modifications says Toolkit is offline</td>
+                <td>Creo must be running with the companion loaded, and the agent tray must be running. <code>/health</code> on port 8767 should answer before you Collect.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout">
+          Full API, build-from-source, and domain notes are in the
+          <a href="https://github.com/mbourque/CreoPDM-Toolkit-Companion" target="_blank" rel="noopener noreferrer">companion README</a>.
+          You only need to build if you change that code. The published DLL is already unlocked.
         </div>
       </section>
 

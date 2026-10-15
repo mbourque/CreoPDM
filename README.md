@@ -314,18 +314,49 @@ Quick check that the agent is up: open `http://127.0.0.1:8766/health` in a norma
 
 ## Toolkit Companion (Creo PC)
 
-**Collect** and **Rebuild metadata** need [CreoPDM-Toolkit-Companion](https://github.com/mbourque/CreoPDM-Toolkit-Companion) installed into Creo on the same PC as the agent. It is a Pro/TOOLKIT auxiliary app (Windows x64, Creo Parametric **10+**) that runs **inside** Creo and exposes a small localhost HTTP API (default `http://127.0.0.1:8767`). Full install steps, `protk.dat` / `config.pro` examples, and troubleshooting live in that repo’s README.
+**Collect**, **Rebuild metadata**, and the Modifications **NEW** outline need [CreoPDM-Toolkit-Companion](https://github.com/mbourque/CreoPDM-Toolkit-Companion) installed into Creo on the same PC as the agent. It is a Pro/TOOLKIT auxiliary app (Windows x64, Creo Parametric **10+**, tested through Creo 13) that runs **inside** Creo — it cannot run standalone — and exposes a small localhost HTTP API (default `http://127.0.0.1:8767`). The same steps are in the in-app help under **Agent tray → Toolkit Companion** (`/help#toolkit`). The companion repo README has the full HTTP API and build notes.
 
-**Install summary** (details in the companion README):
+A prebuilt, unlocked `bin\creopdm_structure.dll` is in that repo. You do not need to compile it to use CreoPDM.
 
-1. Download or clone the companion repo and keep `bin\creopdm_structure.dll`, `protk.dat`, and `text\usascii\` together in a permanent folder (for example `C:\CreoPDM\Toolkit\`).
-2. Edit `protk.dat` so `EXEC_FILE` and `TEXT_DIR` match that folder.
-3. Add `protkdat <full-path-to-protk.dat>` to a `config.pro` Creo reads at startup; restart Creo.
-4. On startup you should see *CreoPDM Structure: HTTP listening on 127.0.0.1.* Confirm with:
+**Install**
+
+1. Download or clone [mbourque/CreoPDM-Toolkit-Companion](https://github.com/mbourque/CreoPDM-Toolkit-Companion) and keep these three together in a permanent folder outside Creo’s install (for example `C:\CreoPDM\Toolkit\`):
+   - `protk.dat`
+   - `bin\creopdm_structure.dll`
+   - `text\usascii\creopdm_msg.txt`
+2. Edit `protk.dat` so the paths match that folder (the copy in the repo has the author’s paths):
+
+```
+NAME        CreoPDMStructure
+EXEC_FILE   C:\CreoPDM\Toolkit\bin\creopdm_structure.dll
+TEXT_DIR    C:\CreoPDM\Toolkit\text
+STARTUP     dll
+ALLOW_STOP  TRUE
+REVISION    18
+END
+```
+
+3. Add this line to a `config.pro` Creo reads at startup (startup folder, or `<Creo install>\Common Files\text\config.pro`). Creo accepts more than one `protkdat` line:
+
+```
+protkdat C:\CreoPDM\Toolkit\protk.dat
+```
+
+4. Restart Creo. `config.pro` is only read at startup. Close Creo before you replace the DLL later (Creo locks it).
+
+**Check**
+
+On startup the message line should say *CreoPDM Structure: HTTP listening on 127.0.0.1.* The app is also listed under Auxiliary Applications. With Creo running:
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8767/health
 ```
+
+Expect `ok: true` and `service: creopdm-toolkit`. Log: `%TEMP%\creopdm_toolkit.log`.
+
+**Use with CreoPDM**
+
+Keep the tray agent running and Creo open with the companion loaded. Collect, Rebuild metadata, and Modifications NEW ask the **agent** (`127.0.0.1:8766`); the agent asks Toolkit (`127.0.0.1:8767`). Toolkit silent-retrieves a workspace file that is not already in session (no new window). The model does not need to be open for that retrieve. If the message line says HTTP did not start, port 8767 is in use — set `CREOPDM_TOOLKIT_PORT` before Creo starts. “Not unlocked” means the DLL path is wrong or a local rebuild was not unlocked; use the prebuilt DLL.
 
 ### How Collect uses the agent and Toolkit
 

@@ -15,7 +15,13 @@ def test_help_page_is_packaged():
     assert "How to use CreoPDM" in text
     assert 'id="tips"' in text
     assert 'id="agent"' in text
+    assert 'id="toolkit"' in text
+    assert 'href="#toolkit"' in text
     assert "Agent tray" in text
+    assert "Toolkit Companion" in text
+    assert "https://github.com/mbourque/CreoPDM-Toolkit-Companion" in text
+    assert "protkdat" in text
+    assert "127.0.0.1:8767/health" in text
     assert "Agent tray (new users)" not in text
     assert "Space Grotesk" not in text
     assert "fonts.googleapis.com" not in text
@@ -32,6 +38,7 @@ def test_help_route_serves_page(client):
     assert "How to use CreoPDM" in response.text
     assert "Quick start" in response.text
     assert "Agent tray" in response.text
+    assert "Toolkit Companion" in response.text
     assert "Agent tray (new users)" not in response.text
     assert "Creo: Agent offline" in response.text
 
