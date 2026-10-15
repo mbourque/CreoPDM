@@ -106,7 +106,7 @@ body#embed-explorer {
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 2px;
+  gap: 0;
   margin: 0;
   border: 0;
   background: transparent;
@@ -124,9 +124,10 @@ body#embed-explorer {
   height: 22px;
   margin: 0;
   padding: 0;
-  border: 1px solid transparent;
+  /* 1px always present (matches fill when off) so selecting never shifts layout */
+  border: 1px solid #eef0f1;
   border-radius: 0;
-  background: transparent;
+  background: #eef0f1;
   box-shadow: none;
   outline: none;
   cursor: pointer;
@@ -139,27 +140,22 @@ body#embed-explorer {
   pointer-events: none;
 }
 .ex-type-toggle:hover:not(.is-on) {
-  opacity: 0.8;
+  background: #e8eaeb;
+  border-color: #e8eaeb;
 }
-/*
- * Pressed: medium-light gray fill + thin dark edge, inset top/left
- * (matches Creo toolbar — adjacent pressed share one divider).
- */
+/* Selected: #dfe1e2 fill + 1px inside #b0b2b4 border (box-sizing keeps size). */
 .ex-type-toggle.is-on {
-  background: #b9c0c8;
-  border-color: #8a939c;
-  border-top-color: #5c6670;
-  border-left-color: #5c6670;
-  border-right-color: #c5ccd4;
-  border-bottom-color: #c5ccd4;
-  box-shadow: inset 1px 1px 0 rgba(60, 68, 78, 0.28);
+  background: #dfe1e2;
+  border-color: #b0b2b4;
+  box-shadow: none;
 }
 .ex-type-toggle.is-on:hover {
-  background: #b0b7bf;
+  background: #d7d9da;
+  border-color: #b0b2b4;
 }
+/* Adjacent selected share one divider. */
 .ex-type-toggle.is-on + .ex-type-toggle.is-on {
   margin-left: -1px;
-  border-left-color: #6e7782;
 }
 
 .ex-search {

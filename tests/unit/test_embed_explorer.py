@@ -274,8 +274,10 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "flex-wrap: nowrap" in type_css
     assert "width: 36px" not in type_css
     assert "width: 22px" in type_css
-    assert "background: #b9c0c8" in type_css
-    assert "border-top-color: #5c6670" in type_css
+    assert "background: #eef0f1" in type_css
+    assert "background: #dfe1e2" in type_css
+    assert "border-color: #b0b2b4" in type_css
+    assert "box-sizing: border-box" in type_css
     assert ".ex-type-toggle.is-on + .ex-type-toggle.is-on" in css
     # Type toggles: none on = all; part/asm/drw OR; top_level exclusive.
     assert "typeFilters" in script
