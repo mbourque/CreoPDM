@@ -286,8 +286,7 @@
           return;
         }
         // Always hash owned/check-in tips: cache index can still say "matches vault"
-        // after a same-size Creo save (Files only skips when not newer .N — we still
-        // verify so navigator does not need the Files pane open first).
+        // after a same-size Creo save — verify so MOD / Check In work without Files.
         needHash.push({ uuid: String(obj.uuid), rel: localRel, vaultHash: vaultHash });
       });
 
@@ -343,23 +342,8 @@
     } catch (err) {
       if (seq !== pendingCheckinSeq) return;
     }
-    // Merge anything Files already published (optional; not required).
-    try {
-      filesCtx()
-        .readPendingCheckinIds(productId)
-        .forEach(function (id) {
-          next[id] = true;
-        });
-    } catch (err) {
-      /* shared helper missing */
-    }
     if (seq !== pendingCheckinSeq) return;
     pendingCheckinIds = next;
-    try {
-      filesCtx().writePendingCheckinIds(productId, Object.keys(next));
-    } catch (err) {
-      /* ignore */
-    }
   }
 
   function rowStateFromObject(obj) {
@@ -1034,14 +1018,6 @@
 
   function boot() {
     if (initialFolder) ensureExpandedPath(initialFolder);
-    // Files (main CEF) publishes Modified ids; pick them up without re-probing agent.
-    window.addEventListener("storage", function (ev) {
-      var key = String((ev && ev.key) || "");
-      if (key.indexOf("creopdm:pending-checkin:") !== 0) return;
-      void refreshPendingCheckinIds().then(function () {
-        if (listState === "ok") renderTree();
-      });
-    });
     if (searchEl) {
       searchEl.addEventListener("input", function () {
         if (listState === "ok") renderTree();

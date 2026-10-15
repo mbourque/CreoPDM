@@ -136,7 +136,7 @@ def test_embed_explorer_context_follows_switched_product(client):
     assert "CreoPdmFilesContextMenu" in script
     assert "menuCapabilitiesFor" in script
     assert "needsEmbeddedBrowser" in script
-    # Check In needs the same pending Modified signal Files uses (server + agent cache).
+    # Check In: navigator detects Modified itself (agent + checkin-preview), no cookie.
     assert "checkin-preview" in script
     assert "pendingCheckinIds" in script
     assert "tipHasCheckinWork" in script
@@ -144,22 +144,19 @@ def test_embed_explorer_context_follows_switched_product(client):
     assert "/files?" in script
     assert "/hash-paths" in script
     assert "hashAgentCachePaths" in script
-    # Must probe agent before relying on Files-published ids.
     refresh_fn = script.split("async function refreshPendingCheckinIds(", 1)[1].split(
       "function rowStateFromObject(", 1
     )[0]
     assert "mergeAgentPendingCheckinIds(next)" in refresh_fn
-    assert refresh_fn.index("mergeAgentPendingCheckinIds") < refresh_fn.index(
-      "readPendingCheckinIds"
-    )
-    assert "readPendingCheckinIds" in script
-    assert "writePendingCheckinIds" in script
+    assert "readPendingCheckinIds" not in refresh_fn
+    assert "writePendingCheckinIds" not in refresh_fn
+    assert "creopdm:pending-checkin:" not in script
     shared = (ROOT / "src/creopdm/static/js/files_context_menu.js").read_text(encoding="utf-8")
-    assert "creopdm_pending_checkin" in shared
-    assert "writePendingCheckinIds" in shared
-    assert "readPendingCheckinIds" in shared
+    assert "creopdm_pending_checkin" not in shared
+    assert "writePendingCheckinIds" not in shared
+    assert "readPendingCheckinIds" not in shared
     app_js = (ROOT / "src/creopdm/static/js/app.js").read_text(encoding="utf-8")
-    assert "writePendingCheckinIds" in app_js
+    assert "writePendingCheckinIds" not in app_js
     assert "files_context_menu.js" in EMBED_HTML.read_text(encoding="utf-8")
 
 
