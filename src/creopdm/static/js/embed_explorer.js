@@ -66,6 +66,7 @@
   /** Creo CEF often never fires focus/visibility when the pane stays loaded. */
   var followPollTimer = null;
   var FOLLOW_POLL_MS = 2000;
+  var postHandoffRefreshTimers = [];
 
   function agentBase() {
     return (root.getAttribute("data-agent-base") || "http://127.0.0.1:8766").replace(/\/$/, "");
@@ -802,11 +803,15 @@
   async function loadObjects(options) {
     var opts = options || {};
     var quiet = Boolean(opts.quiet);
+    // keepPaint: background refresh after Files Check In — do not flash Loading.
+    var keepPaint = Boolean(opts.keepPaint);
     if (!productId) return;
     var seq = ++listLoadSeq;
-    listState = "loading";
-    listError = "";
-    renderTree();
+    if (!keepPaint) {
+      listState = "loading";
+      listError = "";
+      renderTree();
+    }
     if (!quiet) setMsg("Loading files…");
     try {
       // credentials + no-store: Creo CEF must send session cookies and not reuse
@@ -861,26 +866,59 @@
     }
   }
 
+  async function softRefreshList() {
+    // Reload checkout / Modified badges without "Loading files…" flash.
+    if (!productId || busy || syncingContext) return;
+    await loadObjects({ quiet: true, keepPaint: true });
+  }
+
   async function refreshObjects() {
     // Always re-resolve active product (Files last-used) then reload files.
     await syncActiveProduct({ quiet: false });
     await refreshConnectivity();
   }
 
-  function onPaneShown() {
-    if (syncingContext || busy) return;
-    if (!followActive) return;
-    void syncActiveProduct({ quiet: true, onlyIfChanged: true }).then(function (switched) {
-      if (switched) return refreshConnectivity();
+  function schedulePostHandoffRefresh() {
+    // After Check In / Checkout in Files, CO/MOD here must catch up without Refresh.
+    postHandoffRefreshTimers.forEach(function (id) {
+      window.clearTimeout(id);
+    });
+    postHandoffRefreshTimers = [];
+    [1500, 4000, 9000].forEach(function (ms) {
+      postHandoffRefreshTimers.push(
+        window.setTimeout(function () {
+          if (busy || syncingContext) return;
+          void softRefreshList();
+        }, ms)
+      );
     });
   }
 
+  function onPaneShown() {
+    if (syncingContext || busy) return;
+    if (followActive) {
+      void syncActiveProduct({ quiet: true, onlyIfChanged: true }).then(function (switched) {
+        if (switched) return refreshConnectivity();
+        // Same product — still refresh CO/MOD after Files mutations.
+        return softRefreshList();
+      });
+      return;
+    }
+    void softRefreshList();
+  }
+
   function startFollowActivePoll() {
-    if (!followActive || followPollTimer != null) return;
-    // Navigator pane stays loaded while you use Files — poll last-used product.
+    if (followPollTimer != null) return;
+    // Poll product follow (when enabled) and always refresh CO/MOD while pane stays open.
     followPollTimer = window.setInterval(function () {
       if (syncingContext || busy) return;
-      void syncActiveProduct({ quiet: true, onlyIfChanged: true });
+      if (followActive) {
+        void syncActiveProduct({ quiet: true, onlyIfChanged: true }).then(function (switched) {
+          if (!switched) void softRefreshList();
+        });
+      } else {
+        void softRefreshList();
+      }
     }, FOLLOW_POLL_MS);
   }
 
@@ -903,6 +941,7 @@
     // this narrow navigator pane (location.href would squash the explorer UI).
     if (tryCreoJsSetUrl(absoluteUrl)) {
       setMsg("Opened in CreoPDM browser.", "ok");
+      schedulePostHandoffRefresh();
       return true;
     }
     try {
@@ -914,6 +953,7 @@
       );
       if (!response.ok) throw new Error(await readError(response));
       setMsg("Opened in CreoPDM browser.", "ok");
+      schedulePostHandoffRefresh();
       return true;
     } catch (err) {
       setMsg(

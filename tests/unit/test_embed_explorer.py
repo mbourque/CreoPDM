@@ -159,6 +159,15 @@ def test_embed_explorer_context_follows_switched_product(client):
     assert "readPendingCheckinIds" not in refresh_fn
     assert "writePendingCheckinIds" not in refresh_fn
     assert "creopdm:pending-checkin:" not in script
+    # After Files Check In, CO/MOD must update without manual Refresh.
+    assert "function softRefreshList(" in script
+    assert "function schedulePostHandoffRefresh(" in script
+    assert "keepPaint: true" in script
+    assert "schedulePostHandoffRefresh()" in script
+    pane = script.split("function onPaneShown(", 1)[1].split(
+      "function startFollowActivePoll(", 1
+    )[0]
+    assert "softRefreshList()" in pane
     shared = (ROOT / "src/creopdm/static/js/files_context_menu.js").read_text(encoding="utf-8")
     assert "creopdm_pending_checkin" not in shared
     assert "writePendingCheckinIds" not in shared
@@ -169,6 +178,9 @@ def test_embed_explorer_context_follows_switched_product(client):
     assert "files_context_menu.js" in html
     assert "local_cache_pending.js" in html
     assert "data-purgeable=" in html
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "CO / MOD badges" in docs
+    assert "no manual Refresh required" in docs
 
 
 @requires_git
