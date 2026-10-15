@@ -276,12 +276,12 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "width: 22px" in type_css
     assert "background: transparent" in type_css
     assert "background: #dfe1e2" in type_css
-    assert "border-color: #b0b2b4" in type_css
     assert "background: #d3f2ff" in type_css
-    assert "border-color: #77d3ff" in type_css
     assert "box-sizing: border-box" in type_css
     assert "border: 1px solid transparent" in type_css
-    assert ".ex-type-toggle.is-on + .ex-type-toggle.is-on" in css
+    assert "inset 0 0 0 1px #b0b2b4" in type_css
+    assert "inset 0 0 0 1px #77d3ff" in type_css
+    assert "margin-left: -1px" not in type_css
     # Type toggles: none on = all; part/asm/drw OR; top_level exclusive.
     assert "typeFilters" in script
     assert "matchesTypeFilter" in script
