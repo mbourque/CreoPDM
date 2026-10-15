@@ -144,6 +144,14 @@ def test_embed_explorer_context_follows_switched_product(client):
     assert "/files?" in script
     assert "/hash-paths" in script
     assert "hashAgentCachePaths" in script
+    assert "readPendingCheckinIds" in script
+    assert "writePendingCheckinIds" in script
+    shared = (ROOT / "src/creopdm/static/js/files_context_menu.js").read_text(encoding="utf-8")
+    assert "creopdm_pending_checkin" in shared
+    assert "writePendingCheckinIds" in shared
+    assert "readPendingCheckinIds" in shared
+    app_js = (ROOT / "src/creopdm/static/js/app.js").read_text(encoding="utf-8")
+    assert "writePendingCheckinIds" in app_js
     assert "files_context_menu.js" in EMBED_HTML.read_text(encoding="utf-8")
 
 

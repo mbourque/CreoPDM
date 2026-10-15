@@ -2860,6 +2860,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     );
     pendingCheckinIds = next;
     pendingCheckinIdsReady = true;
+    // Navigator embed reads this so Check In matches Files Modified without re-probing.
+    try {
+      window.CreoPdmFilesContextMenu?.writePendingCheckinIds?.(
+        currentProductId(),
+        [...pendingCheckinIds]
+      );
+    } catch {
+      /* ignore */
+    }
     syncModifiedStateLabels();
     updateMetricCounts();
   }

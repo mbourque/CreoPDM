@@ -306,6 +306,16 @@
     }
     var seq = ++pendingCheckinSeq;
     var next = Object.create(null);
+    // Prefer the set Files already computed (same Modified tips the right pane shows).
+    try {
+      filesCtx()
+        .readPendingCheckinIds(productId)
+        .forEach(function (id) {
+          next[id] = true;
+        });
+    } catch (err) {
+      /* shared helper missing */
+    }
     try {
       var response = await fetch(
         "/api/products/" +
@@ -330,10 +340,15 @@
     } catch (err) {
       if (seq !== pendingCheckinSeq) return;
     }
-    // Files also merges agent newer-local — without this, navigator misses Modified tips.
+    // Fallback when Files has not published yet: probe agent like Files Modified tab.
     await mergeAgentPendingCheckinIds(next);
     if (seq !== pendingCheckinSeq) return;
     pendingCheckinIds = next;
+    try {
+      filesCtx().writePendingCheckinIds(productId, Object.keys(next));
+    } catch (err) {
+      /* ignore */
+    }
   }
 
   function rowStateFromObject(obj) {
@@ -1008,6 +1023,14 @@
 
   function boot() {
     if (initialFolder) ensureExpandedPath(initialFolder);
+    // Files (main CEF) publishes Modified ids; pick them up without re-probing agent.
+    window.addEventListener("storage", function (ev) {
+      var key = String((ev && ev.key) || "");
+      if (key.indexOf("creopdm:pending-checkin:") !== 0) return;
+      void refreshPendingCheckinIds().then(function () {
+        if (listState === "ok") renderTree();
+      });
+    });
     if (searchEl) {
       searchEl.addEventListener("input", function () {
         if (listState === "ok") renderTree();

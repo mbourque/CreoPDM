@@ -80,6 +80,92 @@
     return Boolean(item && item.needsEmbedded);
   }
 
+  /** localStorage key so Files → navigator share the same Modified / Check In set. */
+  function pendingCheckinStorageKey(productId) {
+    var id = String(productId || "").trim();
+    return id ? "creopdm:pending-checkin:" + id : "";
+  }
+
+  var PENDING_COOKIE = "creopdm_pending_checkin";
+
+  function writePendingCheckinIds(productId, ids) {
+    var pid = String(productId || "").trim();
+    var list = [];
+    var seen = Object.create(null);
+    (ids || []).forEach(function (id) {
+      var uid = String(id || "").trim();
+      if (!uid || seen[uid]) return;
+      seen[uid] = true;
+      list.push(uid);
+    });
+    var payload = JSON.stringify({ productId: pid, at: Date.now(), ids: list });
+    var key = pendingCheckinStorageKey(pid);
+    if (key && typeof localStorage !== "undefined") {
+      try {
+        localStorage.setItem(key, payload);
+      } catch (err) {
+        /* private mode / quota */
+      }
+    }
+    // Cookie shared across Creo CEF panes (navigator vs main) for same origin.
+    if (pid && typeof document !== "undefined") {
+      try {
+        document.cookie =
+          PENDING_COOKIE +
+          "=" +
+          encodeURIComponent(payload) +
+          "; path=/; SameSite=Lax; max-age=7200";
+      } catch (err) {
+        /* ignore */
+      }
+    }
+  }
+
+  function readPendingCheckinIds(productId) {
+    var pid = String(productId || "").trim();
+    var bodies = [];
+    var key = pendingCheckinStorageKey(pid);
+    if (key && typeof localStorage !== "undefined") {
+      try {
+        var raw = localStorage.getItem(key);
+        if (raw) bodies.push(raw);
+      } catch (err) {
+        /* ignore */
+      }
+    }
+    if (typeof document !== "undefined" && document.cookie) {
+      try {
+        var parts = document.cookie.split(";");
+        for (var i = 0; i < parts.length; i += 1) {
+          var chunk = parts[i].trim();
+          if (chunk.indexOf(PENDING_COOKIE + "=") !== 0) continue;
+          bodies.push(decodeURIComponent(chunk.slice(PENDING_COOKIE.length + 1)));
+          break;
+        }
+      } catch (err) {
+        /* ignore */
+      }
+    }
+    var out = [];
+    var seen = Object.create(null);
+    bodies.forEach(function (raw) {
+      try {
+        var body = JSON.parse(raw);
+        if (!body) return;
+        if (pid && body.productId && String(body.productId) !== pid) return;
+        (Array.isArray(body.ids) ? body.ids : []).forEach(function (id) {
+          var uid = String(id || "").trim();
+          if (!uid || seen[uid]) return;
+          seen[uid] = true;
+          out.push(uid);
+        });
+      } catch (err) {
+        /* ignore bad payload */
+      }
+    });
+    return out;
+  }
+
   /**
    * @param {object} state
    * @param {Array<object>} state.rows normalized selection rows:
@@ -268,5 +354,8 @@
     applyVisibility: applyVisibility,
     itemForAction: itemForAction,
     needsEmbeddedBrowser: needsEmbeddedBrowser,
+    pendingCheckinStorageKey: pendingCheckinStorageKey,
+    writePendingCheckinIds: writePendingCheckinIds,
+    readPendingCheckinIds: readPendingCheckinIds,
   };
 })(typeof window !== "undefined" ? window : globalThis);
