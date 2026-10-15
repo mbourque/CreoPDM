@@ -8221,18 +8221,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return;
     }
     if (action === "checkin") {
-      // Files may still be hashing Modified — wait so Check In is enabled.
+      // Navigator already proved Modified (same agent algorithm). Files' pending
+      // refresh can lag or miss the tip — seed this uuid so Check In opens.
       const pid = currentProductId();
       if (pid) await refreshPendingCheckinIds(pid);
-      selectOnlyForNavigator(row);
-      if (checkinBtn && !checkinBtn.disabled) {
-        checkinBtn.click();
-      } else {
-        showError(
-          $("#toolbar-error"),
-          "Check In is not available for that file yet (no Modified work detected)."
-        );
+      const uid = String(row.dataset.uuid || "").trim();
+      if (uid) {
+        rememberPendingCheckinIds([uid], { merge: true });
+        row.dataset.modifiedLocally = "1";
+        if (row.dataset.owned === "1") row.dataset.canCheckin = "1";
       }
+      selectOnlyForNavigator(row);
+      checkinBtn?.click();
       return;
     }
     if (action === "download") {

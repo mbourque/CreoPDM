@@ -266,6 +266,14 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "runNavigatorDeepLinkAction" in deep
     assert "softNavigate" in deep
     assert "selectOnly(row)" not in deep
+    # Check In hand-off must seed pending Modified (navigator already detected it).
+    action_fn = app_js.split("async function runNavigatorDeepLinkAction(", 1)[1].split(
+        "async function consumeNavigatorDeepLink(", 1
+    )[0]
+    assert 'action === "checkin"' in action_fn
+    assert "rememberPendingCheckinIds([uid], { merge: true })" in action_fn
+    assert 'row.dataset.modifiedLocally = "1"' in action_fn
+    assert "no Modified work detected" not in action_fn
     # Embed always sends folder= (even root) + cache-bust so Files finds the tip.
     link_fn = script.split("function filesDeepLink(", 1)[1].split(
         "async function onOpen(", 1
