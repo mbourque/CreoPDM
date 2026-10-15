@@ -269,11 +269,13 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "ex-loading" in css
     assert "ex-type-toggles" in css
     assert "is-on" in css
-    assert "is-on-joined-left" in css
-    # Off state must not use a bordered group chrome.
-    assert "border: 1px solid var(--ex-line);" not in css.split(".ex-type-toggles", 1)[1].split(
-        ".ex-search", 1
-    )[0]
+    type_css = css.split(".ex-type-toggles", 1)[1].split(".ex-search", 1)[0]
+    assert "width: 36px" in type_css
+    assert "height: 36px" in type_css
+    assert "border-radius: 0" in type_css
+    assert "inset 1px 1px" in type_css
+    assert "border-radius: 3px" not in type_css
+    assert "border-radius: 4px" not in type_css
     # Type toggles: none on = all files; any on = OR filter of those kinds.
     assert "typeFilters" in script
     assert "matchesTypeFilter" in script
@@ -333,7 +335,7 @@ def test_embed_js_never_calls_toolkit_from_browser():
     assert "one scrollbar" in docs.lower() or "Only the tree scrolls" in docs
     assert "Parts / Assemblies / Drawings / Top Level" in docs
     assert "all off" in docs
-    assert "recessed pressed" in docs
+    assert "36×36" in docs
     assert "Could not find that file" in docs
 
 

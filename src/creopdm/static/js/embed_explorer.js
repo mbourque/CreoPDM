@@ -186,23 +186,11 @@
 
   function syncTypeToggleButtons() {
     if (!typeToggleRoot) return;
-    var buttons = [];
     typeToggleRoot.querySelectorAll(".ex-type-toggle[data-type]").forEach(function (btn) {
-      buttons.push(btn);
-    });
-    buttons.forEach(function (btn) {
       var key = String(btn.getAttribute("data-type") || "");
       var on = Boolean(typeFilters[key]);
       btn.setAttribute("aria-pressed", on ? "true" : "false");
       btn.classList.toggle("is-on", on);
-    });
-    // Adjacent pressed toggles share edges (Creo-style recessed strip).
-    buttons.forEach(function (btn, i) {
-      var on = btn.classList.contains("is-on");
-      var prevOn = i > 0 && buttons[i - 1].classList.contains("is-on");
-      var nextOn = i < buttons.length - 1 && buttons[i + 1].classList.contains("is-on");
-      btn.classList.toggle("is-on-joined-left", on && prevOn);
-      btn.classList.toggle("is-on-joined-right", on && nextOn);
     });
   }
 
