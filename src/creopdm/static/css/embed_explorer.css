@@ -124,10 +124,10 @@ body#embed-explorer {
   height: 22px;
   margin: 0;
   padding: 0;
-  /* 1px always present (matches fill when off) so selecting never shifts layout */
-  border: 1px solid #eef0f1;
+  /* 1px transparent border always — selecting never shifts; off blends with nav. */
+  border: 1px solid transparent;
   border-radius: 0;
-  background: #eef0f1;
+  background: transparent;
   box-shadow: none;
   outline: none;
   cursor: pointer;
@@ -139,9 +139,9 @@ body#embed-explorer {
   display: block;
   pointer-events: none;
 }
-.ex-type-toggle:hover:not(.is-on) {
-  background: #e8eaeb;
-  border-color: #e8eaeb;
+.ex-type-toggle:hover {
+  background: #d3f2ff;
+  border-color: #77d3ff;
 }
 /* Selected: #dfe1e2 fill + 1px inside #b0b2b4 border (box-sizing keeps size). */
 .ex-type-toggle.is-on {
@@ -150,8 +150,8 @@ body#embed-explorer {
   box-shadow: none;
 }
 .ex-type-toggle.is-on:hover {
-  background: #d7d9da;
-  border-color: #b0b2b4;
+  background: #d3f2ff;
+  border-color: #77d3ff;
 }
 /* Adjacent selected share one divider. */
 .ex-type-toggle.is-on + .ex-type-toggle.is-on {
