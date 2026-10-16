@@ -293,6 +293,9 @@ def test_get_and_update_settings(client, tmp_path):
     models_page = client.get("/settings/creo-models")
     assert models_page.status_code == 200
     assert 'name="cad_models_extensions"' in models_page.text
+    assert "Creo Models</strong> filter on the Files page" in models_page.text
+    assert "Numbered saves" in models_page.text
+    assert "chip" not in models_page.text.lower()
     docs_page = client.get("/settings/documents")
     assert docs_page.status_code == 200
     assert 'name="document_extensions"' in docs_page.text
@@ -302,6 +305,9 @@ def test_get_and_update_settings(client, tmp_path):
     saves_page = client.get("/settings/numbered-saves")
     assert saves_page.status_code == 200
     assert 'name="purgeable_extensions"' in saves_page.text
+    assert "part.prt.3" in saves_page.text
+    assert "Extensions with numbered saves" in saves_page.text
+    assert "does not change the <strong>Creo Models</strong> filter" in saves_page.text
     network_page = client.get("/settings/network")
     assert network_page.status_code == 200
     assert 'name="port"' in network_page.text

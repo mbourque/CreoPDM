@@ -33,7 +33,7 @@ SETTINGS_HUB_TILES: tuple[SettingsHubTile, ...] = (
     SettingsHubTile(
         slug="creo-models",
         title="Creo Models",
-        blurb="Extensions counted and filtered by the Creo Models chip.",
+        blurb="Extensions the Creo Models filter on the Files page counts and shows.",
         partial="creo_models.html",
     ),
     SettingsHubTile(
@@ -63,7 +63,7 @@ SETTINGS_HUB_TILES: tuple[SettingsHubTile, ...] = (
     SettingsHubTile(
         slug="numbered-saves",
         title="Numbered saves",
-        blurb="Extensions that use Creo-style .ext.N versioning for Add and Purge.",
+        blurb="Extensions that use numbered names like part.prt.3 for Add and Purge workspace.",
         partial="numbered_saves.html",
     ),
     SettingsHubTile(

@@ -622,9 +622,39 @@ DEFAULT_PURGEABLE_EXTENSIONS = (
     ".tph",
     ".txt",
     ".xml",
+    ".lay",
+    ".mfg",
+    ".rep",
+    ".dgm",
 )
 
-PREVIOUS_DEFAULT_PURGEABLE_SETS: tuple[frozenset[str], ...] = ()
+# Installs still on the list from before .lay / .mfg / .rep / .dgm.
+PREVIOUS_DEFAULT_PURGEABLE_SETS: tuple[frozenset[str], ...] = (
+    frozenset(
+        {
+            ".asm",
+            ".dat",
+            ".drw",
+            ".err",
+            ".frm",
+            ".gph",
+            ".inf",
+            ".lsl",
+            ".lst",
+            ".mat",
+            ".mrd",
+            ".ncl",
+            ".neu",
+            ".prt",
+            ".sec",
+            ".sym",
+            ".tbl",
+            ".tph",
+            ".txt",
+            ".xml",
+        }
+    ),
+)
 
 DEFAULT_EXTRA_CAD_EXTENSIONS = (
     ".tph",

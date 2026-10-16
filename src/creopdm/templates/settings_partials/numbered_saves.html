@@ -1,6 +1,6 @@
 <section class="settings-card">
-  <p class="muted small">Extensions that use Creo-style <code>.ext.N</code> versioning. Add (files or folder) skips older numbered saves and uploads only the latest. Purge workspace uses the same list for local workspace cleanup: it deletes saves older than the vault copy; the vault revision and any newer local work stay. The vault is not changed.</p>
-  <label>Purgeable extensions
+  <p class="muted small">These extensions use numbered names such as <code>part.prt.3</code>. <strong>Add</strong> (one file or a folder) uploads only the highest number and skips the older ones. <strong>Purge workspace</strong> deletes local copies that are older than the vault file. The vault file stays, and any newer local save stays. This list does not change the <strong>Creo Models</strong> filter on the Files page.</p>
+  <label>Extensions with numbered saves
     <textarea name="purgeable_extensions" rows="3" placeholder=".prt, .asm, .tph, .inf">{{ settings.purgeable_extensions | join(', ') }}</textarea>
   </label>
   <p class="muted small">Comma-separated, with or without the dot. Default: {{ settings.default_purgeable_extensions | join(', ') }}</p>

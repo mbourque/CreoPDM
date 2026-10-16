@@ -429,6 +429,11 @@ def test_config_layout(data_dir):
     assert ".log" not in settings.cad.openable_extensions
     assert ".lst" in settings.cad.openable_extensions
     assert ".log" not in settings.cad.purgeable_extensions
+    assert ".sym" in settings.cad.purgeable_extensions
+    assert ".lay" in settings.cad.purgeable_extensions
+    assert ".mfg" in settings.cad.purgeable_extensions
+    assert ".rep" in settings.cad.purgeable_extensions
+    assert ".dgm" in settings.cad.purgeable_extensions
     assert "traceback.log" in settings.ignore.patterns
     assert "*.log" in settings.ignore.patterns
     assert "*.log.*" in settings.ignore.patterns
@@ -512,6 +517,25 @@ def test_previous_localhost_bind_migrates_to_all_interfaces(tmp_path):
     manager.save(settings)
     loaded = manager.load()
     assert loaded.server.host == "0.0.0.0"
+
+
+def test_old_purgeable_default_picks_up_layout_mfg_rep_dgm(tmp_path):
+    """Numbered-save default grew .lay .mfg .rep .dgm; .sym was already on it."""
+    from creopdm.constants import PREVIOUS_DEFAULT_PURGEABLE_SETS
+
+    manager = ConfigManager(tmp_path / "appdata")
+    manager.ensure_layout()
+    settings = AppSettings()
+    settings.cad.purgeable_extensions = sorted(PREVIOUS_DEFAULT_PURGEABLE_SETS[0])
+    manager.save(settings)
+    manager._settings = None
+    loaded = manager.load()
+    assert ".sym" in loaded.cad.purgeable_extensions
+    for ext in (".lay", ".mfg", ".rep", ".dgm"):
+        assert ext in loaded.cad.purgeable_extensions
+    assert extra_cad_set(loaded.cad.purgeable_extensions) == extra_cad_set(
+        DEFAULT_PURGEABLE_EXTENSIONS
+    )
 
 
 def test_missing_purgeable_extensions_migrate_to_defaults(tmp_path):

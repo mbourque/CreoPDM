@@ -1,5 +1,5 @@
 <section class="settings-card">
-  <p class="muted small">Extensions counted and filtered by the Creo Models chip. The Other chip is everything else on the file list. Numbered saves such as <code>shaft.prt.3</code> count as <code>.prt</code>.</p>
+  <p class="muted small">These extensions are what the <strong>Creo Models</strong> filter on the Files page counts and shows when you click it. <strong>Other</strong> is every file that is not on this list. A numbered save such as <code>shaft.prt.3</code> still counts as <code>.prt</code>. This list does not decide which files have <code>.1</code> / <code>.2</code> / <code>.3</code> versions — that is <strong>Numbered saves</strong>. Details shows <strong>Where Used</strong> only for extensions on this list.</p>
   <label>Creo Models extensions
     <textarea name="cad_models_extensions" rows="2" placeholder=".prt, .asm, .drw">{{ settings.cad_models_extensions | join(', ') }}</textarea>
   </label>
