@@ -22,6 +22,11 @@ def test_domains_for_filename_by_extension():
     assert "drawing" in domains_for_filename("wedge.drw")
     assert "mfg" in domains_for_filename("basic-milling1.mfg")
     assert "features" in domains_for_filename("notes.txt")
+    assert "dimensions" in domains_for_filename("wedge.prt")
+    assert "dimensions" in domains_for_filename("café.prt")
+    assert "dimensions" in domains_for_filename("top.asm")
+    assert "dimensions" not in domains_for_filename("wedge.drw")
+    assert "dimensions" not in domains_for_filename("basic-milling1.mfg")
 
 
 def test_map_assembly_collect_includes_nested_bom():
@@ -141,6 +146,68 @@ def test_map_part_collect_identity_features_mass():
     assert snap["ai_snapshot"]["identity"]["filename"] == "wedge.prt"
     assert snap["ai_snapshot"]["capture"]["source"] == "toolkit"
     assert snap["ai_snapshot"]["mass"]["volume"] == 12.5
+    assert snap["dimensions"] == []
+    assert snap["ai_snapshot"]["dimensions"] == []
+
+
+def test_map_part_dimensions_show_up_as_added():
+    """A chamfer size from domains.dimensions is stored and compared.
+
+    Older revisions collected before this domain stay Dimensions: (none), so the
+    first new gather lists those sizes under Dimensions added.
+    """
+    from creopdm.ai_prompts import format_snapshot_compare_diff_text
+
+    snap = map_toolkit_collect_to_snapshot(
+        {
+            "ok": True,
+            "fileName": "café.prt",
+            "domains": {
+                "identity": {
+                    "ok": True,
+                    "identity": {"file_name": "café.prt", "model_type": "PART"},
+                },
+                "features": {
+                    "ok": True,
+                    "features": [
+                        {"id": 40, "name": "PROTRUSION", "type": "PROTRUSION"},
+                        {"id": 67, "name": "CHAMFER", "type": "CHAMFER"},
+                    ],
+                },
+                "dimensions": {
+                    "ok": True,
+                    "dimensions": [
+                        {
+                            "symbol": "d12",
+                            "value": 0.1,
+                            "units": "in",
+                            "feature_id": "67",
+                            "feature_name": "CHAMFER",
+                        }
+                    ],
+                },
+            },
+        }
+    )
+    assert snap is not None
+    dim = snap["dimensions"][0]
+    assert dim["symbol"] == "d12"
+    assert dim["value"] == 0.1
+    assert dim["units"] == "in"
+    assert dim["feature_id"] == 67
+    assert dim["feature_name"] == "CHAMFER"
+    assert snap["ai_snapshot"]["dimensions"] == snap["dimensions"]
+
+    older = {
+        "identity": {"file_name": "café.prt", "model_type": "PART"},
+        "features": [{"id": 40, "name": "PROTRUSION", "type": "PROTRUSION"}],
+        "dimensions": [],
+    }
+    diff = format_snapshot_compare_diff_text(older, snap["ai_snapshot"])
+    assert "Features added:" in diff
+    assert "CHAMFER (67)" in diff
+    assert "Dimensions added:" in diff
+    assert "d12 (CHAMFER) = 0.1 in" in diff
 
 
 def test_nest_drawing_inventory_puts_views_under_their_sheet():

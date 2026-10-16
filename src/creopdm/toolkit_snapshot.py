@@ -31,10 +31,10 @@ def domains_for_filename(filename: str) -> str:
         return "identity,parameters,drawing,units"
     if name.endswith(".asm"):
         # bom is opt-in on Toolkit /collect defaults; CreoPDM asks for it on .asm.
-        return "identity,parameters,features,structure,bom,constraints,units"
+        return "identity,parameters,features,dimensions,structure,bom,constraints,units"
     if name.endswith(".prt"):
-        return "identity,parameters,features,materials,mass,units"
-    return "identity,parameters,features,units"
+        return "identity,parameters,features,dimensions,materials,mass,units"
+    return "identity,parameters,features,dimensions,units"
 
 
 def _ok_domain(payload: dict[str, Any], name: str) -> dict[str, Any] | None:
@@ -452,6 +452,48 @@ def normalize_toolkit_mass(block: dict[str, Any] | None) -> dict[str, Any] | Non
     return out
 
 
+def normalize_toolkit_dimensions(rows: list[Any] | None) -> list[dict[str, Any]]:
+    """Toolkit dimensions domain → compare rows (symbol, value, units, feature)."""
+    if not rows:
+        return []
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        symbol = row.get("symbol")
+        if not isinstance(symbol, str) or not symbol.strip():
+            symbol = row.get("name") if isinstance(row.get("name"), str) else ""
+        symbol = str(symbol or "").strip()
+        if not symbol:
+            continue
+        item: dict[str, Any] = {"symbol": symbol}
+        value = row.get("value")
+        if value is None:
+            value = row.get("dim_value", row.get("dimValue"))
+        if value is not None:
+            item["value"] = value
+        units = row.get("units", row.get("unit"))
+        if isinstance(units, str) and units.strip():
+            item["units"] = units.strip()
+        fid = row.get("feature_id", row.get("featureId", row.get("owner_id")))
+        if fid is not None and fid != "":
+            try:
+                item["feature_id"] = int(fid)
+            except (TypeError, ValueError):
+                item["feature_id"] = fid
+        fname = row.get("feature_name", row.get("featureName", row.get("owner_name")))
+        if isinstance(fname, str) and fname.strip():
+            item["feature_name"] = fname.strip()
+        for key in ("dim_type", "tolerance_type", "id"):
+            if row.get(key) is not None:
+                item[key] = row[key]
+        limits = row.get("tolerance_limits")
+        if isinstance(limits, dict):
+            item["tolerance_limits"] = limits
+        out.append(item)
+    return out
+
+
 def _identity_file_name(identity: dict[str, Any] | None) -> str:
     """Toolkit may use file_name, filename, fileName, or full_name."""
     if not isinstance(identity, dict):
@@ -628,6 +670,10 @@ def map_toolkit_collect_to_snapshot(
                 if k not in {"ok", "fileName", "error", "partial", "partial_missing"}
             } or None
 
+    dimensions = normalize_toolkit_dimensions(
+        _list_field(_ok_domain(payload, "dimensions"), "dimensions", "dims", "items")
+    )
+
     simp_block = _ok_domain(payload, "simp_reps")
     simp_reps = None
     if simp_block:
@@ -649,7 +695,7 @@ def map_toolkit_collect_to_snapshot(
         "schema_version": 1,
         "identity": identity_ai,
         "features": features or [],
-        "dimensions": [],
+        "dimensions": dimensions,
         "parameters": parameters or [],
         "materials": materials,
         "units": units,
@@ -672,6 +718,7 @@ def map_toolkit_collect_to_snapshot(
         "mass": mass,
         "family_table": None,
         "features": features,
+        "dimensions": dimensions,
         "structure": structure,
         "simp_reps": simp_reps,
         "constraints": constraints,
