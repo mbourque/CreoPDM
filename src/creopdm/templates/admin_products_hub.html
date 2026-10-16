@@ -12,7 +12,7 @@
     <span>Manage products</span>
   </nav>
   <h1>Manage products</h1>
-  <p class="muted">Edit, copy, promote, or delete products on this server. Each tile is its own page.</p>
+  <p class="muted">Edit, copy, promote, delete, compact, or rebuild products on this server. Each tile is its own page.</p>
 
   <div class="admin-tile-grid">
     {% if can_manage_products %}
@@ -33,6 +33,18 @@
     <section class="admin-tile">
       <h2><a href="/admin/products/delete">Delete products</a></h2>
       <p>Delete a product’s CreoPDM vault and unregister it from the database.</p>
+    </section>
+    {% endif %}
+    {% if can_utilities_compact_product %}
+    <section class="admin-tile">
+      <h2><a href="/admin/products/compact">Compact product vault history</a></h2>
+      <p>Squash one product’s Git history to the tip and free removed-file bytes.</p>
+    </section>
+    {% endif %}
+    {% if can_utilities_rebuild_product %}
+    <section class="admin-tile">
+      <h2><a href="/admin/products/rebuild">Rebuild product database</a></h2>
+      <p>Rebuild one product’s file list from its vault Git tip, clear Creo metadata, or delete and rebuild Where Used (does not rewrite Git).</p>
     </section>
     {% endif %}
   </div>

@@ -2554,15 +2554,15 @@ def test_admin_hub_panel_fills_full_width():
     assert "admin-hub" in utilities
     assert "can_utilities_availability or can_manage_settings" in utilities
     assert "can_utilities_email_users" in utilities
-    assert "can_utilities_compact_product" in utilities
-    assert "can_utilities_rebuild_product" in utilities
+    assert "can_utilities_compact_product" not in utilities
+    assert "can_utilities_rebuild_product" not in utilities
     assert "can_utilities_audit" in utilities
     assert "can_utilities_health" in utilities
     assert "can_utilities_logs" in utilities
     assert 'href="/admin/utilities/availability"' in utilities
     assert 'href="/admin/utilities/email-all"' in utilities
-    assert 'href="/admin/utilities/compact"' in utilities
-    assert 'href="/admin/utilities/rebuild-product"' in utilities
+    assert 'href="/admin/utilities/compact"' not in utilities
+    assert 'href="/admin/utilities/rebuild-product"' not in utilities
     assert 'href="/admin/utilities/delete-products"' not in utilities
     assert 'href="/admin/utilities/audit"' in utilities
     assert 'href="/admin/utilities/health"' in utilities
@@ -2571,7 +2571,7 @@ def test_admin_hub_panel_fills_full_width():
     assert "Audit log" in utilities
     assert ">Logs</a>" in utilities
     assert "{% if can_utilities_logs %}" in utilities
-    assert "delete and rebuild Where Used" in utilities
+    assert "delete and rebuild Where Used" not in utilities
     assert 'action="/admin/utilities/email-all"' not in utilities
     assert "Disk space" not in utilities
     audit_util = (
@@ -2708,6 +2708,10 @@ def test_admin_hub_panel_fills_full_width():
     assert ">Copy Products</a>" in hub
     assert ">Promote Products</a>" in hub
     assert 'href="/admin/products/delete"' in hub
+    assert 'href="/admin/products/compact"' in hub
+    assert 'href="/admin/products/rebuild"' in hub
+    assert "can_utilities_compact_product" in hub
+    assert "can_utilities_rebuild_product" in hub
     promote = (ROOT / "src" / "creopdm" / "templates" / "admin_products_promote.html").read_text(
         encoding="utf-8"
     )
@@ -2842,7 +2846,7 @@ def test_admin_hub_panel_fills_full_width():
         ROOT / "src" / "creopdm" / "templates" / "admin_utilities_rebuild.html"
     ).read_text(encoding="utf-8")
     assert 'id="utilities-rebuild-product-form"' in rebuild_tmpl
-    assert 'action="/admin/utilities/rebuild-product-db"' in rebuild_tmpl
+    assert 'action="/admin/products/rebuild"' in rebuild_tmpl
     assert 'name="repair_action"' in rebuild_tmpl
     assert 'type="radio"' in rebuild_tmpl
     assert 'value="rebuild"' in rebuild_tmpl

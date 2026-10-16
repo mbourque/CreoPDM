@@ -446,7 +446,7 @@ def test_admin_can_open_settings(auth_client):
     assert 'href="/admin/products"' in hub.text
     assert 'href="/admin/email"' not in hub.text
     assert 'href="/admin/utilities"' in hub.text
-    assert "Email all users, site availability, compact vault history, Audit log, and server health checks." in hub.text
+    assert "Email all users, site availability, Audit log, and server health checks." in hub.text
     assert ">Manage products</a>" in hub.text
     assert "Server options hub: Open Creo models, Vault, file types, agent, database, Email, AI, and more." in hub.text
     assert "Availability, Open Creo models" not in hub.text
@@ -499,8 +499,8 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert "admin-hub" in hub.text
     assert 'href="/admin/utilities/availability"' in hub.text
     assert 'href="/admin/utilities/email-all"' in hub.text
-    assert 'href="/admin/utilities/compact"' in hub.text
-    assert 'href="/admin/utilities/rebuild-product"' in hub.text
+    assert 'href="/admin/utilities/compact"' not in hub.text
+    assert 'href="/admin/utilities/rebuild-product"' not in hub.text
     assert 'href="/admin/utilities/delete-products"' not in hub.text
     assert 'href="/admin/utilities/audit"' in hub.text
     assert 'href="/admin/utilities/health"' in hub.text
@@ -508,9 +508,8 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert "Availability" in hub.text
     assert "Audit log" in hub.text
     assert ">Logs</a>" in hub.text or "Logs</a>" in hub.text
-    assert "Rebuild product database" in hub.text
-    assert "Creo metadata" in hub.text
-    assert "Where Used" in hub.text
+    assert "Rebuild product database" not in hub.text
+    assert "Creo metadata" not in hub.text
     assert 'action="/admin/utilities/email-all"' not in hub.text
     assert 'action="/admin/utilities/compact-vault"' not in hub.text
     assert 'action="/admin/utilities/rebuild-product-db"' not in hub.text
@@ -553,15 +552,21 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert "Email all users" in email_page.text
     assert 'action="/admin/utilities/email-all"' in email_page.text
 
-    compact_page = auth_client.get("/admin/utilities/compact")
+    compact_moved = auth_client.get("/admin/utilities/compact", follow_redirects=False)
+    assert compact_moved.status_code == 303
+    assert compact_moved.headers["location"] == "/admin/products/compact"
+    compact_page = auth_client.get("/admin/products/compact")
     assert compact_page.status_code == 200
     assert "Compact product vault history" in compact_page.text
-    assert 'action="/admin/utilities/compact-vault"' in compact_page.text
+    assert 'action="/admin/products/compact"' in compact_page.text
 
-    rebuild_page = auth_client.get("/admin/utilities/rebuild-product")
+    rebuild_moved = auth_client.get("/admin/utilities/rebuild-product", follow_redirects=False)
+    assert rebuild_moved.status_code == 303
+    assert rebuild_moved.headers["location"] == "/admin/products/rebuild"
+    rebuild_page = auth_client.get("/admin/products/rebuild")
     assert rebuild_page.status_code == 200
     assert "Rebuild product database" in rebuild_page.text
-    assert 'action="/admin/utilities/rebuild-product-db"' in rebuild_page.text
+    assert 'action="/admin/products/rebuild"' in rebuild_page.text
     assert 'id="utilities-rebuild-product-form"' in rebuild_page.text
     assert 'name="repair_action"' in rebuild_page.text
     assert 'type="radio"' in rebuild_page.text
@@ -570,6 +575,11 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert 'value="rebuild_where_used"' in rebuild_page.text
     assert "Delete and rebuild Where Used" in rebuild_page.text
     assert "Run selected action" in rebuild_page.text
+    products_hub = auth_client.get("/admin/products")
+    assert "Compact product vault history" in products_hub.text
+    assert "Rebuild product database" in products_hub.text
+    assert "Creo metadata" in products_hub.text
+    assert "Where Used" in products_hub.text
     # Action radios start unselected — only the danger confirm is checked at submit time by the user.
     assert 'name="repair_action" value="rebuild" checked' not in rebuild_page.text
     assert 'name="repair_action" value="clear_metadata" checked' not in rebuild_page.text
@@ -1792,7 +1802,7 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     assert hub.status_code == 200
     assert 'href="/admin/products"' in hub.text
     assert ">Manage products</a>" in hub.text
-    assert "Edit, copy, promote, or delete products on this server." in hub.text
+    assert "Edit, copy, promote, delete, compact, or rebuild products on this server." in hub.text
 
     created = auth_client.post(
         "/admin/products/new",

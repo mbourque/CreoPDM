@@ -9,7 +9,7 @@
     {% endif %}
     <a href="/admin">Administration</a>
     <span>/</span>
-    <a href="/admin/utilities">Utilities</a>
+    <a href="/admin/products">Manage products</a>
     <span>/</span>
     <span>Compact product vault history</span>
   </nav>
@@ -28,7 +28,7 @@
   {% endif %}
 
   <section class="settings-card">
-    <form method="post" action="/admin/utilities/compact-vault" class="settings-form" id="utilities-compact-vault-form">
+    <form method="post" action="/admin/products/compact" class="settings-form" id="utilities-compact-vault-form">
       <label>Product
         <select name="product_id" required>
           <option value="">Select a product…</option>
@@ -46,7 +46,7 @@
       </label>
       <p class="form-actions">
         <button type="submit" class="btn btn-danger" {% if not compact_products %}disabled{% endif %}>Compact vault history</button>
-        <a class="btn" href="/admin/utilities">Back to Utilities</a>
+        <a class="btn" href="/admin/products">Back to Manage products</a>
       </p>
     </form>
   </section>

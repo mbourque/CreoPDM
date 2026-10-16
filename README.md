@@ -386,6 +386,8 @@ Compact list for Creo’s navigator pane (~350–450 px wide): **`/embed/explore
 | **Copy Products** | New product from another product’s current vault files: new id, **A.1**, **In Work**, and a clean Git history (the original is unchanged). **Use hash** locks a UUID as the vault name; uncheck it to type a name with no spaces. |
 | **Promote Products** | Change one product’s lifecycle state. Password confirm explains the change from the Lifecycle states matrix. The audit log records **Product state changed**. |
 | **Delete products** | Password confirm, then remove that product’s CreoPDM vault and unregister it. Needs `utilities.delete_product`. The old **Utilities → Delete products** address redirects here. |
+| **Compact product vault history** | Squash one product’s Git history to the tip. Needs `utilities.compact_product`. The old Utilities address redirects here. |
+| **Rebuild product database** | Rebuild the file list from the vault tip, clear Creo metadata, or delete and rebuild Where Used. Needs `utilities.rebuild_product`. Does not rewrite Git. The old Utilities address redirects here. |
 
 Copy records **Product copied** in the audit log (not **Product created**). Day-to-day file actions stay on the Files page. See [docs/user-interactions.md](docs/user-interactions.md).
 

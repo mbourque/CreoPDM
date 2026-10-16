@@ -1965,7 +1965,7 @@ def _product_form(
 def _require_manage_products_hub(
     request: Request, ctx: AppContext, db: Session
 ) -> User | HTMLResponse | RedirectResponse:
-    """Manage products hub: product editors, or anyone who can delete products."""
+    """Manage products hub: editors, or anyone who can delete, compact, or rebuild a product."""
     user_uuid = request.session.get(SESSION_USER_KEY)
     user = ctx.user_accounts.get_by_uuid(db, str(user_uuid)) if user_uuid else None
     if user is None:
@@ -1973,6 +1973,8 @@ def _require_manage_products_hub(
     if not (
         ctx.user_accounts.can_manage_products(user)
         or ctx.user_accounts.can_utilities_delete_product(user)
+        or ctx.user_accounts.can_utilities_compact_product(user)
+        or ctx.user_accounts.can_utilities_rebuild_product(user)
     ):
         return HTMLResponse(
             "<h1>403 Forbidden</h1><p>Product management access required.</p>",
@@ -2465,6 +2467,80 @@ def admin_products_delete(
         product_id=product_id,
         confirm_password=confirm_password,
         confirm=confirm,
+    )
+
+
+@router.get("/admin/products/compact", response_class=HTMLResponse)
+def admin_products_compact_page(
+    request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
+):
+    manager = _require_utilities_permission(
+        request,
+        ctx,
+        db,
+        check=ctx.user_accounts.can_utilities_compact_product,
+        message="Compact product vault history required (utilities.compact_product).",
+    )
+    if _is_blocked(manager):
+        return manager
+    return _utilities_compact_response(request, ctx, db, manager)
+
+
+@router.post("/admin/products/compact", response_class=HTMLResponse)
+def admin_products_compact_submit(
+    request: Request,
+    product_id: str = Form(""),
+    confirm_password: str = Form(""),
+    confirm: str = Form(""),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    return admin_utilities_compact_vault(
+        request,
+        product_id=product_id,
+        confirm_password=confirm_password,
+        confirm=confirm,
+        ctx=ctx,
+        db=db,
+    )
+
+
+@router.get("/admin/products/rebuild", response_class=HTMLResponse)
+def admin_products_rebuild_page(
+    request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
+):
+    manager = _require_utilities_permission(
+        request,
+        ctx,
+        db,
+        check=ctx.user_accounts.can_utilities_rebuild_product,
+        message="Rebuild product database required (utilities.rebuild_product).",
+    )
+    if _is_blocked(manager):
+        return manager
+    return _utilities_rebuild_response(request, ctx, db, manager)
+
+
+@router.post("/admin/products/rebuild", response_class=HTMLResponse)
+def admin_products_rebuild_submit(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    product_id: str = Form(""),
+    confirm_password: str = Form(""),
+    confirm: str = Form(""),
+    repair_action: str = Form(""),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    return admin_utilities_rebuild_product_db(
+        request,
+        background_tasks,
+        product_id=product_id,
+        confirm_password=confirm_password,
+        confirm=confirm,
+        repair_action=repair_action,
+        ctx=ctx,
+        db=db,
     )
 
 
@@ -3454,11 +3530,11 @@ def admin_utilities_compact_page(
         ctx,
         db,
         check=ctx.user_accounts.can_utilities_compact_product,
-        message="Utilities Compact product required (utilities.compact_product).",
+        message="Compact product vault history required (utilities.compact_product).",
     )
     if _is_blocked(manager):
         return manager
-    return _utilities_compact_response(request, ctx, db, manager)
+    return RedirectResponse("/admin/products/compact", status_code=303)
 
 
 @router.get("/admin/utilities/rebuild-product", response_class=HTMLResponse)
@@ -3470,11 +3546,11 @@ def admin_utilities_rebuild_product_page(
         ctx,
         db,
         check=ctx.user_accounts.can_utilities_rebuild_product,
-        message="Utilities Rebuild product required (utilities.rebuild_product).",
+        message="Rebuild product database required (utilities.rebuild_product).",
     )
     if _is_blocked(manager):
         return manager
-    return _utilities_rebuild_response(request, ctx, db, manager)
+    return RedirectResponse("/admin/products/rebuild", status_code=303)
 
 
 @router.get("/admin/utilities/health", response_class=HTMLResponse)

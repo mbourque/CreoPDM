@@ -9,7 +9,7 @@
     {% endif %}
     <a href="/admin">Administration</a>
     <span>/</span>
-    <a href="/admin/utilities">Utilities</a>
+    <a href="/admin/products">Manage products</a>
     <span>/</span>
     <span>Rebuild product database</span>
   </nav>
@@ -32,7 +32,7 @@
   {% endif %}
 
   <section class="settings-card">
-    <form method="post" action="/admin/utilities/rebuild-product-db" class="settings-form" id="utilities-rebuild-product-form">
+    <form method="post" action="/admin/products/rebuild" class="settings-form" id="utilities-rebuild-product-form">
       <label>Product
         <select name="product_id" required>
           <option value="">Select a product…</option>
@@ -65,7 +65,7 @@
       </label>
       <p class="form-actions">
         <button type="submit" class="btn btn-danger" {% if not rebuild_products %}disabled{% endif %}>Run selected action</button>
-        <a class="btn" href="/admin/utilities">Back to Utilities</a>
+        <a class="btn" href="/admin/products">Back to Manage products</a>
       </p>
     </form>
   </section>
