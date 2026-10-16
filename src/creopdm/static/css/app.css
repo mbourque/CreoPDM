@@ -1435,6 +1435,30 @@ dialog#open-checkout-dialog[open] {
   flex-direction: column;
   gap: 0.45rem;
 }
+/* Copy lives on a full-width admin card. Match the New product dialog field
+   (dialog is min(480px, 92vw) with 1.1rem form padding). */
+.settings-form .product-vault-fields {
+  width: min(calc(480px - 2.2rem), calc(92vw - 2.2rem));
+  max-width: 100%;
+}
+.settings-form .product-vault-fields > label {
+  margin: 0;
+  font-size: 0.88rem;
+  gap: 0.25rem;
+}
+.settings-form .product-vault-fields input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+}
+.settings-form .product-vault-fields input:disabled,
+.settings-form .product-vault-fields input:read-only {
+  background: #eef2f5;
+  color: var(--muted);
+  cursor: not-allowed;
+}
+.settings-form .product-vault-fields .muted.small {
+  margin: 0;
+}
 .product-vault-fields .checkbox-row {
   display: flex;
   flex-direction: row;
