@@ -172,7 +172,11 @@ def test_admin_copy_product_is_a_fresh_add(auth_client, auth_ctx):
 
     released = auth_client.post(
         "/admin/products/promote",
-        data={"product_id": source["uuid"], "state": "RELEASED"},
+        data={
+            "product_id": source["uuid"],
+            "state": "RELEASED",
+            "confirm_password": "AdminPass1",
+        },
     )
     assert released.status_code == 200, released.text
 

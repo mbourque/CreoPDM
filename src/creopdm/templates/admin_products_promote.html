@@ -14,48 +14,38 @@
     <span>Promote Products</span>
   </nav>
   <h1>Promote Products</h1>
-  <p class="muted">Change a product’s lifecycle state. Name, number, and description stay as they are.{% if can_manage_lifecycle_states %} Which operations each state allows is set under <a href="/admin/lifecycle">Administration → Lifecycle states</a>.{% endif %}</p>
+  <p class="muted">Change one product’s lifecycle state. Name, number, and description stay as they are.{% if can_manage_lifecycle_states %} Which operations that state allows is the <a href="/admin/lifecycle">Lifecycle states</a> matrix.{% endif %}</p>
   {% if success %}<p class="ok">{{ success }}</p>{% endif %}
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <p class="error" id="promote-client-error" hidden></p>
 
-  <section class="settings-card admin-products-table">
-    <div class="table-scroll">
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th class="col-number">Number</th>
-          <th>Lifecycle state</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for p in products %}
-        <tr>
-          <td>
-            {{ p.name }}
-            {% if not p.active %}<span class="muted"> (inactive)</span>{% endif %}
-          </td>
-          <td class="col-number">{{ p.number or "—" }}</td>
-          <td>
-            <form method="post" action="/admin/products/promote" class="settings-form promote-state-form">
-              <input type="hidden" name="product_id" value="{{ p.uuid }}">
-              <label class="sr-only" for="promote-state-{{ p.uuid }}">Lifecycle state for {{ p.name }}</label>
-              <select name="state" id="promote-state-{{ p.uuid }}">
-                {% for key in product_states %}
-                <option value="{{ key }}" {% if p.state == key %}selected{% endif %}
-                        title="{{ product_state_descriptions.get(key, '') }}">{{ product_state_labels.get(key, key) }}</option>
-                {% endfor %}
-              </select>
-              <button type="submit" class="btn">Save</button>
-            </form>
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="3" class="muted">No products yet.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    </div>
+  <section class="settings-card">
+    <form method="post" action="/admin/products/promote" class="settings-form" id="promote-products-form">
+      <label>Product
+        <select name="product_id" id="promote-product" required>
+          <option value="">Select a product…</option>
+          {% for p in products %}
+          <option value="{{ p.uuid }}" data-state="{{ p.state }}" data-name="{{ p.name }}"
+                  {% if promote_product_id == p.uuid %}selected{% endif %}>{{ p.name }}{% if not p.active %} (inactive){% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Lifecycle state
+        <select name="state" id="promote-state" required>
+          <option value="">Select a state…</option>
+          {% for key in product_states %}
+          <option value="{{ key }}" {% if promote_state == key %}selected{% endif %}
+                  title="{{ product_state_descriptions.get(key, '') }}">{{ product_state_labels.get(key, key) }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <input type="hidden" name="confirm_password" value="">
+      <p class="form-actions">
+        <button type="submit" class="btn btn-primary" {% if not products %}disabled{% endif %}>Change state</button>
+        <a class="btn" href="/admin/products">Back to Manage products</a>
+      </p>
+    </form>
   </section>
+  <script type="application/json" id="promote-lifecycle">{{ lifecycle_promote | tojson }}</script>
 </article>
 {% endblock %}

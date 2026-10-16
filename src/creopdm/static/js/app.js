@@ -6234,7 +6234,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const dialog = $("#danger-confirm-dialog");
     const form = $("#danger-confirm-form");
     if (!dialog || !form) {
-      return Promise.resolve({ ok: false, deleteWorkspaceFiles: false });
+      return Promise.resolve({ ok: false, deleteWorkspaceFiles: false, password: "" });
     }
     const titleEl = $("#danger-confirm-title");
     const leadEl = $("#danger-confirm-lead");
@@ -6276,7 +6276,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     return new Promise((resolve) => {
       let settled = false;
-      const finish = (ok) => {
+      const finish = (ok, password = "") => {
         if (settled) return;
         settled = true;
         form.removeEventListener("submit", onSubmit);
@@ -6296,18 +6296,24 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
         const deleteWorkspaceFiles = Boolean(ok && workspaceOption && workspaceCheck?.checked);
         if (dialog.open) dialog.close();
-        resolve({ ok: Boolean(ok), deleteWorkspaceFiles });
+        resolve({
+          ok: Boolean(ok),
+          deleteWorkspaceFiles,
+          password: ok ? String(password || "") : "",
+        });
       };
       const onCancel = () => finish(false);
       const onClose = () => finish(false);
       const onSubmit = async (event) => {
         event.preventDefault();
+        let verifiedPassword = "";
         if (requirePassword) {
           const password = String(new FormData(form).get("confirm_password") || "");
           if (!password) {
             showError($("#danger-confirm-error"), "Enter your password to confirm.");
             return;
           }
+          verifiedPassword = password;
           if (submitBtn) submitBtn.disabled = true;
           showError($("#danger-confirm-error"), "");
           try {
@@ -6333,7 +6339,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             if (submitBtn) submitBtn.disabled = false;
           }
         }
-        finish(true);
+        finish(true, verifiedPassword);
       };
       form.addEventListener("submit", onSubmit);
       $("#danger-confirm-cancel")?.addEventListener("click", onCancel);
@@ -8057,6 +8063,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     || $("#product-form")
     || $("#product-vault-folder")
     || $("#utilities-delete-products-form")
+    || $("#promote-products-form")
     || document.querySelector(".admin-utilities")
   ) {
     void initJobModule("admin", window.__creopdmShell);

@@ -2708,6 +2708,19 @@ def test_admin_hub_panel_fills_full_width():
     assert ">Copy Products</a>" in hub
     assert ">Promote Products</a>" in hub
     assert 'href="/admin/products/delete"' in hub
+    promote = (ROOT / "src" / "creopdm" / "templates" / "admin_products_promote.html").read_text(
+        encoding="utf-8"
+    )
+    assert 'id="promote-products-form"' in promote
+    assert 'id="promote-lifecycle"' in promote
+    assert "promote-state-form" not in promote
+    assert promote.count('action="/admin/products/promote"') == 1
+    admin_js = (ROOT / "src" / "creopdm" / "static" / "js" / "admin.js").read_text(encoding="utf-8")
+    assert "promote-lifecycle" in admin_js
+    assert "confirmByProductName" in admin_js
+    assert "pack.effects" in admin_js
+    app_js = (ROOT / "src" / "creopdm" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    assert '$("#promote-products-form")' in app_js
     health = (ROOT / "src" / "creopdm" / "templates" / "admin_utilities_health.html").read_text(
         encoding="utf-8"
     )

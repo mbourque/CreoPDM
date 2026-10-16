@@ -862,6 +862,11 @@ window.__creopdmModules.admin = {
             }
           } else if (form.id === "utilities-delete-products-form") {
             message = `Deleting product ${label}…`;
+          } else if (form.id === "promote-products-form") {
+            if (form.dataset.promoteReady !== "1") return;
+            const stateLabel = form.querySelector("#promote-state")?.selectedOptions?.[0]?.textContent?.trim()
+              || "the new state";
+            message = `Changing lifecycle state to ${stateLabel}…`;
           } else {
             return;
           }
@@ -880,6 +885,62 @@ window.__creopdmModules.admin = {
         true
       );
     }
+
+    function bindPromoteProducts() {
+      const form = $("#promote-products-form");
+      const productSel = $("#promote-product");
+      const stateSel = $("#promote-state");
+      if (!form || !productSel || !stateSel) return;
+      let pack = { labels: {}, effects: {} };
+      const node = document.getElementById("promote-lifecycle");
+      if (node) {
+        try {
+          pack = JSON.parse(node.textContent || "") || pack;
+        } catch {
+          pack = { labels: {}, effects: {} };
+        }
+      }
+      const confirm = shell.confirmByProductName;
+      onPage(productSel, "change", () => {
+        const key = productSel.selectedOptions?.[0]?.dataset?.state || "";
+        if (key && [...stateSel.options].some((opt) => opt.value === key)) stateSel.value = key;
+      });
+      onPage(form, "submit", async (event) => {
+        if (form.dataset.promoteReady === "1") {
+          form.dataset.promoteReady = "";
+          return;
+        }
+        event.preventDefault();
+        const opt = productSel.selectedOptions?.[0];
+        const name = opt?.dataset?.name || opt?.textContent?.trim() || "This product";
+        const fromKey = opt?.dataset?.state || "";
+        const next = stateSel.value || "";
+        const labels = pack.labels || {};
+        const fromLabel = labels[fromKey] || fromKey || "its current state";
+        const toLabel = labels[next] || stateSel.selectedOptions?.[0]?.textContent?.trim() || next;
+        if (!productSel.value || !next) return;
+        if (fromKey && fromKey === next) {
+          showError($("#promote-client-error"), `${name} is already ${toLabel}.`);
+          return;
+        }
+        showError($("#promote-client-error"), "");
+        if (typeof confirm !== "function") return;
+        const confirmed = await confirm({
+          title: "Change lifecycle state",
+          lead: `${name} will change from ${fromLabel} to ${toLabel}.`,
+          note: "Role permissions still apply on top (state ∩ role).",
+          submitLabel: "Change state",
+          detailsHtml: (pack.effects || {})[`${fromKey}|${next}`] || "",
+        });
+        if (!confirmed.ok) return;
+        const passwordInput = form.querySelector('[name="confirm_password"]');
+        if (passwordInput) passwordInput.value = confirmed.password || "";
+        form.dataset.promoteReady = "1";
+        if (typeof form.requestSubmit === "function") form.requestSubmit();
+        else form.submit();
+      });
+    }
+    bindPromoteProducts();
 
     mod.syncProductAccessUi();
   },

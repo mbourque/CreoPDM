@@ -2327,7 +2327,11 @@ def _promote_products_response(
     error: str | None = None,
     success: str | None = None,
     status_code: int = 200,
+    product_id: str = "",
+    state: str = "",
 ):
+    from creopdm.lifecycle_policy import promote_confirm_payload
+
     return templates.TemplateResponse(
         request,
         "admin_products_promote.html",
@@ -2336,6 +2340,9 @@ def _promote_products_response(
             "products": _admin_product_rows(ctx, db),
             "error": error,
             "success": success,
+            "promote_product_id": product_id,
+            "promote_state": state,
+            "lifecycle_promote": promote_confirm_payload(),
             **_lifecycle_form_ctx(),
         },
         status_code=status_code,
@@ -2357,6 +2364,7 @@ def admin_products_promote(
     request: Request,
     product_id: str = Form(""),
     state: str = Form(""),
+    confirm_password: str = Form(""),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
@@ -2364,7 +2372,8 @@ def admin_products_promote(
     if _is_blocked(manager):
         return manager
     pid = (product_id or "").strip()
-    if not pid or not (state or "").strip():
+    raw_state = (state or "").strip()
+    if not pid or not raw_state:
         return _promote_products_response(
             request,
             ctx,
@@ -2372,21 +2381,36 @@ def admin_products_promote(
             manager,
             error="Choose a product and a lifecycle state.",
             status_code=400,
+            product_id=pid,
+            state=raw_state,
         )
     try:
+        require_danger_password(ctx, db, confirm_password, auth_user=manager)
+        from creopdm.product_state import configured_product_state_labels, parse_product_state
+
         product = ctx.products.get_product(db, pid)
+        parsed = parse_product_state(raw_state)
+        label = configured_product_state_labels().get(parsed, parsed)
+        if product.state == parsed:
+            return _promote_products_response(
+                request,
+                ctx,
+                db,
+                manager,
+                error=f"{product.name} is already {label}.",
+                status_code=400,
+                product_id=pid,
+                state=parsed,
+            )
         ctx.products.update_product(
             db,
             product.uuid,
             name=product.name,
             number=product.number,
             description=product.description,
-            state=state,
+            state=parsed,
         )
         db.commit()
-        from creopdm.product_state import configured_product_state_labels
-
-        label = configured_product_state_labels().get(product.state, product.state)
         return _promote_products_response(
             request,
             ctx,
@@ -2397,7 +2421,14 @@ def admin_products_promote(
     except CreoPDMError as exc:
         db.rollback()
         return _promote_products_response(
-            request, ctx, db, manager, error=exc.message, status_code=400
+            request,
+            ctx,
+            db,
+            manager,
+            error=exc.message,
+            status_code=400,
+            product_id=pid,
+            state=raw_state,
         )
 
 

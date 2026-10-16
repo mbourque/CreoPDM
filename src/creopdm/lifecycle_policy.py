@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import re
 from dataclasses import dataclass
 from typing import Any, Iterable
@@ -251,6 +252,62 @@ def set_lifecycle_policy_from_settings(lifecycle: Any) -> LifecyclePolicy:
                 elif isinstance(item, dict):
                     rows.append(item)
     return set_lifecycle_policy(policy_from_dicts(rows))
+
+
+def _confirm_op_list(items: list[str]) -> str:
+    body = "".join(f"<li>{html.escape(item)}</li>" for item in items) or "<li>None</li>"
+    return f'<ul class="confirm-file-list">{body}</ul>'
+
+
+def describe_lifecycle_change(policy: LifecyclePolicy, from_key: str, to_key: str) -> str:
+    """Confirm-dialog HTML for a lifecycle change.
+
+    Operation names are the Lifecycle states matrix columns (``LIFECYCLE_OPS``).
+    Allowed and blocked follow ``policy.allows`` for the destination state.
+    """
+    to_state = policy.get(to_key)
+    from_label = policy.label(from_key)
+    parts: list[str] = []
+    description = (to_state.description if to_state is not None else "").strip()
+    if description:
+        parts.append(f"<p>{html.escape(description)}</p>")
+    allows = [label for key, label in LIFECYCLE_OPS if policy.allows(to_key, key)]
+    blocks = [label for key, label in LIFECYCLE_OPS if not policy.allows(to_key, key)]
+    parts.append("<p><strong>Allows</strong></p>")
+    parts.append(_confirm_op_list(allows))
+    parts.append("<p><strong>Blocks</strong></p>")
+    parts.append(_confirm_op_list(blocks))
+    changes: list[str] = []
+    for key, label in LIFECYCLE_OPS:
+        before = policy.allows(from_key, key)
+        after = policy.allows(to_key, key)
+        if before == after:
+            continue
+        changes.append(f"{label} — {'now allowed' if after else 'no longer allowed'}")
+    if changes:
+        parts.append(f"<p><strong>Compared with {html.escape(from_label)}</strong></p>")
+        parts.append(_confirm_op_list(changes))
+    else:
+        parts.append(
+            f"<p>Compared with {html.escape(from_label)}, the permission matrix is unchanged.</p>"
+        )
+    return "".join(parts)
+
+
+def promote_confirm_payload(policy: LifecyclePolicy | None = None) -> dict[str, Any]:
+    """Labels and prebuilt confirm HTML for every state pair. One matrix, no second copy."""
+    policy = policy or get_lifecycle_policy()
+    states = policy.ordered()
+    effects: dict[str, str] = {}
+    for src in states:
+        for dst in states:
+            if src.key == dst.key:
+                continue
+            effects[f"{src.key}|{dst.key}"] = describe_lifecycle_change(policy, src.key, dst.key)
+    return {
+        "labels": {state.key: state.label for state in states},
+        "effects": effects,
+    }
 
 
 def slugify_lifecycle_key(name: str) -> str:

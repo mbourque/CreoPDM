@@ -1877,9 +1877,27 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     assert body["vault_folder"] == original_vault
     # Edit ignores lifecycle. Promote Products changes it.
     assert body["state"] == "IN_WORK"
-    promoted = auth_client.post(
+    promote_page = auth_client.get("/admin/products/promote")
+    assert promote_page.status_code == 200, promote_page.text
+    assert promote_page.text.count('action="/admin/products/promote"') == 1
+    assert 'id="promote-lifecycle"' in promote_page.text
+    assert "Check Out / Undo Checkout" in promote_page.text
+    assert "promote-state-form" not in promote_page.text
+    denied = auth_client.post(
         "/admin/products/promote",
         data={"product_id": product["uuid"], "state": "IN_REVIEW"},
+    )
+    assert denied.status_code == 400, denied.text
+    assert "password" in denied.text.lower()
+    still = auth_client.get(f"/api/products/{product['uuid']}").json()
+    assert still["state"] == "IN_WORK"
+    promoted = auth_client.post(
+        "/admin/products/promote",
+        data={
+            "product_id": product["uuid"],
+            "state": "IN_REVIEW",
+            "confirm_password": "AdminPass1",
+        },
     )
     assert promoted.status_code == 200, promoted.text
     body = auth_client.get(f"/api/products/{product['uuid']}").json()
@@ -1898,7 +1916,11 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     leftover.write_bytes(b"not-in-git")
     state_only = auth_client.post(
         "/admin/products/promote",
-        data={"product_id": product["uuid"], "state": "RELEASED"},
+        data={
+            "product_id": product["uuid"],
+            "state": "RELEASED",
+            "confirm_password": "AdminPass1",
+        },
     )
     assert state_only.status_code == 200, state_only.text
     assert "Could not record the product rename" not in (state_only.text or "")
@@ -1909,7 +1931,11 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     # Restore IN_WORK before delete path.
     restored = auth_client.post(
         "/admin/products/promote",
-        data={"product_id": product["uuid"], "state": "IN_WORK"},
+        data={
+            "product_id": product["uuid"],
+            "state": "IN_WORK",
+            "confirm_password": "AdminPass1",
+        },
     )
     assert restored.status_code == 200, restored.text
 
