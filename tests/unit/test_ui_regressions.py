@@ -727,6 +727,14 @@ def test_product_dialog_has_vault_folder_and_use_hash():
     assert "Vault/workspace name cannot contain spaces" in script
     assert "getRandomValues" in script
     assert "proj-${" not in script
+    # Copy is a soft-nav admin page with no #product-form. Boot admin.js there or
+    # Use hash stays checked on the placeholder until a hard refresh.
+    gate = _between(
+        _app_shell_js(),
+        '$("#product-form")',
+        'initJobModule("admin", window.__creopdmShell)',
+    )
+    assert '$("#product-vault-folder")' in gate
     css = APP_CSS.read_text(encoding="utf-8")
     assert ".product-vault-fields .checkbox-row" in css
     assert "flex-direction: row" in css.split(".product-vault-fields .checkbox-row", 1)[1].split("}", 1)[0]

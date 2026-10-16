@@ -8055,6 +8055,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     || $("#type-labels-form")
     || $("#access-all-products")
     || $("#product-form")
+    || $("#product-vault-folder")
     || document.querySelector(".admin-utilities")
   ) {
     void initJobModule("admin", window.__creopdmShell);
