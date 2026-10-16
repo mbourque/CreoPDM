@@ -1,5 +1,5 @@
 ---
-description: When the user finds a bug, create or update unit tests in the same change
+description: Bug fixes get a unit test; DRY — one shared implementation for UI and logic
 alwaysApply: true
 ---
 
@@ -30,3 +30,16 @@ When the user pastes `@pytest-last.log` (or failed output) after a fix, treat fa
 After that fix, follow `.cursor/rules/commit-message-after-changes.mdc`: give a focused **pytest** command **and** the **git commit / push** block (plus `./pull-restart.ps1` when the server needs the change). Do not reply with retest-only once the test fix is done.
 
 For Files / toolbar / Add / Checkout / Check In / Remove / open / folder-click bugs: also follow `.cursor/rules/user-interactions.mdc` — do not break `docs/user-interactions.md`, and update that doc if the intended behavior changed.
+
+## DRY
+
+One implementation. Call it from the other place. Do not paste a second copy of markup, CSS, or script.
+
+Search for the existing control, helper, or template before writing another. Share it (Jinja partial, one JS function, one Python helper).
+
+```text
+# ❌ BAD — copy the New product Use hash markup and a second UUID script onto Copy
+# ❌ BAD — navigator search reimplemented instead of files_search_match.js
+# ✅ GOOD — both pages {% include %} partials/product_vault_fields.html and use the same admin.js binder
+# ✅ GOOD — Files and the navigator call CreoPdmFilesSearchMatch
+```
