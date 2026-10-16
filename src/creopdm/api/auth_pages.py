@@ -1962,21 +1962,57 @@ def _product_form(
     return payload
 
 
-@router.get("/admin/products", response_class=HTMLResponse)
-def admin_products(request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)):
-    manager = _require_products_manager(request, ctx, db)
-    if _is_blocked(manager):
-        return manager
-    products = [
+def _require_manage_products_hub(
+    request: Request, ctx: AppContext, db: Session
+) -> User | HTMLResponse | RedirectResponse:
+    """Manage products hub: product editors, or anyone who can delete products."""
+    user_uuid = request.session.get(SESSION_USER_KEY)
+    user = ctx.user_accounts.get_by_uuid(db, str(user_uuid)) if user_uuid else None
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if not (
+        ctx.user_accounts.can_manage_products(user)
+        or ctx.user_accounts.can_utilities_delete_product(user)
+    ):
+        return HTMLResponse(
+            "<h1>403 Forbidden</h1><p>Product management access required.</p>",
+            status_code=403,
+        )
+    return user
+
+
+def _admin_product_rows(ctx: AppContext, db: Session):
+    return [
         product_to_response(p)
         for p in ctx.products.list_products(db, include_inactive=True, include_archived=True)
     ]
+
+
+@router.get("/admin/products", response_class=HTMLResponse)
+def admin_products(request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)):
+    manager = _require_manage_products_hub(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    return templates.TemplateResponse(
+        request,
+        "admin_products_hub.html",
+        {**_base_ctx(request, ctx, current_user=manager)},
+    )
+
+
+@router.get("/admin/products/edit", response_class=HTMLResponse)
+def admin_products_edit_list(
+    request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
+):
+    manager = _require_products_manager(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
     return templates.TemplateResponse(
         request,
         "admin_products.html",
         {
             **_base_ctx(request, ctx, current_user=manager),
-            "products": products,
+            "products": _admin_product_rows(ctx, db),
             **_lifecycle_form_ctx(),
         },
     )
@@ -2227,7 +2263,7 @@ def admin_product_create(
         )
         ctx.user_accounts.grant_product_access(db, manager, product)
         db.commit()
-        return RedirectResponse("/admin/products", status_code=303)
+        return RedirectResponse("/admin/products/edit", status_code=303)
     except CreoPDMError as exc:
         db.rollback()
         return templates.TemplateResponse(
@@ -2264,6 +2300,143 @@ def _copy_form_payload(summary: dict, **overrides) -> dict:
     return payload
 
 
+@router.get("/admin/products/copy", response_class=HTMLResponse)
+def admin_products_copy_list(
+    request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
+):
+    manager = _require_products_manager(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    return templates.TemplateResponse(
+        request,
+        "admin_products_copy.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "products": _admin_product_rows(ctx, db),
+            **_lifecycle_form_ctx(),
+        },
+    )
+
+
+def _promote_products_response(
+    request: Request,
+    ctx: AppContext,
+    db: Session,
+    manager: User,
+    *,
+    error: str | None = None,
+    success: str | None = None,
+    status_code: int = 200,
+):
+    return templates.TemplateResponse(
+        request,
+        "admin_products_promote.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "products": _admin_product_rows(ctx, db),
+            "error": error,
+            "success": success,
+            **_lifecycle_form_ctx(),
+        },
+        status_code=status_code,
+    )
+
+
+@router.get("/admin/products/promote", response_class=HTMLResponse)
+def admin_products_promote_page(
+    request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
+):
+    manager = _require_products_manager(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    return _promote_products_response(request, ctx, db, manager)
+
+
+@router.post("/admin/products/promote", response_class=HTMLResponse)
+def admin_products_promote(
+    request: Request,
+    product_id: str = Form(""),
+    state: str = Form(""),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_products_manager(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    pid = (product_id or "").strip()
+    if not pid or not (state or "").strip():
+        return _promote_products_response(
+            request,
+            ctx,
+            db,
+            manager,
+            error="Choose a product and a lifecycle state.",
+            status_code=400,
+        )
+    try:
+        product = ctx.products.get_product(db, pid)
+        ctx.products.update_product(
+            db,
+            product.uuid,
+            name=product.name,
+            number=product.number,
+            description=product.description,
+            state=state,
+        )
+        db.commit()
+        from creopdm.product_state import configured_product_state_labels
+
+        label = configured_product_state_labels().get(product.state, product.state)
+        return _promote_products_response(
+            request,
+            ctx,
+            db,
+            manager,
+            success=f"Saved {product.name} as {label}.",
+        )
+    except CreoPDMError as exc:
+        db.rollback()
+        return _promote_products_response(
+            request, ctx, db, manager, error=exc.message, status_code=400
+        )
+
+
+@router.get("/admin/products/delete", response_class=HTMLResponse)
+def admin_products_delete_page(
+    request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
+):
+    manager = _require_utilities_permission(
+        request,
+        ctx,
+        db,
+        check=ctx.user_accounts.can_utilities_delete_product,
+        message="Delete products required (utilities.delete_product).",
+    )
+    if _is_blocked(manager):
+        return manager
+    return _utilities_delete_products_response(request, ctx, db, manager)
+
+
+@router.post("/admin/products/delete", response_class=HTMLResponse)
+@router.post("/admin/utilities/delete-products", response_class=HTMLResponse)
+def admin_products_delete(
+    request: Request,
+    product_id: str = Form(""),
+    confirm_password: str = Form(""),
+    confirm: str = Form(""),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    return _delete_products_submit(
+        request,
+        ctx,
+        db,
+        product_id=product_id,
+        confirm_password=confirm_password,
+        confirm=confirm,
+    )
+
+
 @router.get("/admin/products/{product_uuid}/copy", response_class=HTMLResponse)
 def admin_product_copy_form(
     product_uuid: str,
@@ -2277,7 +2450,7 @@ def admin_product_copy_form(
     try:
         summary = ctx.products.copy_source_summary(db, product_uuid)
     except CreoPDMError:
-        return RedirectResponse("/admin/products", status_code=303)
+        return RedirectResponse("/admin/products/copy", status_code=303)
     return templates.TemplateResponse(
         request,
         "admin_product_form.html",
@@ -2311,7 +2484,7 @@ def admin_product_copy(
     try:
         summary = ctx.products.copy_source_summary(db, product_uuid)
     except CreoPDMError:
-        return RedirectResponse("/admin/products", status_code=303)
+        return RedirectResponse("/admin/products/copy", status_code=303)
     form = _copy_form_payload(
         summary,
         name=name,
@@ -2334,7 +2507,7 @@ def admin_product_copy(
         )
         ctx.user_accounts.grant_product_access(db, manager, product)
         db.commit()
-        return RedirectResponse("/admin/products", status_code=303)
+        return RedirectResponse("/admin/products/copy", status_code=303)
     except CreoPDMError as exc:
         db.rollback()
         return templates.TemplateResponse(
@@ -2366,7 +2539,7 @@ def admin_product_detail(
         # Include inactive rows so orphaned soft-deleted products can be Removed.
         product = ctx.products.load_product_for_delete(db, product_uuid)
     except CreoPDMError:
-        return RedirectResponse("/admin/products", status_code=303)
+        return RedirectResponse("/admin/products/edit", status_code=303)
     payload = product_to_response(product)
     return templates.TemplateResponse(
         request,
@@ -2397,7 +2570,6 @@ def admin_product_update(
     number: str = Form(""),
     description: str = Form(""),
     vault_folder: str = Form(""),
-    state: str = Form("IN_WORK"),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
@@ -2407,19 +2579,20 @@ def admin_product_update(
     try:
         product = ctx.products.get_product(db, product_uuid)
     except CreoPDMError:
-        return RedirectResponse("/admin/products", status_code=303)
+        return RedirectResponse("/admin/products/edit", status_code=303)
     form = _product_form(
         name=name,
         number=number,
         description=description,
         vault_folder=product.vault_folder or product.uuid,
-        state=state,
+        state=product.state,
         uuid=product.uuid,
     )
     try:
         from creopdm.utils.vault_folder import reject_vault_folder_change
 
         # Disabled inputs are omitted from POST; if vault_folder is forced in, reject renames.
+        # Lifecycle state is changed on Promote Products, not here.
         reject_vault_folder_change(product, vault_folder)
         ctx.products.update_product(
             db,
@@ -2427,10 +2600,9 @@ def admin_product_update(
             name=name,
             number=number or None,
             description=description or None,
-            state=state,
         )
         db.commit()
-        return RedirectResponse("/admin/products", status_code=303)
+        return RedirectResponse("/admin/products/edit", status_code=303)
     except CreoPDMError as exc:
         db.rollback()
         return templates.TemplateResponse(
@@ -2455,11 +2627,11 @@ def admin_product_delete_moved(
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
-    """Legacy edit-product delete URL → Utilities → Delete products."""
+    """Legacy edit-product delete URL → Manage products → Delete products."""
     manager = _require_products_manager(request, ctx, db)
     if _is_blocked(manager):
         return manager
-    return RedirectResponse("/admin/utilities/delete-products", status_code=303)
+    return RedirectResponse("/admin/products/delete", status_code=303)
 
 
 def _require_email_manager(
@@ -3303,7 +3475,7 @@ def admin_utilities_delete_products_page(
     )
     if _is_blocked(manager):
         return manager
-    return _utilities_delete_products_response(request, ctx, db, manager)
+    return RedirectResponse("/admin/products/delete", status_code=303)
 
 
 @router.get("/admin/utilities/audit", response_class=HTMLResponse)
@@ -3396,14 +3568,14 @@ def admin_utilities_audit_csv(
     )
 
 
-@router.post("/admin/utilities/delete-products", response_class=HTMLResponse)
-def admin_utilities_delete_products(
+def _delete_products_submit(
     request: Request,
-    product_id: str = Form(""),
-    confirm_password: str = Form(""),
-    confirm: str = Form(""),
-    ctx: AppContext = Depends(get_context),
-    db: Session = Depends(get_db),
+    ctx: AppContext,
+    db: Session,
+    *,
+    product_id: str,
+    confirm_password: str,
+    confirm: str,
 ):
     from creopdm.utils.danger_confirm import require_danger_password
 

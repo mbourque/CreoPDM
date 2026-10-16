@@ -376,6 +376,19 @@ Open still uses the agent to **materialize** files and Creo.JS / File > Open to 
 
 Compact list for Creo’s navigator pane (~350–450 px wide): **`/embed/explorer?product=<uuid or name>&file=<tip>&folder=<path>`**. It is a separate page (not the full Files UI). **Open** / **Checkout** / **Details** hand off to Creo’s **main** embedded browser (Creo.JS `SetURL`, or agent→Toolkit `GET /url?url=…` → `ProWindowURLShow`) with `/?product=…&select=…&action=open|checkout` so the normal Files Open chooser runs there — not inside the navigator. No hover thumbnails here (too narrow — they covered names). See [docs/user-interactions.md](docs/user-interactions.md) §18.
 
+## Manage products
+
+**Administration → Manage products** is the hub for product records (separate from the Files list).
+
+| Tile | What it does |
+|------|----------------|
+| **Edit Products** | Add a product, or change its name, number, and description. The vault folder is fixed after create. |
+| **Copy Products** | New product from another product’s current vault files: new id, **A.1**, **In Work**, and a clean Git history (the original is unchanged). **Use hash** locks a UUID as the vault name; uncheck it to type a name with no spaces. |
+| **Promote Products** | Change a product’s lifecycle state. The audit log records **Product state changed**. |
+| **Delete products** | Password confirm, then remove that product’s CreoPDM vault and unregister it. Needs `utilities.delete_product`. The old **Utilities → Delete products** address redirects here. |
+
+Copy records **Product copied** in the audit log (not **Product created**). Day-to-day file actions stay on the Files page. See [docs/user-interactions.md](docs/user-interactions.md).
+
 ## AI (Ask AI / check-in comments)
 
 CreoPDM can call a local **Ollama** model to draft check-in comments and Modifications “Ask AI” summaries from two revision outlines.

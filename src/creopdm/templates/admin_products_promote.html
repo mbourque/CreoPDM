@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Promote Products — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page admin-page">
+  <nav class="crumb">
+    {% if can_view_products %}
+    <a href="/">Products</a>
+    <span>/</span>
+    {% endif %}
+    <a href="/admin">Administration</a>
+    <span>/</span>
+    <a href="/admin/products">Manage products</a>
+    <span>/</span>
+    <span>Promote Products</span>
+  </nav>
+  <h1>Promote Products</h1>
+  <p class="muted">Change a product’s lifecycle state. Name, number, and description stay as they are.{% if can_manage_lifecycle_states %} Which operations each state allows is set under <a href="/admin/lifecycle">Administration → Lifecycle states</a>.{% endif %}</p>
+  {% if success %}<p class="ok">{{ success }}</p>{% endif %}
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+  <section class="settings-card admin-products-table">
+    <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th class="col-number">Number</th>
+          <th>Lifecycle state</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in products %}
+        <tr>
+          <td>
+            {{ p.name }}
+            {% if not p.active %}<span class="muted"> (inactive)</span>{% endif %}
+          </td>
+          <td class="col-number">{{ p.number or "—" }}</td>
+          <td>
+            <form method="post" action="/admin/products/promote" class="settings-form promote-state-form">
+              <input type="hidden" name="product_id" value="{{ p.uuid }}">
+              <label class="sr-only" for="promote-state-{{ p.uuid }}">Lifecycle state for {{ p.name }}</label>
+              <select name="state" id="promote-state-{{ p.uuid }}">
+                {% for key in product_states %}
+                <option value="{{ key }}" {% if p.state == key %}selected{% endif %}
+                        title="{{ product_state_descriptions.get(key, '') }}">{{ product_state_labels.get(key, key) }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="btn">Save</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" class="muted">No products yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </section>
+</article>
+{% endblock %}

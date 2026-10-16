@@ -9,7 +9,13 @@
     {% endif %}
     <a href="/admin">Administration</a>
     <span>/</span>
-    <a href="/admin/products">Products</a>
+    <a href="/admin/products">Manage products</a>
+    <span>/</span>
+    {% if mode == 'copy' %}
+    <a href="/admin/products/copy">Copy Products</a>
+    {% else %}
+    <a href="/admin/products/edit">Edit Products</a>
+    {% endif %}
     <span>/</span>
     <span>{% if mode == 'new' %}Add product{% elif mode == 'copy' %}Copy {{ form.source_name or form.name }}{% else %}{{ form.name }}{% endif %}</span>
   </nav>
@@ -39,7 +45,7 @@
       <p class="muted small">Leave blank to use the same History comment as Add{% if form.default_comment %}: {{ form.default_comment }}{% endif %}.</p>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Copy product</button>
-        <a class="btn" href="/admin/products">Back to list</a>
+        <a class="btn" href="/admin/products/copy">Back to Copy Products</a>
       </div>
     </section>
   </form>
@@ -72,7 +78,7 @@
       <p class="muted small">Default is <strong>In Work</strong>.{% if can_manage_lifecycle_states %} Permissions per state are configured under <a href="/admin/lifecycle">Administration → Lifecycle states</a>.{% else %} Permissions per state are configured under Administration → Lifecycle states.{% endif %}</p>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Create product</button>
-        <a class="btn" href="/admin/products">Back to list</a>
+        <a class="btn" href="/admin/products/edit">Back to Edit Products</a>
       </div>
     </section>
   </form>
@@ -93,25 +99,15 @@
         <input name="vault_folder" type="text" value="{{ form.vault_folder }}" readonly disabled
                title="Set when the product was created; cannot be changed.">
       </label>
-      <p class="muted small">Set at create; cannot be changed.</p>
-      <label>Lifecycle state
-        <select name="state">
-          {% for key in product_states %}
-          <option value="{{ key }}" {% if form.state == key %}selected{% endif %}
-                  title="{{ product_state_descriptions.get(key, '') }}">{{ product_state_labels.get(key, key) }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <p class="muted small">New products default to <strong>In Work</strong>.{% if can_manage_lifecycle_states %} Edit the matrix under <a href="/admin/lifecycle">Administration → Lifecycle states</a>.{% endif %}</p>
+      <p class="muted small">Set at create; cannot be changed. Change the lifecycle under <a href="/admin/products/promote">Promote Products</a>.</p>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Save</button>
-        <a class="btn" href="/admin/products/{{ form.uuid }}/copy">Copy product</a>
-        <a class="btn" href="/admin/products">Back to list</a>
+        <a class="btn" href="/admin/products/edit">Back to Edit Products</a>
       </div>
     </section>
   </form>
   {% if can_delete_product and can_utilities_delete_product %}
-  <p class="muted small" style="margin-top: 1rem;">To delete a product and its vault, use <a href="/admin/utilities/delete-products">Administration → Utilities → Delete products</a>.</p>
+  <p class="muted small" style="margin-top: 1rem;">To delete a product and its vault, use <a href="/admin/products/delete">Manage products → Delete products</a>.</p>
   {% endif %}
 {% endif %}
 </article>

@@ -446,7 +446,8 @@ def test_admin_can_open_settings(auth_client):
     assert 'href="/admin/products"' in hub.text
     assert 'href="/admin/email"' not in hub.text
     assert 'href="/admin/utilities"' in hub.text
-    assert "Email all users, site availability, compact vault history, Delete products, Audit log, and server health checks." in hub.text
+    assert "Email all users, site availability, compact vault history, Audit log, and server health checks." in hub.text
+    assert ">Manage products</a>" in hub.text
     assert "Server options hub: Open Creo models, Vault, file types, agent, database, Email, AI, and more." in hub.text
     assert "Availability, Open Creo models" not in hub.text
     # Admin chrome uses the same Creo pill as Files (not a bare "—").
@@ -500,7 +501,7 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert 'href="/admin/utilities/email-all"' in hub.text
     assert 'href="/admin/utilities/compact"' in hub.text
     assert 'href="/admin/utilities/rebuild-product"' in hub.text
-    assert 'href="/admin/utilities/delete-products"' in hub.text
+    assert 'href="/admin/utilities/delete-products"' not in hub.text
     assert 'href="/admin/utilities/audit"' in hub.text
     assert 'href="/admin/utilities/health"' in hub.text
     assert 'href="/admin/utilities/logs"' in hub.text
@@ -574,10 +575,13 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert 'name="repair_action" value="clear_metadata" checked' not in rebuild_page.text
     assert 'name="repair_action" value="rebuild_where_used" checked' not in rebuild_page.text
 
-    delete_page = auth_client.get("/admin/utilities/delete-products")
+    moved = auth_client.get("/admin/utilities/delete-products", follow_redirects=False)
+    assert moved.status_code == 303
+    assert moved.headers["location"] == "/admin/products/delete"
+    delete_page = auth_client.get("/admin/products/delete")
     assert delete_page.status_code == 200
     assert "Delete products" in delete_page.text
-    assert 'action="/admin/utilities/delete-products"' in delete_page.text
+    assert 'action="/admin/products/delete"' in delete_page.text
     assert 'id="utilities-delete-products-form"' in delete_page.text
 
     health = auth_client.get("/admin/utilities/health")
@@ -1787,7 +1791,8 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     hub = auth_client.get("/admin")
     assert hub.status_code == 200
     assert 'href="/admin/products"' in hub.text
-    assert "List every product" in hub.text or "Products</a>" in hub.text
+    assert ">Manage products</a>" in hub.text
+    assert "Edit, copy, promote, or delete products on this server." in hub.text
 
     created = auth_client.post(
         "/admin/products/new",
@@ -1800,9 +1805,16 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
         follow_redirects=False,
     )
     assert created.status_code == 303, created.text
-    assert created.headers["location"] == "/admin/products"
+    assert created.headers["location"] == "/admin/products/edit"
 
-    listed = auth_client.get("/admin/products")
+    hub_products = auth_client.get("/admin/products")
+    assert hub_products.status_code == 200
+    assert ">Edit Products</a>" in hub_products.text
+    assert ">Copy Products</a>" in hub_products.text
+    assert ">Promote Products</a>" in hub_products.text
+    assert 'href="/admin/products/delete"' in hub_products.text
+
+    listed = auth_client.get("/admin/products/edit")
     assert listed.status_code == 200
     assert "Admin Hub Product" in listed.text
     assert ">Created<" in listed.text
@@ -1816,10 +1828,13 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     assert 'value="Admin Hub Product"' in detail.text
     assert "Remove product" not in detail.text
     assert f'action="/admin/products/{product["uuid"]}/delete"' not in detail.text
-    assert 'href="/admin/utilities/delete-products"' in detail.text
+    assert 'href="/admin/products/delete"' in detail.text
+    assert 'href="/admin/utilities/delete-products"' not in detail.text
+    assert f'/admin/products/{product["uuid"]}/copy' not in detail.text
     assert detail.text.count("settings-form-wide") == 1
-    assert "Lifecycle state" in detail.text
-    assert 'name="state"' in detail.text
+    assert "Lifecycle state" not in detail.text
+    assert 'name="state"' not in detail.text
+    assert 'href="/admin/products/promote"' in detail.text
     assert 'name="read_only"' not in detail.text
     assert "Read only — block modifications" not in detail.text
     assert 'name="vault_folder"' in detail.text
@@ -1860,11 +1875,19 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     body = auth_client.get(f"/api/products/{product['uuid']}").json()
     assert body["name"] == "Admin Hub Renamed"
     assert body["vault_folder"] == original_vault
+    # Edit ignores lifecycle. Promote Products changes it.
+    assert body["state"] == "IN_WORK"
+    promoted = auth_client.post(
+        "/admin/products/promote",
+        data={"product_id": product["uuid"], "state": "IN_REVIEW"},
+    )
+    assert promoted.status_code == 200, promoted.text
+    body = auth_client.get(f"/api/products/{product['uuid']}").json()
     assert body["state"] == "IN_REVIEW"
     assert "read_only" not in body
     assert body["allows_mutation"] is False
 
-    listed = auth_client.get("/admin/products")
+    listed = auth_client.get("/admin/products/edit")
     assert "In Review" in listed.text
     assert "col-access" not in listed.text
 
@@ -1874,16 +1897,10 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     leftover = vault / "orphan-untracked.prt"
     leftover.write_bytes(b"not-in-git")
     state_only = auth_client.post(
-        f"/admin/products/{product['uuid']}",
-        data={
-            "name": "Admin Hub Renamed",
-            "number": "AH-2",
-            "description": "Updated",
-            "state": "RELEASED",
-        },
-        follow_redirects=False,
+        "/admin/products/promote",
+        data={"product_id": product["uuid"], "state": "RELEASED"},
     )
-    assert state_only.status_code == 303, state_only.text
+    assert state_only.status_code == 200, state_only.text
     assert "Could not record the product rename" not in (state_only.text or "")
     after = auth_client.get(f"/api/products/{product['uuid']}").json()
     assert after["state"] == "RELEASED"
@@ -1891,16 +1908,10 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
 
     # Restore IN_WORK before delete path.
     restored = auth_client.post(
-        f"/admin/products/{product['uuid']}",
-        data={
-            "name": "Admin Hub Renamed",
-            "number": "AH-2",
-            "description": "Updated",
-            "state": "IN_WORK",
-        },
-        follow_redirects=False,
+        "/admin/products/promote",
+        data={"product_id": product["uuid"], "state": "IN_WORK"},
     )
-    assert restored.status_code == 303, restored.text
+    assert restored.status_code == 200, restored.text
 
     bad_delete = auth_client.post(
         "/admin/utilities/delete-products",
@@ -1933,7 +1944,7 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
 def test_admin_products_hides_delete_tip_without_delete_permission(
     auth_client, auth_ctx, repo_parent
 ):
-    """Utilities → Delete products tip stays hidden without products.delete."""
+    """Manage products → Delete products tip stays hidden without products.delete."""
     from creopdm.auth_constants import (
         PERMISSION_PRODUCTS_MANAGE,
         PERMISSION_PRODUCTS_VIEW,
@@ -1978,16 +1989,16 @@ def test_admin_products_hides_delete_tip_without_delete_permission(
     product = auth_client.post("/api/products", json={"name": "Tip Gate"}).json()
 
     _login(auth_client, "editor", "EditorPass1")
-    listed = auth_client.get("/admin/products")
+    listed = auth_client.get("/admin/products/edit")
     assert listed.status_code == 200
     assert "Tip Gate" in listed.text
     assert "To delete a product and its vault" not in listed.text
-    assert 'href="/admin/utilities/delete-products"' not in listed.text
+    assert 'href="/admin/products/delete"' not in listed.text
 
     detail = auth_client.get(f"/admin/products/{product['uuid']}")
     assert detail.status_code == 200
     assert "To delete a product and its vault" not in detail.text
-    assert 'href="/admin/utilities/delete-products"' not in detail.text
+    assert 'href="/admin/products/delete"' not in detail.text
 
 
 @requires_git

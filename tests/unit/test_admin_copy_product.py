@@ -71,7 +71,7 @@ def test_admin_copy_product_is_a_fresh_add(auth_client, auth_ctx):
         follow_redirects=False,
     )
     assert created.status_code == 303, created.text
-    listed = auth_client.get("/admin/products")
+    listed = auth_client.get("/admin/products/copy")
     assert listed.status_code == 200
     assert ">Copy<" in listed.text
     source = next(p for p in auth_client.get("/api/products").json() if p["name"] == "Source Widget")
@@ -171,19 +171,13 @@ def test_admin_copy_product_is_a_fresh_add(auth_client, auth_ctx):
     (_vault(auth_ctx, source["vault_folder"]) / "trail.txt").write_text("session junk", encoding="utf-8")
 
     released = auth_client.post(
-        f"/admin/products/{source['uuid']}",
-        data={
-            "name": "Source Widget",
-            "number": "SW-1",
-            "description": "Original",
-            "state": "RELEASED",
-        },
-        follow_redirects=False,
+        "/admin/products/promote",
+        data={"product_id": source["uuid"], "state": "RELEASED"},
     )
-    assert released.status_code == 303, released.text
+    assert released.status_code == 200, released.text
 
     hub = auth_client.get("/admin")
-    assert "Create, copy, rename, or remove products." in hub.text
+    assert "Edit, copy, promote, or delete products on this server." in hub.text
 
     form = auth_client.get(f"/admin/products/{source['uuid']}/copy")
     assert form.status_code == 200, form.text
@@ -200,7 +194,8 @@ def test_admin_copy_product_is_a_fresh_add(auth_client, auth_ctx):
     )
     assert "A.1" in form.text
     edit = auth_client.get(f"/admin/products/{source['uuid']}")
-    assert f'/admin/products/{source["uuid"]}/copy' in edit.text
+    assert f'/admin/products/{source["uuid"]}/copy' not in edit.text
+    assert "Lifecycle state" not in edit.text
 
     same = auth_client.post(
         f"/admin/products/{source['uuid']}/copy",

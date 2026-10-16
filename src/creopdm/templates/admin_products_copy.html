@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Copy Products — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page admin-page">
+  <nav class="crumb">
+    {% if can_view_products %}
+    <a href="/">Products</a>
+    <span>/</span>
+    {% endif %}
+    <a href="/admin">Administration</a>
+    <span>/</span>
+    <a href="/admin/products">Manage products</a>
+    <span>/</span>
+    <span>Copy Products</span>
+  </nav>
+  <h1>Copy Products</h1>
+  <p class="muted">Pick a product. Copy makes a new product from its current vault files (new id, A.1, In Work, clean history). The original product is not changed.</p>
+
+  <section class="settings-card admin-products-table">
+    <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th class="col-number">Number</th>
+          <th class="col-state">State</th>
+          <th class="col-vault">Vault folder</th>
+          <th class="col-copy"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in products %}
+        <tr>
+          <td>
+            {{ p.name }}
+            {% if not p.active %}<span class="muted"> (inactive)</span>{% endif %}
+          </td>
+          <td class="col-number">{{ p.number or "—" }}</td>
+          <td class="col-state">{{ product_state_labels.get(p.state, p.state) }}</td>
+          <td class="mono col-vault" title="{{ p.vault_folder }}">{{ p.vault_folder }}</td>
+          <td class="col-copy"><a class="btn" href="/admin/products/{{ p.uuid }}/copy">Copy</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="muted">No products yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </section>
+</article>
+{% endblock %}

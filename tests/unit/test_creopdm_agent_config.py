@@ -32,6 +32,8 @@ def test_agent_config_health_interval_floor(tmp_path, monkeypatch):
 
 def test_agent_config_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setattr("creopdm_agent.config.default_data_dir", lambda: tmp_path)
+    # A developer shell often sets CREOPDM_URL; that override must not hide the file.
+    monkeypatch.delenv("CREOPDM_URL", raising=False)
     settings = AgentConfig(
         port=8777,
         pdm_url="http://linux-box:8765",
@@ -58,6 +60,7 @@ def test_apply_runtime_settings_notes_listen_change():
 
 def test_load_flat_settings_dialog_shape(tmp_path, monkeypatch):
     monkeypatch.setattr("creopdm_agent.config.default_data_dir", lambda: tmp_path)
+    monkeypatch.delenv("CREOPDM_URL", raising=False)
     from creopdm_agent.config import config_path
 
     path = config_path()

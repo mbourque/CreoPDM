@@ -485,7 +485,7 @@ class ProductService:
         )
         old_name = product.name
         state_changed = new_state is not None and new_state != old_state
-        # Lifecycle state on product Edit/Save is not matrix-gated (no Change Lifecycle
+        # Lifecycle state on Promote Products is not matrix-gated (no Change Lifecycle
         # State column) — admins with products.edit can leave Locked / any state.
 
         # State lives in the DB only — do not touch the vault Git repo.

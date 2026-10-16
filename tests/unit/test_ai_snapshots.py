@@ -564,7 +564,8 @@ def test_app_js_posts_ai_snapshot_soft_fail():
         "async function tryEraseModelsFromCreoSession(", 1
     )[0]
     assert "hostedCreoJS()" in can_gather
-    assert "CreoJS.gatherModelMetadata" not in can_gather
+    # The comment may name the missing API. The function must not call it.
+    assert "CreoJS.gatherModelMetadata(" not in can_gather
     assert "function aiFeaturesEnabled(" in app_script
     assert "aiFeaturesEnabled()" in script
     assert "AI features are turned off" in script

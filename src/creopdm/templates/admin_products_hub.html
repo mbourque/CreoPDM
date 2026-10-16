@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Manage products — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page admin-page admin-hub">
+  <nav class="crumb">
+    {% if can_view_products %}
+    <a href="/">Products</a>
+    <span>/</span>
+    {% endif %}
+    <a href="/admin">Administration</a>
+    <span>/</span>
+    <span>Manage products</span>
+  </nav>
+  <h1>Manage products</h1>
+  <p class="muted">Edit, copy, promote, or delete products on this server. Each tile is its own page.</p>
+
+  <div class="admin-tile-grid">
+    {% if can_manage_products %}
+    <section class="admin-tile">
+      <h2><a href="/admin/products/edit">Edit Products</a></h2>
+      <p>Change a product’s name, number, and description, or add a product.</p>
+    </section>
+    <section class="admin-tile">
+      <h2><a href="/admin/products/copy">Copy Products</a></h2>
+      <p>Make a new product from another product’s current vault files.</p>
+    </section>
+    <section class="admin-tile">
+      <h2><a href="/admin/products/promote">Promote Products</a></h2>
+      <p>Change a product’s lifecycle state.</p>
+    </section>
+    {% endif %}
+    {% if can_utilities_delete_product %}
+    <section class="admin-tile">
+      <h2><a href="/admin/products/delete">Delete products</a></h2>
+      <p>Delete a product’s CreoPDM vault and unregister it from the database.</p>
+    </section>
+    {% endif %}
+  </div>
+</article>
+{% endblock %}

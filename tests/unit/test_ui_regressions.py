@@ -2556,7 +2556,6 @@ def test_admin_hub_panel_fills_full_width():
     assert "can_utilities_email_users" in utilities
     assert "can_utilities_compact_product" in utilities
     assert "can_utilities_rebuild_product" in utilities
-    assert "can_utilities_delete_product" in utilities
     assert "can_utilities_audit" in utilities
     assert "can_utilities_health" in utilities
     assert "can_utilities_logs" in utilities
@@ -2564,7 +2563,7 @@ def test_admin_hub_panel_fills_full_width():
     assert 'href="/admin/utilities/email-all"' in utilities
     assert 'href="/admin/utilities/compact"' in utilities
     assert 'href="/admin/utilities/rebuild-product"' in utilities
-    assert 'href="/admin/utilities/delete-products"' in utilities
+    assert 'href="/admin/utilities/delete-products"' not in utilities
     assert 'href="/admin/utilities/audit"' in utilities
     assert 'href="/admin/utilities/health"' in utilities
     assert 'href="/admin/utilities/logs"' in utilities
@@ -2690,12 +2689,25 @@ def test_admin_hub_panel_fills_full_width():
     assert "Remove product" not in product_form
     assert '}/delete"' not in product_form
     assert "can_utilities_delete_product" in product_form
-    assert 'href="/admin/utilities/delete-products"' in product_form
+    assert 'href="/admin/products/delete"' in product_form
+    assert 'href="/admin/utilities/delete-products"' not in product_form
+    # Copy stays on its own page. The shared form still posts to /copy in copy mode.
+    assert ">Copy product</a>" not in product_form
+    edit_branch = product_form.split("{% else %}")[-1]
+    assert "/copy" not in edit_branch
+    assert 'href="/admin/products/promote"' in edit_branch
     products_list = (ROOT / "src" / "creopdm" / "templates" / "admin_products.html").read_text(
         encoding="utf-8"
     )
     assert "can_utilities_delete_product" in products_list
-    assert 'href="/admin/utilities/delete-products"' in products_list
+    assert 'href="/admin/products/delete"' in products_list
+    hub = (ROOT / "src" / "creopdm" / "templates" / "admin_products_hub.html").read_text(
+        encoding="utf-8"
+    )
+    assert ">Edit Products</a>" in hub
+    assert ">Copy Products</a>" in hub
+    assert ">Promote Products</a>" in hub
+    assert 'href="/admin/products/delete"' in hub
     health = (ROOT / "src" / "creopdm" / "templates" / "admin_utilities_health.html").read_text(
         encoding="utf-8"
     )
