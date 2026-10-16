@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -60,6 +61,31 @@ def _browser_bearer_ok(authorization: str | None) -> bool:
     """Page sends data-agent-token; require a non-trivial Bearer (not verified HMAC here)."""
     token = _bearer_token(authorization)
     return len(token) >= 16
+
+
+def decode_toolkit_body(raw: bytes) -> str:
+    """Toolkit may send cp1252 names (café as 0xE9). Prefer real UTF-8 first."""
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    try:
+        return raw.decode("cp1252")
+    except UnicodeDecodeError:
+        return raw.decode("cp1252", errors="replace")
+
+
+def toolkit_response_json(response: httpx.Response, *, url: str) -> object:
+    """Parse a Toolkit HTTP body. One decoder for health, collect, open, and url."""
+    text = decode_toolkit_body(bytes(response.content or b""))
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        snippet = text[:120]
+        raise HTTPException(
+            status_code=502,
+            detail=f"toolkit_bad_json: HTTP {response.status_code} {url} {snippet}",
+        ) from exc
 
 
 def _cors_headers(origin: str) -> dict[str, str]:
@@ -1289,13 +1315,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                 status_code=502,
                 detail=f"toolkit_unavailable: {exc}",
             ) from exc
-        try:
-            body = response.json()
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=502,
-                detail=f"toolkit_bad_json: HTTP {response.status_code}",
-            ) from exc
+        body = toolkit_response_json(response, url=url)
         if response.status_code >= 400:
             detail = body.get("error") if isinstance(body, dict) else None
             raise HTTPException(

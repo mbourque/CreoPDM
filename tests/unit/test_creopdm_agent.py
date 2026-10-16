@@ -2282,11 +2282,10 @@ def test_agent_toolkit_health_and_snapshot_proxy(tmp_path, monkeypatch):
 
     class FakeResponse:
         def __init__(self, status_code: int, body: dict):
-            self.status_code = status_code
-            self._body = body
+            import json
 
-        def json(self):
-            return self._body
+            self.status_code = status_code
+            self.content = json.dumps(body).encode("utf-8")
 
     class FakeClient:
         def __init__(self, *args, **kwargs):
@@ -2414,3 +2413,83 @@ def test_agent_toolkit_unavailable_returns_502(tmp_path, monkeypatch):
         response = client.get("/toolkit/health")
         assert response.status_code == 502
         assert "toolkit_unavailable" in response.json()["detail"]
+
+
+def test_toolkit_response_json_accepts_cp1252_and_utf8():
+    """café.prt may arrive as cp1252 0xE9. A real UTF-8 é (C3 A9) must stay é."""
+    import httpx
+    from fastapi import HTTPException
+
+    from creopdm_agent.server import toolkit_response_json
+
+    cp1252 = toolkit_response_json(
+        httpx.Response(200, content=b'{"ok": true, "model": {"fileName": "caf\xe9.prt"}}'),
+        url="http://127.0.0.1:8767/health",
+    )
+    assert cp1252["model"]["fileName"] == "café.prt"
+
+    utf8 = toolkit_response_json(
+        httpx.Response(
+            200,
+            content='{"ok": true, "model": {"fileName": "café.prt"}}'.encode("utf-8"),
+        ),
+        url="http://127.0.0.1:8767/health",
+    )
+    assert utf8["model"]["fileName"] == "café.prt"
+
+    try:
+        toolkit_response_json(
+            httpx.Response(200, content=b"<html>"),
+            url="http://127.0.0.1:8767/health",
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 502
+        assert "toolkit_bad_json" in str(exc.detail)
+        assert "http://127.0.0.1:8767/health" in str(exc.detail)
+        assert "<html>" in str(exc.detail)
+    else:
+        raise AssertionError("non-JSON Toolkit body should be toolkit_bad_json")
+
+
+def test_toolkit_proxy_rejects_non_object_and_open_uses_same_decoder(tmp_path, monkeypatch):
+    """Health, open, url, and collect all parse through toolkit_response_json."""
+    import httpx
+
+    root = tmp_path / "cache"
+    root.mkdir()
+    settings = AgentConfig(
+        host="127.0.0.1",
+        port=8766,
+        local_root=str(root),
+        toolkit_base_url="http://127.0.0.1:8767",
+    )
+    app = create_agent_app(settings)
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url, headers=None):
+            if url.rstrip("/").endswith("/health"):
+                return httpx.Response(200, content=b"[1, 2]")
+            if "/open?" in url:
+                return httpx.Response(
+                    200,
+                    content=b'{"ok": true, "fileName": "caf\xe9.prt"}',
+                )
+            return httpx.Response(200, content=b'{"ok": true}')
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    with TestClient(app) as client:
+        health = client.get("/toolkit/health")
+        assert health.status_code == 502
+        assert health.json()["detail"] == "toolkit_bad_json: not an object"
+        opened = client.get("/toolkit/open", params={"fileName": "cafe.prt"})
+        assert opened.status_code == 200, opened.text
+        assert opened.json()["toolkit"]["fileName"] == "café.prt"
