@@ -497,7 +497,7 @@ Use a normal browser for these checks. You need the matching Administration perm
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Open **Membership** (under **Manage products**) | Show a hub with **By product** and **By user**, plus a short products summary. Needs `products.assign` | Put product checkboxes on the user Add/Edit form; leave the tile on the Administration home |
+| Open **Membership** (first tile under **Manage products**) | Show a hub with **By product** and **By user**, plus a short products summary. Needs `products.assign` | Put product checkboxes on the user Add/Edit form; leave the tile on the Administration home; list it after Edit Products |
 | Open **By user** → a person | Let you set **All products** or pick specific products, then Save | Leave Files still showing every product when that user is restricted |
 | Open **By product** → a product | Let you add/remove members for that product | |
 

@@ -12,9 +12,15 @@
     <span>Manage products</span>
   </nav>
   <h1>Manage products</h1>
-  <p class="muted">Edit, copy, promote, delete, compact, rebuild, or set who can open products. Each tile is its own page.</p>
+  <p class="muted">Set who can open products, or edit, copy, promote, delete, compact, or rebuild. Each tile is its own page.</p>
 
   <div class="admin-tile-grid">
+    {% if can_assign_products %}
+    <section class="admin-tile">
+      <h2><a href="/admin/membership">Membership</a></h2>
+      <p>Decide who can open which products (by product or by user).</p>
+    </section>
+    {% endif %}
     {% if can_manage_products %}
     <section class="admin-tile">
       <h2><a href="/admin/products/edit">Edit Products</a></h2>
@@ -27,12 +33,6 @@
     <section class="admin-tile is-caution">
       <h2><a href="/admin/products/promote">Promote Products</a></h2>
       <p>Change a product’s lifecycle state.</p>
-    </section>
-    {% endif %}
-    {% if can_assign_products %}
-    <section class="admin-tile">
-      <h2><a href="/admin/membership">Membership</a></h2>
-      <p>Decide who can open which products (by product or by user).</p>
     </section>
     {% endif %}
     {% if can_utilities_delete_product %}

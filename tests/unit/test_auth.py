@@ -1807,7 +1807,7 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     assert hub.status_code == 200
     assert 'href="/admin/products"' in hub.text
     assert ">Manage products</a>" in hub.text
-    assert "Edit, copy, promote, delete, compact, rebuild, or set membership." in hub.text
+    assert "Membership, then edit, copy, promote, delete, compact, or rebuild." in hub.text
 
     created = auth_client.post(
         "/admin/products/new",
