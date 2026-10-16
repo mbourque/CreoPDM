@@ -901,3 +901,130 @@ def test_batch_checkout_unique_index_race_fails_only_that_item(client, app, repo
     assert client.get(f"/api/objects/{free['uuid']}").json()["owned_by_me"] is True
 
 
+@requires_git
+def test_batch_undo_does_not_hash_and_keeps_newer_save(client, repo_parent, data_dir, monkeypatch):
+    """Bulk undo only releases locks: no SHA-256 reads, and a newer Creo save stays for check-in."""
+    from creopdm.services import workspace_service
+
+    product = client.post("/api/products", json={"name": "Undo Bulk Arm"}).json()
+    ids = [_add_part(client, product, f"part{n}.prt", f"p{n}".encode())["uuid"] for n in range(3)]
+    assert client.post("/api/objects/batch/checkout", json={"object_ids": ids}).status_code == 200
+    vault = data_dir / "vaults" / product["uuid"]
+    (vault / "part0.prt.2").write_bytes(b"creo-save")
+    calls: list[str] = []
+    real = workspace_service.calculate_sha256
+
+    def counting(path):
+        calls.append(str(path))
+        return real(path)
+
+    monkeypatch.setattr(workspace_service, "calculate_sha256", counting)
+    result = client.post("/api/objects/batch/undo-checkout", json={"object_ids": ids})
+    assert result.status_code == 200, result.text
+    body = result.json()
+    assert body["failed"] == []
+    assert [item["status"] for item in body["ok"]] == ["cancelled"] * 3
+    assert [item["uuid"] for item in body["ok"]] == ids
+    assert calls == []
+    assert (vault / "part0.prt.2").read_bytes() == b"creo-save"
+    for object_id in ids:
+        assert client.get(f"/api/objects/{object_id}").json()["owned_by_me"] is False
+
+
+@requires_git
+def test_batch_undo_reports_each_state(client, repo_parent, identity):
+    """Mine is cancelled, never-checked-out is already available, someone else's is refused."""
+    product = client.post("/api/products", json={"name": "Undo State Arm"}).json()
+    mine = _add_part(client, product, "mine.prt", b"mine")
+    theirs = _add_part(client, product, "theirs.prt", b"theirs")
+    idle = _add_part(client, product, "idle.prt", b"idle")
+    assert client.post(f"/api/objects/{mine['uuid']}/checkout").status_code == 200
+    identity.become("Bob", "ENG-PC-18")
+    assert client.post(f"/api/objects/{theirs['uuid']}/checkout").status_code == 200
+    result = client.post(
+        "/api/objects/batch/undo-checkout",
+        json={"object_ids": [mine["uuid"], theirs["uuid"], idle["uuid"]]},
+    )
+    assert result.status_code == 200, result.text
+    body = result.json()
+    statuses = {item["uuid"]: item["status"] for item in body["ok"]}
+    assert statuses == {theirs["uuid"]: "cancelled", idle["uuid"]: "already_available"}
+    assert [item["uuid"] for item in body["failed"]] == [mine["uuid"]]
+    assert body["failed"][0]["code"] == "CHECKOUT_OWNERSHIP"
+
+
+@requires_git
+def test_batch_force_undo_releases_other_users_files(client, repo_parent, identity, data_dir):
+    """Bulk Force Undo: no new version, previous owner reported per file."""
+    product = client.post("/api/products", json={"name": "Force Bulk Arm"}).json()
+    first = _add_part(client, product, "first.prt", b"first")
+    second = _add_part(client, product, "second.prt", b"second")
+    idle = _add_part(client, product, "idle.prt", b"idle")
+    assert (
+        client.post(
+            "/api/objects/batch/checkout", json={"object_ids": [first["uuid"], second["uuid"]]}
+        ).status_code
+        == 200
+    )
+    owner = client.get(f"/api/objects/{first['uuid']}").json()["checkout_user"]
+    vault = data_dir / "vaults" / (product.get("vault_folder") or product["uuid"])
+    git = GitService()
+    head_before = git.get_head(vault)
+    identity.become("Bob", "ENG-PC-18")
+    result = client.post(
+        "/api/objects/batch/force-undo-checkout",
+        json={"object_ids": [first["uuid"], second["uuid"], idle["uuid"]]},
+    )
+    assert result.status_code == 200, result.text
+    body = result.json()
+    assert body["failed"] == []
+    rows = {item["uuid"]: item for item in body["ok"]}
+    assert rows[first["uuid"]]["status"] == "force_cancelled"
+    assert rows[second["uuid"]]["status"] == "force_cancelled"
+    assert rows[idle["uuid"]]["status"] == "already_available"
+    assert git.get_head(vault) == head_before
+    # previous_user is not in the API response (it feeds the owner email); the audit
+    # trail records who held each lock.
+    import json
+
+    from creopdm.constants import ActivityAction
+    from creopdm.models.activity import Activity
+    from sqlalchemy import select
+
+    with client.app.state.ctx.session_factory() as db:
+        overrides = list(
+            db.scalars(
+                select(Activity).where(Activity.action == ActivityAction.CHECKOUT_OVERRIDE.value)
+            ).all()
+        )
+    assert len(overrides) == 2
+    for row in overrides:
+        details = json.loads(row.details_json or "{}")
+        assert details["previous_user"] == owner
+        assert details["filename"] in {"first.prt", "second.prt"}
+
+
+@requires_git
+def test_batch_undo_blocked_by_product_state_fails_only_releases(client, repo_parent):
+    """Gate failures apply to files that need releasing; already-available files stay ok."""
+    product = client.post("/api/products", json={"name": "Undo Lock Arm"}).json()
+    held = _add_part(client, product, "held.prt", b"held")
+    idle = _add_part(client, product, "idle.prt", b"idle")
+    assert client.post(f"/api/objects/{held['uuid']}/checkout").status_code == 200
+    ctx = client.app.state.ctx
+    with ctx.session_factory() as db:
+        loaded = ctx.products.get_product(db, product["uuid"])
+        loaded.state = "IN_REVIEW"
+        db.commit()
+    result = client.post(
+        "/api/objects/batch/undo-checkout",
+        json={"object_ids": [held["uuid"], idle["uuid"]]},
+    )
+    assert result.status_code == 200, result.text
+    body = result.json()
+    assert [item["uuid"] for item in body["ok"]] == [idle["uuid"]]
+    assert body["ok"][0]["status"] == "already_available"
+    assert [item["uuid"] for item in body["failed"]] == [held["uuid"]]
+    assert "In Review" in body["failed"][0]["message"]
+
+

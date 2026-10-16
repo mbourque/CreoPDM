@@ -46,6 +46,31 @@ def test_checkout_many_is_bulk_not_per_file_checkout():
     assert "_insert_checkouts" in group
 
 
+def test_undo_and_force_undo_are_bulk_not_per_file():
+    service = _read("services", "checkout_service.py")
+    undo = service[service.index("def undo_checkout_many(") : service.index("def _release_many(")]
+    assert "_release_many" in undo
+    assert "self.undo_checkout(session" not in undo
+    assert "self.force_undo_checkout(session" not in undo
+    group = service[service.index("def _release_group(") : service.index("def _release_one(")]
+    assert "release_workspace_path" in group
+    assert "_apply_release" in group
+    workspace = _read("services", "workspace_service.py")
+    release = workspace[
+        workspace.index("    def release_workspace_path(") : workspace.index("    def locate_content(")
+    ]
+    # Undo never restores bytes: the vault-file fast path must not hash.
+    assert "_file_modified" not in release
+    assert "calculate_sha256" not in release
+
+
+def test_bulk_undo_chunks_are_large_everywhere():
+    for name in ("checkout.js", "checkin.js"):
+        js = _read("static", "js", name)
+        assert "UNDO_CHUNK = 250" in js
+    assert "FORCE_CHUNK = 250" in _read("static", "js", "checkout.js")
+
+
 def test_materialize_skips_second_hash_when_workspace_is_the_vault():
     workspace = _read("services", "workspace_service.py")
     start = workspace.index("    def materialize(")

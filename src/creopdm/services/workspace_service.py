@@ -483,6 +483,20 @@ class WorkspaceService:
             return destination
         return self.materialize(product, obj, writable=True, keep_local=True)
 
+    def release_workspace_path(self, product: Product, obj: EngineeringObject) -> Path:
+        """Working copy after Undo / Force Undo Checkout.
+
+        Same result as ``materialize(writable=False, overwrite_modified=True)`` — which
+        never restores bytes when the tip is the vault file — without hashing the file.
+        Anything else (missing tip, workspace that is not the vault) uses ``materialize``.
+        """
+        source = self.repository_file(product, obj.relative_path)
+        destination = self.workspace_file_path(product, obj)
+        if destination == source and destination.is_file():
+            self._try_set_mode(destination, False)
+            return destination
+        return self.materialize(product, obj, writable=False, overwrite_modified=True)
+
     def locate_content(self, product_or_folder: Product | str, obj: EngineeringObject) -> Path:
         extras = self._cad_extensions()
         for directory in self._workspace_search_dirs(product_or_folder, obj):

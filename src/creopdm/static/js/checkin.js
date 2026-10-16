@@ -877,7 +877,7 @@ window.__creopdmModules.checkin = {
           result = { ok: [], failed: [] };
         }
         if (productScopeSubmit && undoIds.length) {
-          const UNDO_CHUNK = 50;
+          const UNDO_CHUNK = 250;
           const undoResult = await withBusy(
             `Releasing unchanged checkouts… 0 of ${undoIds.length}`,
             async () => {

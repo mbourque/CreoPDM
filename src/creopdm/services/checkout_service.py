@@ -495,66 +495,203 @@ class CheckoutService:
             return previous_user
 
     def undo_checkout_many(self, session: Session, object_uuids: list[str]) -> dict[str, list]:
+        """Bulk Undo Checkout: one gate, one lock, one flush per product."""
+        return self._release_many(session, object_uuids, force=False)
+
+    def force_undo_checkout_many(self, session: Session, object_uuids: list[str]) -> dict[str, list]:
+        """Bulk Force Undo Checkout (any user's lock); same bulk path as Undo."""
+        return self._release_many(session, object_uuids, force=True)
+
+    def _release_many(
+        self,
+        session: Session,
+        object_uuids: list[str],
+        *,
+        force: bool,
+    ) -> dict[str, list]:
+        """Release checkouts in bulk. Results match the single-file Undo / Force Undo.
+
+        Undo never restores bytes (a newer Creo save stays for check-in), so a tip that is
+        the vault file is only made read-only: no hashing, no copy, no directory scan.
+        """
+        started = time.perf_counter()
         ok: list[dict[str, str]] = []
         failed: list[dict[str, str]] = []
         user = self._users.get_current_user()
+        ordered: list[str] = []
         seen: set[str] = set()
         for object_uuid in object_uuids:
             if not object_uuid or object_uuid in seen:
                 continue
             seen.add(object_uuid)
-            filename = object_uuid
-            try:
-                obj = self._objects.get_object(session, object_uuid)
-                filename = obj.filename
-                existing = self.active_for(session, obj.id)
+            ordered.append(object_uuid)
+        by_uuid = {obj.uuid: obj for obj in self._objects.get_objects(session, ordered)}
+        groups: dict[int, list[EngineeringObject]] = {}
+        for object_uuid in ordered:
+            obj = by_uuid.get(object_uuid)
+            if obj is None:
+                missing = ObjectNotFoundError("Object not found.", details={"uuid": object_uuid})
+                failed.append(batch_failure(object_uuid, object_uuid, missing))
+                continue
+            groups.setdefault(obj.product_id, []).append(obj)
+        for group in groups.values():
+            self._release_group(session, group, user, ok, failed, force=force)
+        rank = {object_uuid: index for index, object_uuid in enumerate(ordered)}
+        ok.sort(key=lambda row: rank.get(row["uuid"], 0))
+        failed.sort(key=lambda row: rank.get(row["uuid"], 0))
+        logger.info(
+            "%s: %s ok, %s failed in %.2fs (%s requested)",
+            "force_undo_checkout_many" if force else "undo_checkout_many",
+            len(ok),
+            len(failed),
+            time.perf_counter() - started,
+            len(ordered),
+        )
+        return {"ok": ok, "failed": failed}
+
+    def _release_group(
+        self,
+        session: Session,
+        group: list[EngineeringObject],
+        user: UserIdentity,
+        ok: list[dict[str, str]],
+        failed: list[dict[str, str]],
+        *,
+        force: bool,
+    ) -> None:
+        product = group[0].product
+        if product is not None:
+            session.refresh(product)
+        gate_error: CreoPDMError | None = None
+        try:
+            ensure_product_allows(
+                product,
+                "checkout",
+                action="force undo checkout" if force else "undo checkout",
+            )
+        except CreoPDMError as exc:
+            # Only files that need releasing fail on the gate; "already available" and
+            # "not yours" keep the same answer they had before.
+            gate_error = exc
+        with self._locks.acquire(product.uuid):
+            active = self.active_map(session, [obj.id for obj in group])
+            releasing: list[tuple[EngineeringObject, Checkout]] = []
+            for obj in group:
+                existing = active.get(obj.id)
                 if existing is None:
-                    ok.append({"uuid": object_uuid, "filename": filename, "status": "already_available"})
+                    ok.append({"uuid": obj.uuid, "filename": obj.filename, "status": "already_available"})
                     continue
-                if existing.user_name != user.user_name:
-                    raise CheckoutOwnershipError(
+                if not force and existing.user_name != user.user_name:
+                    other = CheckoutOwnershipError(
                         f"{obj.filename} is checked out by {existing.user_name}.",
                         details={"user": existing.user_name, "machine": existing.machine_name},
                     )
-                self.undo_checkout(session, object_uuid)
-                ok.append({"uuid": object_uuid, "filename": filename, "status": "cancelled"})
-            except Exception as exc:
-                if not isinstance(exc, CreoPDMError):
-                    logger.exception("Undo checkout failed for %s", object_uuid)
-                failed.append(batch_failure(object_uuid, filename, exc))
-        return {"ok": ok, "failed": failed}
-
-    def force_undo_checkout_many(self, session: Session, object_uuids: list[str]) -> dict[str, list]:
-        ok: list[dict[str, str]] = []
-        failed: list[dict[str, str]] = []
-        seen: set[str] = set()
-        for object_uuid in object_uuids:
-            if not object_uuid or object_uuid in seen:
-                continue
-            seen.add(object_uuid)
-            filename = object_uuid
-            try:
-                obj = self._objects.get_object(session, object_uuid)
-                filename = obj.filename
-                existing = self.active_for(session, obj.id)
-                if existing is None:
-                    ok.append({"uuid": object_uuid, "filename": filename, "status": "already_available"})
+                    failed.append(batch_failure(obj.uuid, obj.filename, other))
                     continue
-                previous_user = existing.user_name
-                self.force_undo_checkout(session, object_uuid)
-                ok.append(
-                    {
-                        "uuid": object_uuid,
-                        "filename": filename,
-                        "status": "force_cancelled",
-                        "previous_user": previous_user,
-                    }
-                )
+                if gate_error is not None:
+                    failed.append(batch_failure(obj.uuid, obj.filename, gate_error))
+                    continue
+                releasing.append((obj, existing))
+            if not releasing:
+                return
+            prepared: list[tuple[EngineeringObject, Checkout, Path]] = []
+            for obj, record in releasing:
+                try:
+                    path = self._workspaces.release_workspace_path(product, obj)
+                except Exception as exc:
+                    if not isinstance(exc, CreoPDMError):
+                        logger.exception("Undo checkout failed for %s", obj.uuid)
+                    failed.append(batch_failure(obj.uuid, obj.filename, exc))
+                    continue
+                prepared.append((obj, record, path))
+            self._apply_release(session, product, user, prepared, ok, failed, force=force)
+
+    def _release_one(
+        self,
+        session: Session,
+        product,
+        user: UserIdentity,
+        obj: EngineeringObject,
+        record: Checkout,
+        path: Path,
+        *,
+        force: bool,
+    ) -> dict[str, str]:
+        previous_user = record.user_name
+        previous_machine = record.machine_name
+        record.status = CheckoutStatus.CANCELLED.value
+        details: dict[str, object] = {
+            "filename": obj.filename,
+            "object_uuid": obj.uuid,
+            "workspace": str(path),
+        }
+        if force:
+            details["previous_user"] = previous_user
+            details["previous_machine"] = previous_machine
+        self._activities.record(
+            session,
+            ActivityAction.CHECKOUT_OVERRIDE if force else ActivityAction.CHECKOUT_CANCELLED,
+            user,
+            product_id=product.id,
+            object_id=obj.id,
+            details=details,
+            product_uuid=product.uuid,
+            product_name=product.name,
+            object_uuid=obj.uuid,
+            object_filename=obj.filename,
+            flush=False,
+        )
+        if force:
+            return {
+                "uuid": obj.uuid,
+                "filename": obj.filename,
+                "status": "force_cancelled",
+                "previous_user": previous_user,
+            }
+        return {"uuid": obj.uuid, "filename": obj.filename, "status": "cancelled"}
+
+    def _apply_release(
+        self,
+        session: Session,
+        product,
+        user: UserIdentity,
+        prepared: list[tuple[EngineeringObject, Checkout, Path]],
+        ok: list[dict[str, str]],
+        failed: list[dict[str, str]],
+        *,
+        force: bool,
+    ) -> None:
+        """Flip every row in one flush; on any error retry per item with savepoints."""
+        if not prepared:
+            return
+        rows: list[dict[str, str]] = []
+        try:
+            with session.begin_nested():
+                for obj, record, path in prepared:
+                    rows.append(
+                        self._release_one(session, product, user, obj, record, path, force=force)
+                    )
+                session.flush()
+        except Exception:
+            logger.warning(
+                "Bulk release failed for %s; retrying one file at a time",
+                product.uuid,
+                exc_info=True,
+            )
+        else:
+            ok.extend(rows)
+            return
+        for obj, record, path in prepared:
+            try:
+                with session.begin_nested():
+                    row = self._release_one(session, product, user, obj, record, path, force=force)
+                    session.flush()
             except Exception as exc:
                 if not isinstance(exc, CreoPDMError):
-                    logger.exception("Force undo checkout failed for %s", object_uuid)
-                failed.append(batch_failure(object_uuid, filename, exc))
-        return {"ok": ok, "failed": failed}
+                    logger.exception("Undo checkout failed for %s", obj.uuid)
+                failed.append(batch_failure(obj.uuid, obj.filename, exc))
+                continue
+            ok.append(row)
 
     def release_mine(self, session: Session, obj: EngineeringObject) -> None:
         """Drop my active checkout without restoring workspace files."""

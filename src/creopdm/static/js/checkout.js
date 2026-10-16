@@ -208,7 +208,8 @@ window.__creopdmModules.checkout = {
         }
         return;
       }
-      const UNDO_CHUNK = 50;
+      // Server undo is bulk (one gate, one flush per request): larger chunks are cheap.
+      const UNDO_CHUNK = 250;
       const undoResult = await withBusy(`Cancelling checkout… 0 of ${count}`, async () => {
         const merged = { ok: [], failed: [] };
         for (let start = 0; start < objectIds.length; start += UNDO_CHUNK) {
@@ -270,7 +271,7 @@ window.__creopdmModules.checkout = {
         }
         return;
       }
-      const FORCE_CHUNK = 50;
+      const FORCE_CHUNK = 250;
       const forceResult = await withBusy(`Force undoing checkout… 0 of ${count}`, async () => {
         const merged = { ok: [], failed: [] };
         for (let start = 0; start < objectIds.length; start += FORCE_CHUNK) {
