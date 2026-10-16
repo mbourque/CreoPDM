@@ -730,10 +730,14 @@ def test_product_dialog_has_vault_folder_and_use_hash():
     css = APP_CSS.read_text(encoding="utf-8")
     assert ".product-vault-fields .checkbox-row" in css
     assert "flex-direction: row" in css.split(".product-vault-fields .checkbox-row", 1)[1].split("}", 1)[0]
-    # Admin copy must not stretch the UUID box across the full-width settings card.
-    vault_on_form = css.split(".settings-form .product-vault-fields {", 1)[1].split("}", 1)[0]
-    assert "480px - 2.2rem" in vault_on_form
-    assert "#eef2f5" in css.split(".settings-form .product-vault-fields input:disabled", 1)[1].split("}", 1)[0]
+    # Vault name matches the New product box and stays full width. :read-only must
+    # not paint the Use hash checkbox (checkboxes match :read-only and showed not-allowed).
+    assert "#product-vault-folder" in css
+    folder_box = css.split("#product-vault-folder {", 1)[1].split("}", 1)[0]
+    assert "width: 100%" in folder_box
+    assert "border-radius: 4px" in folder_box
+    assert "input:read-only" not in css.split(".product-vault-fields", 1)[1].split(".dialog input", 1)[0]
+    assert "cursor: pointer" in css.split(".product-vault-fields .checkbox-row input[type=\"checkbox\"]", 1)[1].split("}", 1)[0]
 
 
 def test_admin_edit_vault_folder_is_readonly_disabled():
