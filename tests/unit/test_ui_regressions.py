@@ -513,6 +513,9 @@ def test_metadata_gear_items_require_creo_session():
     assert 'reason: harness ? "harness"' in meta_js
     assert "attachCollectLocalPaths" in loop
     assert "materializeCheckedOutToAgentCache(ids" in loop
+    assert "preserveNewer: true" in loop
+    assert "collectPathIsUnsavedTip" in push
+    assert "left local modifications" in push
     assert "Updating local workspace…" in loop
     assert "Empty local workspace" in loop
     assert "busyAlready" in loop
@@ -532,6 +535,7 @@ def test_metadata_gear_items_require_creo_session():
         ws_js, "async function prepareLocalPathForMetadata(", "async function gatherViaToolkitAgent("
     )
     assert "metadataNeedsOpenDependencies(filename)" in prepare_meta
+    assert "replace_newer: false" in prepare_meta
     assert "include_dependencies: includeDependencies" in prepare_meta
     assert "include_dependencies: false" not in prepare_meta
     assert "include_dependencies: true" not in prepare_meta

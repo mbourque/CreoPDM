@@ -28,6 +28,9 @@ window.__creopdmModules.metadata = {
     const isCreoMetadataCandidate = shell.isCreoMetadataCandidate;
     const looksLikeLocalWindowsPath = shell.looksLikeLocalWindowsPath;
     const prepareLocalPathForMetadata = shell.prepareLocalPathForMetadata;
+    const PathBasename = shell.PathBasename;
+    const logicalUploadName = shell.logicalUploadName;
+    const creoSaveNumber = shell.creoSaveNumber;
     const attachCollectLocalPaths = shell.attachCollectLocalPaths;
     const materializeCheckedOutToAgentCache = shell.materializeCheckedOutToAgentCache;
     const gatherCreoMetadataForFilename = shell.gatherCreoMetadataForFilename;
@@ -456,6 +459,16 @@ window.__creopdmModules.metadata = {
       });
     }
 
+    function collectPathIsUnsavedTip(filePath, vaultFilename) {
+      const base = PathBasename(filePath);
+      const vault = PathBasename(vaultFilename);
+      if (!base || !vault || typeof creoSaveNumber !== "function") return false;
+      const logical = String(logicalUploadName(base) || base).toLowerCase();
+      const vaultLogical = String(logicalUploadName(vault) || vault).toLowerCase();
+      if (logical !== vaultLogical) return false;
+      return creoSaveNumber(base) > creoSaveNumber(vault);
+    }
+
     async function pushOneCreoMetadataTarget(target, options) {
       // No per-file JS timeout — large assemblies (e.g. 844j.asm) can take many
       // minutes in Creo. Skipping them loses the metadata we care about most.
@@ -470,6 +483,11 @@ window.__creopdmModules.metadata = {
         }
         if (!filePath) {
           return { ok: false, reason: "materialize_failed" };
+        }
+        // A higher local .N is the unsaved Modified tip. Do not read it onto the
+        // checked-in revision, and do not treat that skip as a failed collect.
+        if (collectPathIsUnsavedTip(filePath, target.filename)) {
+          return { ok: true, reason: "left local modifications" };
         }
         let snapshot = await gatherCreoMetadataForFilename(target.filename, filePath, {
           deferErase: opts.deferErase !== false,
@@ -628,7 +646,7 @@ window.__creopdmModules.metadata = {
                 if (total <= 1) return;
                 setBusyMessage(`Updating local workspace… ${done} of ${total}`);
                 publishBusyMessage(`Updating local workspace… ${done} of ${total}`);
-              });
+              }, { preserveNewer: true });
             } catch {
               /* per-tip prepareLocalPathForMetadata still works */
             }

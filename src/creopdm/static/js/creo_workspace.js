@@ -110,7 +110,8 @@ window.__creopdmModules.creo_workspace = {
         const openSpec = await materializeViaAgent(
           {
             ...prepared,
-            replace_newer: Boolean(prepared.replace_newer),
+            // Collect must not trash a higher local .N (the unsaved Modified tip).
+            replace_newer: false,
           },
           // Keep Collect's "N of M" busy text — do not flash workspace-up-to-date.
           { quietBusy: true }
@@ -646,7 +647,7 @@ window.__creopdmModules.creo_workspace = {
       return response.json();
     }
 
-    async function materializeCheckedOutToAgentCache(objectIds, onProgress) {
+    async function materializeCheckedOutToAgentCache(objectIds, onProgress, options) {
       const ids = [...new Set((objectIds || []).filter(Boolean))];
       if (!ids.length) return { agentOffline: false, ok: 0, failed: 0 };
       const agent = await probeCreoAgent();
@@ -676,6 +677,7 @@ window.__creopdmModules.creo_workspace = {
           /* fall back to per-file download */
         }
       }
+      const preserveNewer = Boolean(options && options.preserveNewer);
       let ok = 0;
       let failed = 0;
       for (let i = 0; i < ids.length; i += 1) {
@@ -692,7 +694,9 @@ window.__creopdmModules.creo_workspace = {
             failed += 1;
             continue;
           }
-          await materializeViaAgent(prepared);
+          await materializeViaAgent(
+            preserveNewer ? { ...prepared, replace_newer: false } : prepared
+          );
           ok += 1;
         } catch {
           failed += 1;
