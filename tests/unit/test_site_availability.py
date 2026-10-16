@@ -167,7 +167,7 @@ def test_unavailable_hides_pages_from_viewer_keeps_api_and_admin(auth_client, au
     settings_hub = auth_client.get("/settings")
     assert settings_hub.status_code == 200
     assert 'href="/settings/availability"' in settings_hub.text
-    assert "admin-tile is-caution" in settings_hub.text
+    assert "admin-tile is-danger" in settings_hub.text
     assert ">Availability</a>" in settings_hub.text
     util_hub = auth_client.get("/admin/utilities")
     assert util_hub.status_code == 200
@@ -210,7 +210,7 @@ def test_settings_html_and_js_wire_availability(auth_client, auth_ctx):
     hub = auth_client.get("/settings")
     assert hub.status_code == 200
     assert 'href="/settings/availability"' in hub.text
-    assert "is-caution" in hub.text
+    assert "is-danger" in hub.text
     page = auth_client.get("/settings/availability")
     assert page.status_code == 200
     assert 'name="site_availability"' in page.text

@@ -16,7 +16,7 @@
 
   <div class="admin-tile-grid">
     {% for tile in settings_tiles %}
-    <section class="admin-tile{% if tile.caution %} is-caution{% endif %}">
+    <section class="admin-tile is-danger">
       <h2><a href="/settings/{{ tile.slug }}">{{ tile.title }}</a></h2>
       <p>{{ tile.blurb }}</p>
     </section>

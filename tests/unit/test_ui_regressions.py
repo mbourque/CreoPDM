@@ -2663,11 +2663,11 @@ def test_admin_hub_panel_fills_full_width():
     assert "margin-left: auto" in css
     settings_hub_py = (ROOT / "src" / "creopdm" / "settings_hub.py").read_text(encoding="utf-8")
     assert 'slug="availability"' in settings_hub_py
-    assert "caution=True" in settings_hub_py
     settings_hub_tmpl = (ROOT / "src" / "creopdm" / "templates" / "settings.html").read_text(
         encoding="utf-8"
     )
-    assert "tile.caution" in settings_hub_tmpl
+    assert 'class="admin-tile is-danger"' in settings_hub_tmpl
+    assert "tile.caution" not in settings_hub_tmpl
     partial = (ROOT / "src" / "creopdm" / "templates" / "settings_partials" / "availability.html").read_text(
         encoding="utf-8"
     )
@@ -2716,6 +2716,8 @@ def test_admin_hub_panel_fills_full_width():
     assert 'href="/admin/products/delete"' in hub
     assert 'href="/admin/products/compact"' in hub
     assert 'href="/admin/products/rebuild"' in hub
+    assert 'href="/admin/membership"' in hub
+    assert "can_assign_products" in hub
     assert "can_utilities_compact_product" in hub
     assert "can_utilities_rebuild_product" in hub
     assert hub.count("admin-tile is-danger") == 3

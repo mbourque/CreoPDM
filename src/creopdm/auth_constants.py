@@ -71,7 +71,7 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_USERS_PASSWORD, "Set or reset user passwords"),
     (PERMISSION_ROLES_ASSIGN, "Assign roles to users"),
     (PERMISSION_ROLES_MANAGE, "Create, edit, and delete roles"),
-    (PERMISSION_PRODUCTS_ASSIGN, "Assign product membership (Administration → Membership)"),
+    (PERMISSION_PRODUCTS_ASSIGN, "Assign product membership (Manage products → Membership)"),
     (PERMISSION_PRODUCTS_MANAGE, "Create, edit, and delete products in Administration"),
     (
         PERMISSION_LIFECYCLE_STATES_MANAGE,

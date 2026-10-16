@@ -1301,7 +1301,9 @@ def test_admin_membership_product_access_filters_products(auth_client, auth_ctx)
 
     hub = auth_client.get("/admin")
     assert hub.status_code == 200
-    assert 'href="/admin/membership"' in hub.text
+    assert 'href="/admin/membership"' not in hub.text
+    products_hub = auth_client.get("/admin/products")
+    assert 'href="/admin/membership"' in products_hub.text
 
     user_form = auth_client.get("/admin/users/new")
     assert user_form.status_code == 200
@@ -1805,7 +1807,7 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     assert hub.status_code == 200
     assert 'href="/admin/products"' in hub.text
     assert ">Manage products</a>" in hub.text
-    assert "Edit, copy, promote, delete, compact, or rebuild products on this server." in hub.text
+    assert "Edit, copy, promote, delete, compact, rebuild, or set membership." in hub.text
 
     created = auth_client.post(
         "/admin/products/new",

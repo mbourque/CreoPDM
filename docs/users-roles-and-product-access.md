@@ -52,13 +52,13 @@ Others do not see Administration; direct URLs return **403**.
 | --- | --- |
 | `roles.assign` | Change another user’s role. Full administrators may pick any role (including Administrator). Everyone else may only pick a role with **fewer** permissions than their own. Without this cap, Role is read-only and new users default to **Engineer** |
 | `users.password` | Set initial password on Add user, or reset password on Edit |
-| `products.assign` | Open **Administration → Membership** (By product / By user). New users default to **no** product access |
+| `products.assign` | Open **Manage products → Membership** (By product / By user). New users default to **no** product access |
 
 Assignable roles are always a **proper subset** of the signed-in user’s permissions (never peer or higher).
 
 ### Product access (Membership)
 
-On **Administration → Membership** (`products.assign`):
+On **Manage products → Membership** (`products.assign`):
 
 | Mode | Behavior |
 | --- | --- |
