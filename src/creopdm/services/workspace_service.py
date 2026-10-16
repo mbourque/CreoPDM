@@ -414,14 +414,16 @@ class WorkspaceService:
                     f"{obj.filename} has local changes that would be overwritten.",
                     details={"path": str(conflict_path)},
                 )
+        # Vault and workspace are the same folder in the common case: nothing to copy,
+        # so skip the second full-file hash the unchanged check below would run.
+        if source.resolve() == destination.resolve():
+            self._try_set_mode(destination, writable)
+            return destination
         if (
             obj.current_version is not None
             and destination.is_file()
             and not self._file_modified(destination, obj)
         ):
-            self._try_set_mode(destination, writable)
-            return destination
-        if source.resolve() == destination.resolve():
             self._try_set_mode(destination, writable)
             return destination
         try:
@@ -438,6 +440,48 @@ class WorkspaceService:
             raise
         self._try_set_mode(destination, writable)
         return destination
+
+    def checkout_workspace_context(self, product: Product) -> dict[str, object]:
+        """One git status for a whole checkout batch (same lookups as the Files list)."""
+        status = self._git_status(product)
+        extras, vault, dirty_paths, untracked_by_logical = self._status_lookups(product, status)
+        return {
+            "status": status,
+            "extras": extras,
+            "vault": vault,
+            "dirty_paths": dirty_paths,
+            "untracked_by_logical": untracked_by_logical,
+        }
+
+    def checkout_workspace_path(
+        self,
+        product: Product,
+        obj: EngineeringObject,
+        context: dict[str, object] | None = None,
+    ) -> Path:
+        """Working copy for a checkout. Never overwrites a file.
+
+        Fast path (no hashing, no directory scan): the tip exists at the vault path and
+        git does not report it modified. A locally modified or newer-save tip, a missing
+        file, or a workspace that is not the vault folder falls back to ``materialize``
+        with ``keep_local`` so those edits are kept.
+        """
+        ctx = context or self.checkout_workspace_context(product)
+        source = self.repository_file(product, obj.relative_path)
+        destination = self.workspace_file_path(product, obj)
+        pending = self._pending_from_status(
+            product,
+            obj,
+            ctx["status"],  # type: ignore[arg-type]
+            extras=ctx["extras"],  # type: ignore[arg-type]
+            vault=ctx["vault"],  # type: ignore[arg-type]
+            dirty_paths=ctx["dirty_paths"],  # type: ignore[arg-type]
+            untracked_by_logical=ctx["untracked_by_logical"],  # type: ignore[arg-type]
+        )
+        if pending is None and destination == source and destination.is_file():
+            self._try_set_mode(destination, True)
+            return destination
+        return self.materialize(product, obj, writable=True, keep_local=True)
 
     def locate_content(self, product_or_folder: Product | str, obj: EngineeringObject) -> Path:
         extras = self._cad_extensions()

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from creopdm.constants import CheckoutStatus, LifecycleState, ActivityAction
@@ -13,6 +16,7 @@ from creopdm.exceptions import (
     CheckoutOwnershipError,
     CreoPDMError,
     ObjectAlreadyCheckedOutError,
+    ObjectNotFoundError,
     ReleasedObjectError,
     batch_failure,
 )
@@ -127,6 +131,25 @@ class CheckoutService:
         )
         return int(value or 0)
 
+    def checkoutable_ids_for_product(self, session: Session, product_id: int) -> list[str]:
+        """UUIDs Checkout product would take: IN_WORK, no active checkout, product allows it."""
+        from creopdm.models.product import Product
+
+        product = session.get(Product, product_id)
+        if product is not None and not product_allows_mutation(product):
+            return []
+        active = select(Checkout.object_id).where(Checkout.status == CheckoutStatus.ACTIVE.value)
+        rows = session.scalars(
+            select(EngineeringObject.uuid)
+            .where(
+                EngineeringObject.product_id == product_id,
+                EngineeringObject.lifecycle_state == LifecycleState.IN_WORK.value,
+                EngineeringObject.id.not_in(active),
+            )
+            .order_by(EngineeringObject.id)
+        )
+        return [str(item) for item in rows]
+
     def describe(
         self,
         obj: EngineeringObject,
@@ -206,29 +229,193 @@ class CheckoutService:
             return record
 
     def checkout_many(self, session: Session, object_uuids: list[str]) -> dict[str, list]:
+        """Bulk checkout: one gate, one lock, one git status, one insert per product.
+
+        Per-item results match the single-file path (``checked_out``,
+        ``already_checked_out``, or a ``failed`` row with the same error text). A
+        working copy is never overwritten: clean tips are only made writable, and
+        locally modified tips are kept.
+        """
+        started = time.perf_counter()
         ok: list[dict[str, str]] = []
         failed: list[dict[str, str]] = []
         user = self._users.get_current_user()
+        ordered: list[str] = []
         seen: set[str] = set()
         for object_uuid in object_uuids:
             if not object_uuid or object_uuid in seen:
                 continue
             seen.add(object_uuid)
-            filename = object_uuid
-            try:
-                obj = self._objects.get_object(session, object_uuid)
-                filename = obj.filename
-                existing = self.active_for(session, obj.id)
-                if existing is not None and existing.user_name == user.user_name:
-                    ok.append({"uuid": object_uuid, "filename": filename, "status": "already_checked_out"})
-                    continue
-                self.checkout(session, object_uuid)
-                ok.append({"uuid": object_uuid, "filename": filename, "status": "checked_out"})
-            except Exception as exc:
-                if not isinstance(exc, CreoPDMError):
-                    logger.exception("Checkout failed for %s", object_uuid)
-                failed.append(batch_failure(object_uuid, filename, exc))
+            ordered.append(object_uuid)
+        by_uuid = {obj.uuid: obj for obj in self._objects.get_objects(session, ordered)}
+        groups: dict[int, list[EngineeringObject]] = {}
+        for object_uuid in ordered:
+            obj = by_uuid.get(object_uuid)
+            if obj is None:
+                missing = ObjectNotFoundError("Object not found.", details={"uuid": object_uuid})
+                failed.append(batch_failure(object_uuid, object_uuid, missing))
+                continue
+            groups.setdefault(obj.product_id, []).append(obj)
+        for group in groups.values():
+            self._checkout_group(session, group, user, ok, failed)
+        rank = {object_uuid: index for index, object_uuid in enumerate(ordered)}
+        ok.sort(key=lambda row: rank.get(row["uuid"], 0))
+        failed.sort(key=lambda row: rank.get(row["uuid"], 0))
+        logger.info(
+            "checkout_many: %s ok, %s failed in %.2fs (%s requested)",
+            len(ok),
+            len(failed),
+            time.perf_counter() - started,
+            len(ordered),
+        )
         return {"ok": ok, "failed": failed}
+
+    def _checkout_group(
+        self,
+        session: Session,
+        group: list[EngineeringObject],
+        user: UserIdentity,
+        ok: list[dict[str, str]],
+        failed: list[dict[str, str]],
+    ) -> None:
+        product = group[0].product
+        if product is not None:
+            session.refresh(product)
+        try:
+            ensure_product_allows(product, "checkout", action="check out files")
+        except CreoPDMError as exc:
+            for obj in group:
+                failed.append(batch_failure(obj.uuid, obj.filename, exc))
+            return
+        with self._locks.acquire(product.uuid):
+            active = self.active_map(session, [obj.id for obj in group])
+            candidates: list[EngineeringObject] = []
+            for obj in group:
+                existing = active.get(obj.id)
+                if existing is not None and existing.user_name == user.user_name:
+                    ok.append({"uuid": obj.uuid, "filename": obj.filename, "status": "already_checked_out"})
+                    continue
+                if obj.lifecycle_state != LifecycleState.IN_WORK.value:
+                    released = ReleasedObjectError(
+                        f"{obj.filename} is {obj.lifecycle_state.replace('_', ' ').title()} and cannot be checked out."
+                    )
+                    failed.append(batch_failure(obj.uuid, obj.filename, released))
+                    continue
+                if existing is not None:
+                    taken = ObjectAlreadyCheckedOutError(
+                        f"{obj.filename} is checked out by {existing.user_name}.",
+                        details={
+                            "user": existing.user_name,
+                            "machine": existing.machine_name,
+                            "since": format_local(existing.checkout_time) or "unknown",
+                        },
+                    )
+                    failed.append(batch_failure(obj.uuid, obj.filename, taken))
+                    continue
+                candidates.append(obj)
+            if not candidates:
+                return
+            prepared: list[tuple[EngineeringObject, Path]] = []
+            context = self._workspaces.checkout_workspace_context(product)
+            for obj in candidates:
+                try:
+                    path = self._workspaces.checkout_workspace_path(product, obj, context)
+                except Exception as exc:
+                    if not isinstance(exc, CreoPDMError):
+                        logger.exception("Checkout failed for %s", obj.uuid)
+                    failed.append(batch_failure(obj.uuid, obj.filename, exc))
+                    continue
+                prepared.append((obj, path))
+            self._insert_checkouts(session, product, user, prepared, ok, failed)
+
+    def _new_checkout_row(
+        self,
+        obj: EngineeringObject,
+        path: Path,
+        user: UserIdentity,
+        now: datetime,
+    ) -> Checkout:
+        return Checkout(
+            object_id=obj.id,
+            user_name=user.user_name,
+            machine_name=user.machine_name,
+            workspace_path=str(path),
+            checkout_time=now,
+            heartbeat_time=now,
+            status=CheckoutStatus.ACTIVE.value,
+        )
+
+    def _record_checked_out(
+        self,
+        session: Session,
+        product,
+        user: UserIdentity,
+        obj: EngineeringObject,
+        path: Path,
+    ) -> None:
+        self._activities.record(
+            session,
+            ActivityAction.CHECKED_OUT,
+            user,
+            product_id=product.id,
+            object_id=obj.id,
+            details={
+                "filename": obj.filename,
+                "object_uuid": obj.uuid,
+                "workspace": str(path),
+            },
+            product_uuid=product.uuid,
+            product_name=product.name,
+            object_uuid=obj.uuid,
+            object_filename=obj.filename,
+            flush=False,
+        )
+
+    def _insert_checkouts(
+        self,
+        session: Session,
+        product,
+        user: UserIdentity,
+        prepared: list[tuple[EngineeringObject, Path]],
+        ok: list[dict[str, str]],
+        failed: list[dict[str, str]],
+    ) -> None:
+        """Insert every row in one flush; on any error retry per item with savepoints."""
+        if not prepared:
+            return
+        now = datetime.now(timezone.utc)
+        try:
+            with session.begin_nested():
+                for obj, path in prepared:
+                    session.add(self._new_checkout_row(obj, path, user, now))
+                    self._record_checked_out(session, product, user, obj, path)
+                session.flush()
+        except Exception:
+            logger.warning(
+                "Bulk checkout insert failed for %s; retrying one file at a time",
+                product.uuid,
+                exc_info=True,
+            )
+        else:
+            for obj, _path in prepared:
+                ok.append({"uuid": obj.uuid, "filename": obj.filename, "status": "checked_out"})
+            return
+        for obj, path in prepared:
+            try:
+                with session.begin_nested():
+                    session.add(self._new_checkout_row(obj, path, user, now))
+                    self._record_checked_out(session, product, user, obj, path)
+                    session.flush()
+            except Exception as exc:
+                if isinstance(exc, IntegrityError):
+                    exc = ObjectAlreadyCheckedOutError(
+                        f"{obj.filename} was checked out by someone else."
+                    )
+                elif not isinstance(exc, CreoPDMError):
+                    logger.exception("Checkout failed for %s", obj.uuid)
+                failed.append(batch_failure(obj.uuid, obj.filename, exc))
+                continue
+            ok.append({"uuid": obj.uuid, "filename": obj.filename, "status": "checked_out"})
 
     def undo_checkout(self, session: Session, object_uuid: str) -> None:
         obj = self._objects.get_object(session, object_uuid)

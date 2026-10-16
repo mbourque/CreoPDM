@@ -206,11 +206,34 @@ def checkout_batch(
     require_permission(request, ctx, PERMISSION_OBJECTS_CHECKOUT)
     objects = load_accessible_objects(request, ctx, db, payload.object_ids)
     result = ctx.checkouts.checkout_many(db, payload.object_ids)
+    plan_items: list[dict[str, object]] = []
     if result.get("ok"):
         _notify_batch_by_product(request, ctx, db, objects, result, "Checked out")
+        ok_ids = {item.get("uuid") for item in result["ok"]}
+        plan_items = manifest_items_for_objects(
+            [obj for obj in objects if obj.uuid in ok_ids],
+            extra_extensions=ctx.workspaces._cad_extensions(),
+        )
     return BatchOperationResponse.model_validate(
-        {**result, "workspace_root": str(ctx.config.workspace_root())}
+        {
+            **result,
+            "workspace_root": str(ctx.config.workspace_root()),
+            "plan_items": plan_items,
+        }
     )
+
+
+@router.get("/api/products/{product_id}/checkoutable-ids")
+def checkoutable_ids(
+    product_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> dict[str, list[str]]:
+    """UUIDs Checkout product would take. Light: no Files presentation, no hashing."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_CHECKOUT)
+    product = load_accessible_product(request, ctx, db, product_id)
+    return {"object_ids": ctx.checkouts.checkoutable_ids_for_product(db, product.id)}
 
 
 @router.post("/api/objects/batch/undo-checkout", response_model=BatchOperationResponse)

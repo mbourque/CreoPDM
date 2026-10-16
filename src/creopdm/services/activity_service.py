@@ -259,6 +259,7 @@ class ActivityService:
         product_name: str | None = None,
         object_uuid: str | None = None,
         object_filename: str | None = None,
+        flush: bool = True,
     ) -> Activity:
         safe = redact_audit_details(details)
         note = (comment or "").strip() or None
@@ -313,7 +314,9 @@ class ActivityService:
             details_json=json.dumps(safe) if safe else None,
         )
         session.add(activity)
-        session.flush()
+        # Bulk callers (Checkout product) flush once after the whole batch.
+        if flush:
+            session.flush()
         return activity
 
     def detach_product_activities(self, session: Session, product_id: int) -> None:

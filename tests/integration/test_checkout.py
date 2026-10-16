@@ -3,6 +3,7 @@ import zipfile
 from pathlib import Path
 
 from creopdm.services.git_service import GitService
+from creopdm.utils.files import set_file_writable
 from tests.conftest import requires_git
 
 
@@ -719,21 +720,23 @@ def test_checkout_many_continues_after_oserror(client, app, repo_parent):
         files={"file": ("pin.prt", b"pin", "application/octet-stream")},
         data={"comment": "Pin"},
     ).json()
-    real = app.state.ctx.checkouts.checkout
+    workspaces = app.state.ctx.workspaces
+    real = workspaces.checkout_workspace_path
+    first_filename = first["filename"]
 
-    def wrapped(session, object_uuid):
-        if object_uuid == first["uuid"]:
+    def wrapped(product, obj, context=None):
+        if obj.filename == first_filename:
             raise OSError("disk locked")
-        return real(session, object_uuid)
+        return real(product, obj, context)
 
-    app.state.ctx.checkouts.checkout = wrapped
+    workspaces.checkout_workspace_path = wrapped
     try:
         result = client.post(
             "/api/objects/batch/checkout",
             json={"object_ids": [first["uuid"], second["uuid"]]},
         )
     finally:
-        app.state.ctx.checkouts.checkout = real
+        workspaces.checkout_workspace_path = real
     assert result.status_code == 200, result.text
     body = result.json()
     failed = {item["uuid"]: item for item in body["failed"]}
@@ -744,5 +747,157 @@ def test_checkout_many_continues_after_oserror(client, app, repo_parent):
     pin = client.get(f"/api/objects/{second['uuid']}").json()
     assert shaft["owned_by_me"] is False
     assert pin["owned_by_me"] is True
+
+
+def _add_part(client, product, name: str, data: bytes):
+    created = client.post(
+        f"/api/products/{product['uuid']}/objects",
+        files={"file": (name, data, "application/octet-stream")},
+        data={"comment": name},
+    )
+    assert created.status_code == 201, created.text
+    return created.json()
+
+
+@requires_git
+def test_batch_checkout_response_carries_plan_items(client, repo_parent):
+    """Checkout returns hash identities so the agent skips files it already has."""
+    product = client.post("/api/products", json={"name": "Plan Arm"}).json()
+    first = _add_part(client, product, "shaft.prt", b"shaft")
+    second = _add_part(client, product, "pin.prt", b"pin")
+    result = client.post(
+        "/api/objects/batch/checkout",
+        json={"object_ids": [first["uuid"], second["uuid"]]},
+    )
+    assert result.status_code == 200, result.text
+    body = result.json()
+    plan = {item["object_id"]: item for item in body["plan_items"]}
+    assert set(plan) == {first["uuid"], second["uuid"]}
+    for created in (first, second):
+        item = plan[created["uuid"]]
+        assert item["content_hash"] == created["current_version"]["content_hash"]
+        assert item["file_size"] == created["current_version"]["file_size"]
+        assert item["disk_name"] == created["filename"]
+
+
+@requires_git
+def test_checkoutable_ids_lists_only_available_files(client, repo_parent):
+    """Light list for Checkout product: no Files presentation, only free IN_WORK files."""
+    product = client.post("/api/products", json={"name": "Free Arm"}).json()
+    held = _add_part(client, product, "shaft.prt", b"shaft")
+    free = _add_part(client, product, "pin.prt", b"pin")
+    assert client.post(f"/api/objects/{held['uuid']}/checkout").status_code == 200
+    listed = client.get(f"/api/products/{product['uuid']}/checkoutable-ids")
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["object_ids"] == [free["uuid"]]
+
+    ctx = client.app.state.ctx
+    with ctx.session_factory() as db:
+        loaded = ctx.products.get_product(db, product["uuid"])
+        loaded.state = "IN_REVIEW"
+        db.commit()
+    blocked = client.get(f"/api/products/{product['uuid']}/checkoutable-ids")
+    assert blocked.status_code == 200
+    assert blocked.json()["object_ids"] == []
+
+
+@requires_git
+def test_batch_checkout_does_not_hash_clean_tips(client, repo_parent, monkeypatch):
+    """Clean tips are only made writable: no SHA-256 reads during a bulk checkout."""
+    from creopdm.services import workspace_service
+
+    product = client.post("/api/products", json={"name": "Clean Arm"}).json()
+    ids = [_add_part(client, product, f"part{n}.prt", f"p{n}".encode())["uuid"] for n in range(3)]
+    calls: list[str] = []
+    real = workspace_service.calculate_sha256
+
+    def counting(path):
+        calls.append(str(path))
+        return real(path)
+
+    monkeypatch.setattr(workspace_service, "calculate_sha256", counting)
+    result = client.post("/api/objects/batch/checkout", json={"object_ids": ids})
+    assert result.status_code == 200, result.text
+    assert len(result.json()["ok"]) == 3
+    assert calls == []
+
+
+@requires_git
+def test_batch_checkout_keeps_locally_modified_tip(client, repo_parent, data_dir):
+    """A modified working copy is checked out as-is, never overwritten with vault bytes."""
+    product = client.post("/api/products", json={"name": "Edit Arm"}).json()
+    edited = _add_part(client, product, "shaft.prt", b"original")
+    other = _add_part(client, product, "pin.prt", b"pin")
+    vault = data_dir / "vaults" / product["uuid"]
+    # Added files are read-only until checked out; edit it the way a Creo save would.
+    set_file_writable(vault / "shaft.prt")
+    (vault / "shaft.prt").write_bytes(b"local-edits")
+    result = client.post(
+        "/api/objects/batch/checkout",
+        json={"object_ids": [edited["uuid"], other["uuid"]]},
+    )
+    assert result.status_code == 200, result.text
+    body = result.json()
+    assert body["failed"] == []
+    assert {item["uuid"] for item in body["ok"]} == {edited["uuid"], other["uuid"]}
+    assert (vault / "shaft.prt").read_bytes() == b"local-edits"
+    assert client.get(f"/api/objects/{edited['uuid']}").json()["owned_by_me"] is True
+
+
+@requires_git
+def test_batch_checkout_restores_missing_working_copy(client, repo_parent, data_dir):
+    """A tip deleted from the vault folder is restored from Git, then checked out."""
+    product = client.post("/api/products", json={"name": "Gone Arm"}).json()
+    gone = _add_part(client, product, "shaft.prt", b"original")
+    vault = data_dir / "vaults" / product["uuid"]
+    # Read-only files cannot be deleted on Windows.
+    set_file_writable(vault / "shaft.prt")
+    (vault / "shaft.prt").unlink()
+    result = client.post("/api/objects/batch/checkout", json={"object_ids": [gone["uuid"]]})
+    assert result.status_code == 200, result.text
+    assert result.json()["failed"] == []
+    assert (vault / "shaft.prt").read_bytes() == b"original"
+
+
+@requires_git
+def test_batch_checkout_unique_index_race_fails_only_that_item(client, app, repo_parent):
+    """Another process holding a row must fail that file, not the whole batch."""
+    from creopdm.constants import CheckoutStatus
+    from creopdm.models.checkout import Checkout
+    from creopdm.models.object import EngineeringObject
+    from sqlalchemy import select
+
+    product = client.post("/api/products", json={"name": "Race Arm"}).json()
+    taken = _add_part(client, product, "shaft.prt", b"shaft")
+    free = _add_part(client, product, "pin.prt", b"pin")
+    ctx = app.state.ctx
+    with ctx.session_factory() as db:
+        row = db.scalar(select(EngineeringObject).where(EngineeringObject.uuid == taken["uuid"]))
+        db.add(
+            Checkout(
+                object_id=row.id,
+                user_name="someone-else",
+                machine_name="other-pc",
+                workspace_path="x",
+                status=CheckoutStatus.ACTIVE.value,
+            )
+        )
+        db.commit()
+    real = ctx.checkouts.active_map
+    # Simulate the check-then-insert race: the active row is invisible to the batch.
+    ctx.checkouts.active_map = lambda session, object_ids: {}
+    try:
+        result = client.post(
+            "/api/objects/batch/checkout",
+            json={"object_ids": [taken["uuid"], free["uuid"]]},
+        )
+    finally:
+        ctx.checkouts.active_map = real
+    assert result.status_code == 200, result.text
+    body = result.json()
+    assert [item["uuid"] for item in body["failed"]] == [taken["uuid"]]
+    assert body["failed"][0]["code"] == "OBJECT_ALREADY_CHECKED_OUT"
+    assert [item["uuid"] for item in body["ok"]] == [free["uuid"]]
+    assert client.get(f"/api/objects/{free['uuid']}").json()["owned_by_me"] is True
 
 

@@ -626,8 +626,15 @@ window.__creopdmModules.creo_workspace = {
       return items;
     }
 
-    async function materializeCheckedOutToAgentCacheZip(objectIds, prepared) {
-      const planItems = cachePlanItemsFromPrepared(prepared);
+    async function materializeCheckedOutToAgentCacheZip(objectIds, prepared, identities) {
+      // Checkout supplies identities straight from its response: the agent then skips
+      // the manifest fetch and the files that already match by hash and size.
+      const planItems = Array.isArray(identities) && identities.length
+        ? cachePlanItemsFromPrepared({
+            product_id: currentProductId() || "",
+            dependencies: identities,
+          })
+        : cachePlanItemsFromPrepared(prepared);
       const response = await fetch(`${agentBase()}/materialize-zip`, {
         method: "POST",
         headers: agentAuthHeaders({ "Content-Type": "application/json" }),
@@ -658,7 +665,11 @@ window.__creopdmModules.creo_workspace = {
       if (total >= 2) {
         if (typeof onProgress === "function") onProgress(0, total);
         try {
-          const zipResult = await materializeCheckedOutToAgentCacheZip(ids);
+          const zipResult = await materializeCheckedOutToAgentCacheZip(
+            ids,
+            null,
+            options && Array.isArray(options.planItems) ? options.planItems : null
+          );
           const extracted = Number(zipResult?.extracted_count) || 0;
           const skipped = Number(zipResult?.skipped_count) || 0;
           const keptNewer = Number(zipResult?.kept_newer_count) || 0;

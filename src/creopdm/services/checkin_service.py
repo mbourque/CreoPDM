@@ -185,8 +185,17 @@ class CheckinService:
                 )
             remove_paths = [old_relative] if old_relative != new_relative else []
             touched = list(dict.fromkeys([new_relative, *remove_paths]))
-            snapshots = self._snapshot_repo_files(repo, touched)
+            # Workspace and vault are usually the same file: nothing is overwritten,
+            # so there is nothing to snapshot. Otherwise copy to disk, not into memory.
             try:
+                same_file = workspace_file.resolve() == repo_file.resolve()
+            except OSError:
+                same_file = False
+            snapshot_dir = Path(tempfile.mkdtemp(prefix="creopdm-checkin-snap-"))
+            snapshots: list[tuple[Path, bool, Path | None]] = []
+            try:
+                if not same_file:
+                    snapshots = self._snapshot_repo_files(repo, [new_relative], snapshot_dir)
                 copy_file(workspace_file, repo_file)
                 try:
                     os.utime(repo_file, None)
@@ -204,6 +213,8 @@ class CheckinService:
                 logger.exception("Git store failed during check-in of %s", obj.filename)
                 self._restore_repo_snapshots(repo, snapshots, touched)
                 raise
+            finally:
+                shutil.rmtree(snapshot_dir, ignore_errors=True)
             # Drop numbered Creo siblings only after Git has the new tip.
             self._workspaces.purge_newer_creo_saves(product, repo_file)
 
@@ -552,17 +563,23 @@ class CheckinService:
         return {"ok": ok, "failed": failed}
 
     def _snapshot_repo_files(
-        self, repo: Path, relative_paths: list[str]
-    ) -> list[tuple[Path, bool, bytes | None]]:
-        """Bytes of vault paths check-in is about to overwrite. Missing files are noted."""
-        snaps: list[tuple[Path, bool, bytes | None]] = []
+        self, repo: Path, relative_paths: list[str], snapshot_dir: Path
+    ) -> list[tuple[Path, bool, Path | None]]:
+        """Copy vault paths check-in is about to overwrite into ``snapshot_dir``.
+
+        Missing files are noted. Copies live on disk so a huge assembly is never held
+        in memory.
+        """
+        snaps: list[tuple[Path, bool, Path | None]] = []
         root = repo.resolve()
-        for rel in relative_paths:
+        for index, rel in enumerate(relative_paths):
             path = (repo / rel.replace("\\", "/").lstrip("/")).resolve()
             if root != path and root not in path.parents:
                 continue
             if path.is_file():
-                snaps.append((path, True, path.read_bytes()))
+                saved = snapshot_dir / f"{index}.bin"
+                shutil.copy2(path, saved)
+                snaps.append((path, True, saved))
             else:
                 snaps.append((path, False, None))
         return snaps
@@ -570,7 +587,7 @@ class CheckinService:
     def _restore_repo_snapshots(
         self,
         repo: Path,
-        snaps: list[tuple[Path, bool, bytes | None]],
+        snaps: list[tuple[Path, bool, Path | None]],
         relative_paths: list[str],
     ) -> None:
         """Put only the paths this check-in touched back. Not a whole-repo reset."""
@@ -578,13 +595,13 @@ class CheckinService:
             self._store.abandon_staged_paths(repo, relative_paths)
         except Exception:
             logger.warning("Could not unstage check-in paths in %s", repo, exc_info=True)
-        for path, existed, data in snaps:
+        for path, existed, saved in snaps:
             try:
-                if existed and data is not None:
+                if existed and saved is not None:
                     path.parent.mkdir(parents=True, exist_ok=True)
                     if path.exists():
                         set_file_writable(path)
-                    path.write_bytes(data)
+                    shutil.copyfile(saved, path)
                 elif path.is_file():
                     set_file_writable(path)
                     path.unlink()

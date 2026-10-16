@@ -596,7 +596,10 @@ def test_metadata_gear_items_require_creo_session():
         "mod.attachCollectLocalPaths = attachCollectLocalPaths",
     )
     assert "total >= 2" in mat_cache
-    assert "materializeCheckedOutToAgentCacheZip(ids)" in mat_cache
+    # One zip call for all ids; Checkout passes its response identities (planItems) so the
+    # agent compares hashes against .creopdm_cache_index.json without a manifest fetch.
+    assert "materializeCheckedOutToAgentCacheZip(" in mat_cache
+    assert "options.planItems" in mat_cache
     assert "One vault zip for 2+ tips" in mat_cache
     # Open: session-only gather; Add/Check In: path-first (no empty-session probe).
     assert "sessionOnly || sessionWaitRounds > 0" in push_items

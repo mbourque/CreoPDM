@@ -553,6 +553,8 @@ class BatchOperationResponse(BaseModel):
     failed: list[BatchItemResult]
     workspace_root: str | None = None
     where_used_index: str | None = None  # "started" when background index kicked off
+    # Checkout batches: content identities so the agent can skip files already local.
+    plan_items: list[AgentCacheManifestItem] | None = None
 
 
 class SettingsResponse(BaseModel):

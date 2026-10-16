@@ -50,10 +50,12 @@ window.__creopdmModules.checkout = {
         );
         if (!checkoutResult) return false;
       } else {
-        const CHECKOUT_CHUNK = 50;
+        // Server checkout is bulk (one git status + one insert per request), so a
+        // bigger chunk is cheap; keep chunks for progress and request timeouts.
+        const CHECKOUT_CHUNK = 250;
         const total = ids.length;
         checkoutResult = await withBusy(`Checking out… 0 of ${total}`, async () => {
-          const merged = { ok: [], failed: [] };
+          const merged = { ok: [], failed: [], plan_items: [] };
           for (let start = 0; start < ids.length; start += CHECKOUT_CHUNK) {
             const chunk = ids.slice(start, start + CHECKOUT_CHUNK);
             setBusyMessage(`Checking out… ${Math.min(start + chunk.length, total)} of ${total}`);
@@ -66,6 +68,7 @@ window.__creopdmModules.checkout = {
             if (!part) return null;
             if (Array.isArray(part.ok)) merged.ok.push(...part.ok);
             if (Array.isArray(part.failed)) merged.failed.push(...part.failed);
+            if (Array.isArray(part.plan_items)) merged.plan_items.push(...part.plan_items);
           }
           return merged;
         });
@@ -78,15 +81,22 @@ window.__creopdmModules.checkout = {
         Array.isArray(checkoutResult.ok) && checkoutResult.ok.length
           ? checkoutResult.ok.map((item) => item.uuid).filter(Boolean)
           : ids;
+      // Identities from the checkout response let the agent skip files that already
+      // match by hash (no manifest fetch, no second download).
+      const planItems = Array.isArray(checkoutResult.plan_items) ? checkoutResult.plan_items : null;
       const sync = await withBusy("Downloading checked-out files to local workspace…", async () => {
         try {
-          return await materializeCheckedOutToAgentCache(syncedIds, (done, total) => {
-            if (total >= BULK_AGENT_CACHE_ZIP_THRESHOLD && done === 0) {
-              setBusyMessage(`Checking local workspace for ${total} files…`);
-            } else {
-              setBusyMessage(`Downloading checked-out files… ${done} of ${total}`);
-            }
-          });
+          return await materializeCheckedOutToAgentCache(
+            syncedIds,
+            (done, total) => {
+              if (total >= BULK_AGENT_CACHE_ZIP_THRESHOLD && done === 0) {
+                setBusyMessage(`Checking local workspace for ${total} files…`);
+              } else {
+                setBusyMessage(`Downloading checked-out files… ${done} of ${total}`);
+              }
+            },
+            planItems && planItems.length ? { planItems } : undefined
+          );
         } catch (err) {
           showError($("#toolbar-error"), err?.message || String(err));
           return null;
@@ -142,8 +152,12 @@ window.__creopdmModules.checkout = {
         return;
       }
       showError($("#toolbar-error"), "");
-      const listed = await withBusy("Listing product files…", async () => {
-        const response = await fetch(`/api/products/${encodeURIComponent(productId)}/objects`);
+      // Light list of checkoutable ids — not the full Files presentation (no git
+      // status, type labels, or per-row hash checks for every file).
+      const listed = await withBusy("Finding files to check out…", async () => {
+        const response = await fetch(
+          `/api/products/${encodeURIComponent(productId)}/checkoutable-ids`
+        );
         if (!response.ok) {
           showError($("#toolbar-error"), await readError(response));
           return null;
@@ -151,9 +165,9 @@ window.__creopdmModules.checkout = {
         return response.json();
       });
       if (!listed) return;
-      const objectIds = (Array.isArray(listed) ? listed : [])
-        .filter((item) => item && item.can_checkout && item.uuid)
-        .map((item) => String(item.uuid));
+      const objectIds = (Array.isArray(listed?.object_ids) ? listed.object_ids : [])
+        .filter(Boolean)
+        .map(String);
       if (!objectIds.length) {
         showError($("#toolbar-error"), "No files available to check out in this product.");
         setCheckoutableCount(0);

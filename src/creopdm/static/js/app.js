@@ -5965,8 +5965,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return (await withCreoWorkspace()).materializeViaAgent(prepared, options);
   }
 
-  async function materializeCheckedOutToAgentCache(objectIds, onProgress) {
-    return (await withCreoWorkspace()).materializeCheckedOutToAgentCache(objectIds, onProgress);
+  async function materializeCheckedOutToAgentCache(objectIds, onProgress, options) {
+    return (await withCreoWorkspace()).materializeCheckedOutToAgentCache(
+      objectIds,
+      onProgress,
+      options
+    );
   }
 
   function joinLocalWorkspacePath(directory, relativePath) {
