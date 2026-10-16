@@ -51,6 +51,52 @@ def test_clear_stale_git_index_lock_keeps_fresh_file(tmp_path: Path):
     assert lock.exists()
 
 
+def test_clear_stale_git_index_lock_keeps_lock_while_git_uses_repo(tmp_path: Path, monkeypatch):
+    """A long-running git commit must not lose index.lock just because it is old."""
+    import os
+    import time
+
+    from creopdm.services import git_service
+
+    assert git_service._INDEX_LOCK_STALE_SEC >= 900
+    assert 60 <= git_service._INDEX_LOCK_STALE_SEC_OTHER <= 120
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir()
+    lock = git_dir / "index.lock"
+    lock.write_text("live", encoding="utf-8")
+    old = time.time() - 3600
+    os.utime(lock, (old, old))
+    monkeypatch.setattr(git_service, "_git_process_uses_repo", lambda _repo: True)
+    assert clear_stale_git_index_lock(tmp_path, max_age_sec=1) is False
+    assert lock.exists()
+
+
+def test_index_lock_age_is_long_only_when_git_processes_are_visible(tmp_path: Path, monkeypatch):
+    """Without /proc, a dead lock is cleared after about a minute, not 15."""
+    import os
+    import time
+
+    from creopdm.services import git_service
+
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir()
+    lock = git_dir / "index.lock"
+    lock.write_text("dead", encoding="utf-8")
+    three_minutes = time.time() - 180
+    os.utime(lock, (three_minutes, three_minutes))
+    monkeypatch.setattr(git_service, "_git_process_uses_repo", lambda _repo: False)
+
+    monkeypatch.setattr(git_service, "_can_see_git_processes", lambda: True)
+    assert git_service.index_lock_stale_sec() >= 900
+    assert clear_stale_git_index_lock(tmp_path) is False
+    assert lock.exists()
+
+    monkeypatch.setattr(git_service, "_can_see_git_processes", lambda: False)
+    assert git_service.index_lock_stale_sec() == git_service._INDEX_LOCK_STALE_SEC_OTHER
+    assert clear_stale_git_index_lock(tmp_path) is True
+    assert not lock.exists()
+
+
 @requires_git
 def test_commit_retries_after_index_lock_error(tmp_path: Path, monkeypatch):
     repo = tmp_path / "repo"

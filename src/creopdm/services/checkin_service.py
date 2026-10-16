@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import shutil
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +22,7 @@ from creopdm.exceptions import (
     ReleasedObjectError,
     RepositoryError,
     ValidationAppError,
+    batch_failure,
 )
 from creopdm.logging_setup import get_logger
 from creopdm.models.object import EngineeringObject
@@ -168,28 +171,27 @@ class CheckinService:
             repo_file = self._workspaces.repository_file(product, new_relative)
             captured_head = self._store.capture_checkpoint(repo)
             previous_git = obj.current_version.git_commit_hash if obj.current_version else None
-            copy_file(workspace_file, repo_file)
-            # Drop numbered Creo siblings so the vault tip stays the logical path.
-            self._workspaces.purge_newer_creo_saves(product, repo_file)
-            try:
-                os.utime(repo_file, None)
-            except OSError:
-                pass
             same_bytes = (
                 obj.current_version is not None
                 and content_hash == obj.current_version.content_hash
             )
             path_changed = old_relative != new_relative
-            # Same content with a Creo save-number rename (e.g. migrate
-            # shaft.prt.3 → shaft.prt) is still a real check-in. Revert may
-            # also force a new history row when tip bytes already match.
+            # Reject unchanged check-ins before touching the vault. A later
+            # "No changes" error used to run after copy + purge.
             if same_bytes and not to_add and not path_changed and not allow_unchanged:
                 raise ValidationAppError(
                     "No changes to check in. Use Undo Checkout to release the lock without a new version.",
                     details={"filename": obj.filename},
                 )
             remove_paths = [old_relative] if old_relative != new_relative else []
+            touched = list(dict.fromkeys([new_relative, *remove_paths]))
+            snapshots = self._snapshot_repo_files(repo, touched)
             try:
+                copy_file(workspace_file, repo_file)
+                try:
+                    os.utime(repo_file, None)
+                except OSError:
+                    pass
                 git_hash = self._store.store_version(
                     repo,
                     [new_relative],
@@ -200,7 +202,10 @@ class CheckinService:
                 )
             except Exception:
                 logger.exception("Git store failed during check-in of %s", obj.filename)
+                self._restore_repo_snapshots(repo, snapshots, touched)
                 raise
+            # Drop numbered Creo siblings only after Git has the new tip.
+            self._workspaces.purge_newer_creo_saves(product, repo_file)
 
             previous_iteration = int(obj.iteration or 0)
             now = datetime.now(timezone.utc)
@@ -355,52 +360,64 @@ class CheckinService:
             dest_rel = (dest_parent / dest_name).as_posix()
 
         tip_rel = str(obj.relative_path or "").replace("\\", "/").strip().lstrip("/")
+        # Hold the product lock across restore and check-in (RLock: check-in re-enters).
         with self._locks.acquire(product.uuid):
             existing = self._checkouts.active_for(session, obj.id)
+            created_checkout = existing is None
             if existing is not None:
                 self._checkouts.require_owned(session, obj, user)
             else:
                 # Need a writable checkout so check-in can record the restored bytes.
                 self._checkouts.checkout(session, object_uuid)
 
-            # Restore bytes onto the logical tip path.
-            try:
-                self._store.restore_version(repo, source_rel, target.git_commit_hash)
-            except Exception:
-                logger.warning(
-                    "git checkout of %s@%s failed; writing blob directly",
-                    source_rel,
-                    (target.git_commit_hash or "")[:8],
-                    exc_info=True,
-                )
             dest = self._workspaces.file_path(product, dest_rel)
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            if not dest.is_file() or dest.read_bytes() != data:
-                if dest.exists():
-                    set_file_writable(dest)
-                dest.write_bytes(data)
-            try:
-                set_file_writable(dest)
-            except Exception:
-                pass
-
-            # Drop numbered siblings so locate_content prefers the logical tip.
-            self._workspaces.purge_newer_creo_saves(product, dest)
-            if tip_rel and tip_rel != dest_rel:
-                tip_path = self._workspaces.file_path(product, tip_rel)
+            source_for_checkin = dest
+            temp_dir: Path | None = None
+            if created_checkout:
+                # Restore bytes onto the logical tip path.
                 try:
-                    tip_resolved = tip_path.resolve()
-                    dest_resolved = dest.resolve()
-                except OSError:
-                    tip_resolved = tip_path
-                    dest_resolved = dest
-                if tip_path.is_file() and tip_resolved != dest_resolved:
+                    self._store.restore_version(repo, source_rel, target.git_commit_hash)
+                except Exception:
+                    logger.warning(
+                        "git checkout of %s@%s failed; writing blob directly",
+                        source_rel,
+                        (target.git_commit_hash or "")[:8],
+                        exc_info=True,
+                    )
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                if not dest.is_file() or dest.read_bytes() != data:
+                    if dest.exists():
+                        set_file_writable(dest)
+                    dest.write_bytes(data)
+                try:
+                    set_file_writable(dest)
+                except Exception:
+                    pass
+
+                # Drop numbered siblings so locate_content prefers the logical tip.
+                self._workspaces.purge_newer_creo_saves(product, dest)
+                if tip_rel and tip_rel != dest_rel:
+                    tip_path = self._workspaces.file_path(product, tip_rel)
                     try:
-                        set_file_writable(tip_path)
-                        tip_path.unlink()
-                        logger.info("Removed tip path after revert: %s", tip_path)
-                    except OSError as exc:
-                        logger.warning("Could not remove tip path %s: %s", tip_path, exc)
+                        tip_resolved = tip_path.resolve()
+                        dest_resolved = dest.resolve()
+                    except OSError:
+                        tip_resolved = tip_path
+                        dest_resolved = dest
+                    if tip_path.is_file() and tip_resolved != dest_resolved:
+                        try:
+                            set_file_writable(tip_path)
+                            tip_path.unlink()
+                            logger.info("Removed tip path after revert: %s", tip_path)
+                        except OSError as exc:
+                            logger.warning("Could not remove tip path %s: %s", tip_path, exc)
+            else:
+                # Their checkout already has local edits. Do not overwrite the vault
+                # file unless check-in of the restored bytes succeeds. The temp
+                # file keeps the vault tip name so check-in stores that path.
+                temp_dir = Path(tempfile.mkdtemp(prefix="creopdm-revert-"))
+                source_for_checkin = temp_dir / dest.name
+                source_for_checkin.write_bytes(data)
             logger.info(
                 "Restored %s bytes from %s@%s → %s for revert to %s",
                 len(data),
@@ -410,27 +427,31 @@ class CheckinService:
                 display,
             )
 
-        # Revert always records the restored tip as a new version — never leave the
-        # user checked out with a "please check in" prompt. Pass dest explicitly so
-        # a leftover higher Creo .N cannot win locate_content after a failed purge.
-        try:
-            restored = self.checkin(
-                session,
-                object_uuid,
-                comment,
-                allow_unchanged=True,
-                source_path=dest,
-            )
-        except Exception:
+            # Revert always records the restored tip as a new version — never leave the
+            # user checked out with a "please check in" prompt. Pass the source explicitly
+            # so a leftover higher Creo .N cannot win locate_content after a failed purge.
             try:
-                self._checkouts.undo_checkout(session, object_uuid)
-            except Exception:
-                logger.warning(
-                    "Could not release checkout after failed revert check-in of %s",
+                restored = self.checkin(
+                    session,
                     object_uuid,
-                    exc_info=True,
+                    comment,
+                    allow_unchanged=True,
+                    source_path=source_for_checkin,
                 )
-            raise
+            except Exception:
+                if created_checkout:
+                    try:
+                        self._checkouts.undo_checkout(session, object_uuid)
+                    except Exception:
+                        logger.warning(
+                            "Could not release checkout after failed revert check-in of %s",
+                            object_uuid,
+                            exc_info=True,
+                        )
+                raise
+            finally:
+                if temp_dir is not None:
+                    shutil.rmtree(temp_dir, ignore_errors=True)
         self._activities.record(
             session,
             ActivityAction.VERSION_RESTORED,
@@ -498,39 +519,77 @@ class CheckinService:
         for object_uuid in object_ids or []:
             filename = object_uuid
             try:
-                obj = self.checkin(session, object_uuid, message, None)
-                ok.append({"uuid": obj.uuid, "filename": obj.filename, "status": "checked_in"})
-            except CreoPDMError as exc:
+                # Savepoint: a failure after check-in mutates the row must not
+                # stay in this session for the request-end commit.
+                with session.begin_nested():
+                    obj = self.checkin(session, object_uuid, message, None)
+                    ok.append({"uuid": obj.uuid, "filename": obj.filename, "status": "checked_in"})
+            except Exception as exc:
+                if not isinstance(exc, CreoPDMError):
+                    logger.exception("Check-in queue failed for %s", object_uuid)
                 try:
                     filename = self._objects.get_object(session, object_uuid).filename
-                except CreoPDMError:
+                except Exception:
                     pass
-                failed.append(
-                    {
-                        "uuid": object_uuid,
-                        "filename": filename,
-                        "code": exc.code,
-                        "message": exc.message,
-                    }
-                )
+                failed.append(batch_failure(object_uuid, filename, exc))
         to_add = [item.replace("\\", "/").strip() for item in (add_relative_paths or []) if item.strip()]
         if to_add:
             try:
-                self._add_workspace_files(session, product, to_add, message, "workspace")
-                for relative in to_add:
-                    ok.append({"uuid": "", "filename": Path(relative).name, "status": "added", "path": relative})
-            except CreoPDMError as exc:
+                with session.begin_nested():
+                    self._add_workspace_files(session, product, to_add, message, "workspace")
+                    for relative in to_add:
+                        ok.append(
+                            {"uuid": "", "filename": Path(relative).name, "status": "added", "path": relative}
+                        )
+            except Exception as exc:
+                if not isinstance(exc, CreoPDMError):
+                    logger.exception("Check-in queue failed while adding workspace files")
                 failed.append(
-                    {
-                        "uuid": "",
-                        "filename": Path(to_add[0]).name if to_add else "",
-                        "code": exc.code,
-                        "message": exc.message,
-                    }
+                    batch_failure("", Path(to_add[0]).name if to_add else "", exc)
                 )
         if not ok and not failed:
             raise ValidationAppError("There are no vault files to check in.")
         return {"ok": ok, "failed": failed}
+
+    def _snapshot_repo_files(
+        self, repo: Path, relative_paths: list[str]
+    ) -> list[tuple[Path, bool, bytes | None]]:
+        """Bytes of vault paths check-in is about to overwrite. Missing files are noted."""
+        snaps: list[tuple[Path, bool, bytes | None]] = []
+        root = repo.resolve()
+        for rel in relative_paths:
+            path = (repo / rel.replace("\\", "/").lstrip("/")).resolve()
+            if root != path and root not in path.parents:
+                continue
+            if path.is_file():
+                snaps.append((path, True, path.read_bytes()))
+            else:
+                snaps.append((path, False, None))
+        return snaps
+
+    def _restore_repo_snapshots(
+        self,
+        repo: Path,
+        snaps: list[tuple[Path, bool, bytes | None]],
+        relative_paths: list[str],
+    ) -> None:
+        """Put only the paths this check-in touched back. Not a whole-repo reset."""
+        try:
+            self._store.abandon_staged_paths(repo, relative_paths)
+        except Exception:
+            logger.warning("Could not unstage check-in paths in %s", repo, exc_info=True)
+        for path, existed, data in snaps:
+            try:
+                if existed and data is not None:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    if path.exists():
+                        set_file_writable(path)
+                    path.write_bytes(data)
+                elif path.is_file():
+                    set_file_writable(path)
+                    path.unlink()
+            except OSError:
+                logger.warning("Could not restore vault file %s", path, exc_info=True)
 
     def _new_files_for(
         self,

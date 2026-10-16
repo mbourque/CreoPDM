@@ -41,6 +41,50 @@ def test_password_hash_round_trip_never_stores_plaintext():
     assert verify_password("wrong", hashed) is False
 
 
+def test_must_change_password_blocks_api_until_password_changes(auth_client, auth_ctx):
+    """A temporary password must not unlock the API. The change-password page still works."""
+    created = auth_client.post(
+        "/setup",
+        data={
+            "display_name": "Admin User",
+            "username": "admin",
+            "email": "admin@example.com",
+            "password": "AdminPass1",
+            "password_confirm": "AdminPass1",
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code == 303, created.text
+    with auth_ctx.session_factory() as db:
+        user = db.scalar(select(User).where(User.username == "admin"))
+        assert user is not None
+        user.must_change_password = True
+        db.commit()
+
+    blocked = auth_client.get("/api/products")
+    assert blocked.status_code == 403, blocked.text
+    assert blocked.json()["error"]["code"] == "PASSWORD_CHANGE_REQUIRED"
+
+    page = auth_client.get("/account/password")
+    assert page.status_code == 200
+    assert "Change password" in page.text
+    health = auth_client.get("/api/health")
+    assert health.status_code == 200
+
+    changed = auth_client.post(
+        "/account/password",
+        data={
+            "current_password": "AdminPass1",
+            "new_password": "AdminPass2",
+            "new_password_confirm": "AdminPass2",
+        },
+        follow_redirects=False,
+    )
+    assert changed.status_code == 303, changed.text
+    allowed = auth_client.get("/api/products")
+    assert allowed.status_code == 200, allowed.text
+
+
 def test_migration_seeds_builtin_roles(auth_ctx):
     inspector = inspect(auth_ctx.engine)
     for table in ("users", "roles", "permissions", "user_roles", "role_permissions", "user_products", "product_watches"):

@@ -14,6 +14,7 @@ from creopdm.exceptions import (
     CreoPDMError,
     ObjectAlreadyCheckedOutError,
     ReleasedObjectError,
+    batch_failure,
 )
 from creopdm.logging_setup import get_logger
 from creopdm.models.checkout import Checkout
@@ -223,15 +224,10 @@ class CheckoutService:
                     continue
                 self.checkout(session, object_uuid)
                 ok.append({"uuid": object_uuid, "filename": filename, "status": "checked_out"})
-            except CreoPDMError as exc:
-                failed.append(
-                    {
-                        "uuid": object_uuid,
-                        "filename": filename,
-                        "code": exc.code,
-                        "message": exc.message,
-                    }
-                )
+            except Exception as exc:
+                if not isinstance(exc, CreoPDMError):
+                    logger.exception("Checkout failed for %s", object_uuid)
+                failed.append(batch_failure(object_uuid, filename, exc))
         return {"ok": ok, "failed": failed}
 
     def undo_checkout(self, session: Session, object_uuid: str) -> None:
@@ -335,24 +331,10 @@ class CheckoutService:
                     )
                 self.undo_checkout(session, object_uuid)
                 ok.append({"uuid": object_uuid, "filename": filename, "status": "cancelled"})
-            except CreoPDMError as exc:
-                failed.append(
-                    {
-                        "uuid": object_uuid,
-                        "filename": filename,
-                        "code": exc.code,
-                        "message": exc.message,
-                    }
-                )
             except Exception as exc:
-                failed.append(
-                    {
-                        "uuid": object_uuid,
-                        "filename": filename,
-                        "code": "APPLICATION_ERROR",
-                        "message": str(exc),
-                    }
-                )
+                if not isinstance(exc, CreoPDMError):
+                    logger.exception("Undo checkout failed for %s", object_uuid)
+                failed.append(batch_failure(object_uuid, filename, exc))
         return {"ok": ok, "failed": failed}
 
     def force_undo_checkout_many(self, session: Session, object_uuids: list[str]) -> dict[str, list]:
@@ -381,24 +363,10 @@ class CheckoutService:
                         "previous_user": previous_user,
                     }
                 )
-            except CreoPDMError as exc:
-                failed.append(
-                    {
-                        "uuid": object_uuid,
-                        "filename": filename,
-                        "code": exc.code,
-                        "message": exc.message,
-                    }
-                )
             except Exception as exc:
-                failed.append(
-                    {
-                        "uuid": object_uuid,
-                        "filename": filename,
-                        "code": "APPLICATION_ERROR",
-                        "message": str(exc),
-                    }
-                )
+                if not isinstance(exc, CreoPDMError):
+                    logger.exception("Force undo checkout failed for %s", object_uuid)
+                failed.append(batch_failure(object_uuid, filename, exc))
         return {"ok": ok, "failed": failed}
 
     def release_mine(self, session: Session, obj: EngineeringObject) -> None:

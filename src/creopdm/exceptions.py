@@ -5,6 +5,23 @@ from __future__ import annotations
 from typing import Any
 
 
+def batch_failure(object_uuid: str, filename: str, exc: BaseException) -> dict[str, str]:
+    """One batch-item error. Unexpected exceptions stay in ``failed`` instead of a 500."""
+    if isinstance(exc, CreoPDMError):
+        return {
+            "uuid": object_uuid,
+            "filename": filename,
+            "code": exc.code,
+            "message": exc.message,
+        }
+    return {
+        "uuid": object_uuid,
+        "filename": filename,
+        "code": "APPLICATION_ERROR",
+        "message": str(exc) or exc.__class__.__name__,
+    }
+
+
 class CreoPDMError(Exception):
     """Base application error. Never expose raw Python exceptions to the UI."""
 

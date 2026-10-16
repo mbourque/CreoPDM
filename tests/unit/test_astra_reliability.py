@@ -163,7 +163,10 @@ def test_index_lock_retry_keeps_full_stale_window(tmp_path: Path, monkeypatch):
     with pytest.raises(Exception):
         git.run_with_index_lock_retry(["status"], cwd=tmp_path)
     assert ages
-    assert all(age >= 20.0 for age in ages)
+    from creopdm.services.git_service import index_lock_stale_sec
+
+    # Retries must use the full platform window, not a few seconds.
+    assert all(age == index_lock_stale_sec() for age in ages)
 
 
 def test_clear_stale_git_index_lock_still_removes_old_file(tmp_path: Path):

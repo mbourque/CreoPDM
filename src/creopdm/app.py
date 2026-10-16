@@ -160,6 +160,19 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
 
 
 
+def _password_change_allowed(path: str) -> bool:
+    """Pages and APIs a temporary-password session may still use."""
+    if path.startswith("/account/password"):
+        return True
+    if path == "/logout" or path.startswith("/logout/"):
+        return True
+    if path.startswith("/static") or path.startswith("/client/"):
+        return True
+    if path in {"/favicon.ico", "/api/health"} or path.startswith("/api/health/"):
+        return True
+    return False
+
+
 def create_app(context: AppContext | None = None) -> FastAPI:
     ctx = context or build_context()
 
@@ -346,14 +359,20 @@ def create_app(context: AppContext | None = None) -> FastAPI:
                 next_url = quote(path + (("?" + request.url.query) if request.url.query else ""))
                 return RedirectResponse(f"/login?next={next_url}", status_code=303)
 
-            if (
-                user is not None
-                and user.must_change_password
-                and not path.startswith("/account/password")
-                and not path.startswith("/logout")
-                and not path.startswith("/static")
-                and not path.startswith("/api/")
-            ):
+            if user is not None and user.must_change_password and not _password_change_allowed(path):
+                # Temporary passwords must not unlock the API. The change-password
+                # page, logout, and health stay available.
+                if path.startswith("/api/"):
+                    return JSONResponse(
+                        {
+                            "error": {
+                                "code": "PASSWORD_CHANGE_REQUIRED",
+                                "message": "Change your password before using CreoPDM.",
+                                "details": {},
+                            }
+                        },
+                        status_code=403,
+                    )
                 return RedirectResponse("/account/password", status_code=303)
 
             # Display-only maintenance: swap HTML for non-admins. Never touch /api/

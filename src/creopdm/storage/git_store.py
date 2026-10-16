@@ -79,6 +79,9 @@ class GitVersionStore(VersionStore):
     def restore_checkpoint(self, repository_path: Path, checkpoint: str) -> None:
         self._git.reset_to(repository_path, checkpoint)
 
+    def abandon_staged_paths(self, repository_path: Path, relative_paths: list[str]) -> None:
+        self._git.unstage_paths(repository_path, relative_paths)
+
     def remove_files(
         self,
         repository_path: Path,

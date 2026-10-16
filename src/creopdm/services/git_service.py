@@ -18,7 +18,11 @@ logger = get_logger("git")
 # Windows CreateProcess command lines cap near 32KB. Keep path batches small.
 _PATHSPEC_CHUNK = 64
 _INDEX_LOCK_RETRIES = 6
-_INDEX_LOCK_STALE_SEC = 20.0
+# Linux can see a live git process via /proc, so a crashed lock is the only
+# reason to wait this long. Elsewhere the process check always says "not running",
+# and a 15-minute wait would block check-in and Add after a dead lock.
+_INDEX_LOCK_STALE_SEC = 900.0
+_INDEX_LOCK_STALE_SEC_OTHER = 90.0
 
 
 def _chunks(items: list[str], size: int = _PATHSPEC_CHUNK):
@@ -26,14 +30,126 @@ def _chunks(items: list[str], size: int = _PATHSPEC_CHUNK):
         yield items[index : index + size]
 
 
+def _read_git_quoted(text: str, start: int) -> tuple[str, int]:
+    """Decode one git C-quoted path. Octal escapes are raw bytes, then UTF-8."""
+    i = start + 1
+    raw = bytearray()
+    while i < len(text):
+        ch = text[i]
+        if ch == '"':
+            return raw.decode("utf-8", "surrogateescape"), i + 1
+        if ch == "\\" and i + 1 < len(text):
+            nxt = text[i + 1]
+            if nxt in "01234567":
+                octal = nxt
+                i += 2
+                for _ in range(2):
+                    if i < len(text) and text[i] in "01234567":
+                        octal += text[i]
+                        i += 1
+                    else:
+                        break
+                raw.append(int(octal, 8) & 0xFF)
+                continue
+            mapping = {
+                "n": b"\n",
+                "t": b"\t",
+                "\\": b"\\",
+                '"': b'"',
+                "a": b"\a",
+                "b": b"\b",
+                "f": b"\f",
+                "r": b"\r",
+                "v": b"\v",
+            }
+            raw.extend(mapping.get(nxt, nxt.encode("utf-8", "surrogateescape")))
+            i += 2
+            continue
+        raw.extend(ch.encode("utf-8", "surrogateescape"))
+        i += 1
+    return text[start:], len(text)
+
+
+def _porcelain_path_tokens(field: str) -> list[str]:
+    """Split a porcelain path field on unquoted `` -> `` rename separators."""
+    tokens: list[str] = []
+    i = 0
+    n = len(field)
+    while i < n:
+        while i < n and field[i] == " ":
+            i += 1
+        if i >= n:
+            break
+        if field.startswith("->", i):
+            i += 2
+            continue
+        if field[i] == '"':
+            token, i = _read_git_quoted(field, i)
+            tokens.append(token)
+            continue
+        arrow = field.find(" -> ", i)
+        if arrow == -1:
+            tokens.append(field[i:])
+            break
+        tokens.append(field[i:arrow])
+        i = arrow
+    return tokens
+
+
 def _porcelain_path(raw: str) -> str:
-    """Turn a git status --porcelain path into a repo-relative posix path."""
-    name = (raw or "").strip()
-    if " -> " in name:
-        name = name.split(" -> ", 1)[1]
-    if len(name) >= 2 and name[0] == '"' and name[-1] == '"':
-        name = name[1:-1].encode("utf-8").decode("unicode_escape")
+    """Turn a git status --porcelain path into a repo-relative posix path.
+
+    Unquote before treating `` -> `` as a rename, so a quoted name that contains
+    that text stays one path. Octal escapes are git's quoted UTF-8 bytes.
+    """
+    field = (raw or "").strip()
+    if not field:
+        return ""
+    tokens = _porcelain_path_tokens(field)
+    name = tokens[-1] if tokens else field
     return name.replace("\\", "/")
+
+
+def _can_see_git_processes() -> bool:
+    """True on hosts where a live git command line can be matched to this repo."""
+    return Path("/proc").is_dir()
+
+
+def index_lock_stale_sec() -> float:
+    """How old index.lock must be before it is treated as abandoned."""
+    if _can_see_git_processes():
+        return _INDEX_LOCK_STALE_SEC
+    return _INDEX_LOCK_STALE_SEC_OTHER
+
+
+def _git_process_uses_repo(repo: Path) -> bool:
+    """True when a live git process command line names this repository.
+
+    Linux CreoPDM hosts expose that in ``/proc``. Other platforms use the shorter
+    stale-lock age, because this check cannot see a live git process there.
+    """
+    proc = Path("/proc")
+    if not proc.is_dir():
+        return False
+    try:
+        root = str(Path(repo).resolve())
+    except OSError:
+        root = str(repo)
+    needle = root.encode("utf-8", "surrogateescape")
+    try:
+        entries = list(proc.iterdir())
+    except OSError:
+        return False
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        try:
+            cmdline = (entry / "cmdline").read_bytes()
+        except OSError:
+            continue
+        if b"git" in cmdline and needle in cmdline:
+            return True
+    return False
 
 
 def is_git_index_lock_error(message: str) -> bool:
@@ -43,14 +159,19 @@ def is_git_index_lock_error(message: str) -> bool:
     )
 
 
-def clear_stale_git_index_lock(repo: Path, *, max_age_sec: float = _INDEX_LOCK_STALE_SEC) -> bool:
+def clear_stale_git_index_lock(repo: Path, *, max_age_sec: float | None = None) -> bool:
     """Remove a leftover .git/index.lock when it is older than max_age_sec."""
+    if max_age_sec is None:
+        max_age_sec = index_lock_stale_sec()
     lock = Path(repo) / ".git" / "index.lock"
     if not lock.is_file():
         return False
     try:
         age = time.time() - lock.stat().st_mtime
     except OSError:
+        return False
+    if _git_process_uses_repo(repo):
+        logger.info("Leaving git index.lock; a git process is using %s", repo)
         return False
     if age < max_age_sec:
         return False
@@ -165,7 +286,7 @@ class GitService:
                 # hold index.lock longer than a couple of seconds.
                 cleared = clear_stale_git_index_lock(
                     cwd,
-                    max_age_sec=_INDEX_LOCK_STALE_SEC,
+                    max_age_sec=index_lock_stale_sec(),
                 )
                 logger.warning(
                     "Git index.lock busy (%s/%s)%s; retrying in %.1fs",
@@ -247,7 +368,11 @@ class GitService:
     def status(self, path: Path) -> GitStatus:
         branch_result = self._run(["rev-parse", "--abbrev-ref", "HEAD"], cwd=path, check=False, quiet=True)
         branch = (branch_result.stdout or "main").strip() or "main"
-        porcelain = self._run(["status", "--porcelain", "-uall"], cwd=path, quiet=True)
+        porcelain = self._run(
+            ["-c", "core.quotepath=false", "status", "--porcelain", "-uall"],
+            cwd=path,
+            quiet=True,
+        )
         raw = porcelain.stdout or ""
         staged: list[str] = []
         unstaged: list[str] = []
@@ -353,6 +478,13 @@ class GitService:
                 )
             )
         return entries
+
+    def unstage_paths(self, path: Path, relative_paths: list[str]) -> None:
+        """Drop these paths from the index only. Does not reset the rest of the repo."""
+        safe = [item.replace("\\", "/").lstrip("/") for item in relative_paths if item]
+        if not safe:
+            return
+        self._run(["reset", "-q", "HEAD", "--", *safe], cwd=path, check=False, quiet=True)
 
     def restore_file(self, path: Path, relative_path: str, commit_hash: str) -> None:
         self._run(["checkout", commit_hash, "--", relative_path], cwd=path)
@@ -482,23 +614,50 @@ class GitService:
         )
         if (existing.stdout or "").strip():
             self._run(["branch", "-D", temp_branch], cwd=repo, quiet=True)
-        logger.warning("Compacting vault history to a single tip commit at %s", repo)
-        self._run(["checkout", "--orphan", temp_branch], cwd=repo)
-        self.run_with_index_lock_retry(["add", "-A"], cwd=repo, quiet=True)
-        self.commit(repo, message, author, allow_empty=True)
-        self._run(["branch", "-M", branch], cwd=repo)
-        # Delete any other local branches that still pin old objects.
-        listed = self._run(
-            ["branch", "--format=%(refname:short)"],
+        current = self._run(
+            ["rev-parse", "--abbrev-ref", "HEAD"],
             cwd=repo,
+            check=False,
             quiet=True,
         )
-        for name in (listed.stdout or "").splitlines():
-            other = name.strip()
-            if other and other != branch:
-                self._run(["branch", "-D", other], cwd=repo, quiet=True)
-        self._run(["reflog", "expire", "--expire=now", "--all"], cwd=repo, quiet=True)
-        self._run(["gc", "--prune=now"], cwd=repo, quiet=True)
-        head = self.get_head(repo)
-        logger.info("Compacted vault history → %s (%s)", head[:12], repo)
-        return head
+        original_branch = (current.stdout or "").strip() or branch
+        if original_branch == "HEAD":
+            original_branch = branch
+        logger.warning("Compacting vault history to a single tip commit at %s", repo)
+        self._run(["checkout", "--orphan", temp_branch], cwd=repo)
+        on_temp_branch = True
+        try:
+            self.run_with_index_lock_retry(["add", "-A"], cwd=repo, quiet=True)
+            self.commit(repo, message, author, allow_empty=True)
+            self._run(["branch", "-M", branch], cwd=repo)
+            on_temp_branch = False
+            # Delete any other local branches that still pin old objects.
+            listed = self._run(
+                ["branch", "--format=%(refname:short)"],
+                cwd=repo,
+                quiet=True,
+            )
+            for name in (listed.stdout or "").splitlines():
+                other = name.strip()
+                if other and other != branch:
+                    self._run(["branch", "-D", other], cwd=repo, quiet=True)
+            self._run(["reflog", "expire", "--expire=now", "--all"], cwd=repo, quiet=True)
+            self._run(["gc", "--prune=now"], cwd=repo, quiet=True)
+            head = self.get_head(repo)
+            logger.info("Compacted vault history → %s (%s)", head[:12], repo)
+            return head
+        finally:
+            if on_temp_branch:
+                logger.warning(
+                    "Compact failed; returning %s from %s to %s",
+                    repo,
+                    temp_branch,
+                    original_branch,
+                )
+                self._run(
+                    ["checkout", "-f", original_branch],
+                    cwd=repo,
+                    check=False,
+                    quiet=True,
+                )
+                self._run(["branch", "-D", temp_branch], cwd=repo, check=False, quiet=True)

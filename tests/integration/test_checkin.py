@@ -2,6 +2,12 @@ from pathlib import Path
 import re
 import stat
 
+from sqlalchemy import select
+
+from creopdm.constants import CheckoutStatus
+from creopdm.exceptions import RepositoryError
+from creopdm.models.checkout import Checkout
+from creopdm.models.object import EngineeringObject
 from tests.conftest import requires_git
 
 
@@ -951,3 +957,172 @@ def test_product_workspace_content_stages_new_file_for_add(client, repo_parent, 
     assert added.status_code == 200, added.text
     objects = client.get(f"/api/products/{product['uuid']}/objects").json()
     assert any(item["filename"] == "notes.txt" for item in objects)
+
+
+@requires_git
+def test_checkin_git_failure_restores_vault_bytes(client, app, repo_parent, data_dir):
+    """store_version raising must not leave new vault bytes or a new DB version."""
+    product, obj = _create_part(client, repo_parent)
+    assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
+    vault = data_dir / "vaults" / product["uuid"]
+    original = (vault / "shaft.prt").read_bytes()
+    (vault / "shaft.prt.1").write_bytes(b"newer-local")
+    store = app.state.ctx.checkins._store
+    real = store.store_version
+
+    def boom(*_args, **_kwargs):
+        raise RepositoryError("git failed")
+
+    store.store_version = boom
+    try:
+        failed = client.post(
+            f"/api/objects/{obj['uuid']}/checkin",
+            json={"comment": "Should not stick"},
+        )
+    finally:
+        store.store_version = real
+    assert failed.status_code >= 400, failed.text
+    assert (vault / "shaft.prt").read_bytes() == original
+    assert (vault / "shaft.prt.1").read_bytes() == b"newer-local"
+    current = client.get(f"/api/objects/{obj['uuid']}").json()
+    assert current["iteration"] == obj["iteration"]
+    assert current["owned_by_me"] is True
+
+
+@requires_git
+def test_revert_failure_keeps_existing_checkout(client, app, repo_parent, data_dir):
+    """A failed revert must not undo a checkout the user already held."""
+    product, obj = _create_part(client, repo_parent)
+    object_id = obj["uuid"]
+    assert client.post(f"/api/objects/{object_id}/checkout").status_code == 200
+    vault = data_dir / "vaults" / product["uuid"]
+    (vault / "shaft.prt").write_bytes(b"v2-content")
+    checked = client.post(
+        f"/api/objects/{object_id}/checkin",
+        json={"comment": "Second version"},
+    )
+    assert checked.status_code == 200, checked.text
+    assert client.post(f"/api/objects/{object_id}/checkout").status_code == 200
+    (vault / "shaft.prt").write_bytes(b"local-edits")
+    history = client.get(f"/api/objects/{object_id}/history").json()
+    older = history[-1]
+    store = app.state.ctx.checkins._store
+    real = store.store_version
+
+    def boom(*_args, **_kwargs):
+        raise RepositoryError("git failed")
+
+    store.store_version = boom
+    try:
+        failed = client.post(f"/api/objects/{object_id}/versions/{older['uuid']}/revert")
+    finally:
+        store.store_version = real
+    assert failed.status_code >= 400, failed.text
+    assert (vault / "shaft.prt").read_bytes() == b"local-edits"
+    current = client.get(f"/api/objects/{object_id}").json()
+    assert current["iteration"] == checked.json()["iteration"]
+    assert current["owned_by_me"] is True
+    with app.state.ctx.session_factory() as db:
+        row = db.scalar(select(EngineeringObject).where(EngineeringObject.uuid == object_id))
+        assert row is not None
+        active = db.scalar(
+            select(Checkout).where(
+                Checkout.object_id == row.id,
+                Checkout.status == CheckoutStatus.ACTIVE.value,
+            )
+        )
+        assert active is not None
+
+
+@requires_git
+def test_revert_when_already_checked_out_stores_old_bytes(client, app, repo_parent, data_dir):
+    """A successful revert of a file you already checked out replaces local edits and releases the lock."""
+    product, obj = _create_part(client, repo_parent)
+    object_id = obj["uuid"]
+    assert client.post(f"/api/objects/{object_id}/checkout").status_code == 200
+    vault = data_dir / "vaults" / product["uuid"]
+    (vault / "shaft.prt").write_bytes(b"v2-content")
+    checked = client.post(
+        f"/api/objects/{object_id}/checkin",
+        json={"comment": "Second version"},
+    )
+    assert checked.status_code == 200, checked.text
+    assert client.post(f"/api/objects/{object_id}/checkout").status_code == 200
+    (vault / "shaft.prt").write_bytes(b"local-edits")
+    history = client.get(f"/api/objects/{object_id}/history").json()
+    older = history[-1]
+    reverted = client.post(f"/api/objects/{object_id}/versions/{older['uuid']}/revert")
+    assert reverted.status_code == 200, reverted.text
+    body = reverted.json()
+    assert body["iteration"] == checked.json()["iteration"] + 1
+    assert body["owned_by_me"] is False
+    assert body["current_version"]["content_hash"] == older["content_hash"]
+    assert body["current_version"]["comment"].startswith("Reverted to")
+    assert (vault / "shaft.prt").read_bytes() == b"v1-content"
+    with app.state.ctx.session_factory() as db:
+        row = db.scalar(select(EngineeringObject).where(EngineeringObject.uuid == object_id))
+        assert row is not None
+        active = db.scalar(
+            select(Checkout).where(
+                Checkout.object_id == row.id,
+                Checkout.status == CheckoutStatus.ACTIVE.value,
+            )
+        )
+        assert active is None
+
+
+@requires_git
+def test_checkin_queue_continues_after_oserror(client, app, repo_parent, data_dir):
+    """One OSError in a check-in batch is a failed row; the other file still checks in."""
+    product = client.post("/api/products", json={"name": "Queue Arm"}).json()
+    first = client.post(
+        f"/api/products/{product['uuid']}/objects",
+        files={"file": ("shaft.prt", b"shaft-v1", "application/octet-stream")},
+        data={"comment": "Shaft"},
+    ).json()
+    second = client.post(
+        f"/api/products/{product['uuid']}/objects",
+        files={"file": ("pin.prt", b"pin-v1", "application/octet-stream")},
+        data={"comment": "Pin"},
+    ).json()
+    vault = data_dir / "vaults" / product["uuid"]
+    for object_id, name, payload in (
+        (first["uuid"], "shaft.prt", b"shaft-v2"),
+        (second["uuid"], "pin.prt", b"pin-v2"),
+    ):
+        assert client.post(f"/api/objects/{object_id}/checkout").status_code == 200
+        (vault / name).write_bytes(payload)
+    real = app.state.ctx.checkins.checkin
+
+    def wrapped(session, object_uuid, comment, add_relative_paths=None, **kwargs):
+        if object_uuid == first["uuid"]:
+            # Half-applied row must roll back with this item, not stick on commit.
+            row = session.scalar(
+                select(EngineeringObject).where(EngineeringObject.uuid == object_uuid)
+            )
+            assert row is not None
+            row.filename = "half-applied.prt"
+            session.flush()
+            raise OSError("disk full")
+        return real(session, object_uuid, comment, add_relative_paths, **kwargs)
+
+    app.state.ctx.checkins.checkin = wrapped
+    try:
+        result = client.post(
+            f"/api/products/{product['uuid']}/checkin-queue",
+            json={"comment": "Batch", "object_ids": [first["uuid"], second["uuid"]]},
+        )
+    finally:
+        app.state.ctx.checkins.checkin = real
+    assert result.status_code == 200, result.text
+    body = result.json()
+    assert body["failed"][0]["uuid"] == first["uuid"]
+    assert body["failed"][0]["code"] == "APPLICATION_ERROR"
+    assert any(item["uuid"] == second["uuid"] for item in body["ok"])
+    shaft = client.get(f"/api/objects/{first['uuid']}").json()
+    pin = client.get(f"/api/objects/{second['uuid']}").json()
+    assert shaft["filename"] == "shaft.prt"
+    assert shaft["iteration"] == first["iteration"]
+    assert shaft["owned_by_me"] is True
+    assert pin["iteration"] == second["iteration"] + 1
+    assert pin["owned_by_me"] is False

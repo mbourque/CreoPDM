@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import select
 
-from creopdm.exceptions import ValidationAppError
+from creopdm.exceptions import RepositoryError, ValidationAppError
 from creopdm.models.object import EngineeringObject
 from creopdm.models.version import ObjectVersion
 from creopdm.services.git_service import GitService
@@ -194,3 +194,30 @@ def test_compact_drops_blobs_after_remove_from_product(client, app, data_dir):
         assert result.new_head
 
     assert git._run(["cat-file", "-e", blob], cwd=vault, check=False).returncode != 0
+
+
+@requires_git
+def test_compact_failure_returns_to_original_branch(tmp_path):
+    """A failure after orphan checkout must not leave creopdm-compact-tmp checked out."""
+    vault = tmp_path / "vault"
+    git = GitService()
+    author = UserIdentity("Admin", "TEST-PC")
+    git.init_repository(vault, "main")
+    (vault / "a.prt").write_bytes(b"keep")
+    git.stage_files(vault, ["a.prt"])
+    git.commit(vault, "init", author)
+    real_commit = git.commit
+
+    def boom(path, message, commit_author, allow_empty=False):
+        if message.startswith("Compact"):
+            raise RepositoryError("commit failed")
+        return real_commit(path, message, commit_author, allow_empty=allow_empty)
+
+    git.commit = boom
+    with pytest.raises(RepositoryError):
+        git.compact_to_tip(vault, author=author, message="Compact vault", branch="main")
+    branch = git._run(["rev-parse", "--abbrev-ref", "HEAD"], cwd=vault).stdout.strip()
+    assert branch == "main"
+    listed = git._run(["branch", "--list", "creopdm-compact-tmp"], cwd=vault).stdout or ""
+    assert "creopdm-compact-tmp" not in listed
+    assert (vault / "a.prt").read_bytes() == b"keep"

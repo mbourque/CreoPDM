@@ -2877,7 +2877,9 @@ def test_admin_hub_panel_fills_full_width():
     assert 'href="/settings/{{ tile.slug }}"' in settings or 'href="/settings/' in settings
     assert "settings_tiles" in settings
     hub = (ROOT / "src" / "creopdm" / "settings_hub.py").read_text(encoding="utf-8")
-    assert 'slug="availability"' not in hub
+    # Availability lives on System Settings (moved off Utilities on purpose).
+    assert 'slug="availability"' in hub
+    assert hub.index('slug="availability"') < hub.index('slug="open"')
     assert 'slug="database"' in hub
     assert 'slug="ai"' in hub
     assert hub.index('slug="open"') < hub.index('slug="vault"')
@@ -2910,7 +2912,7 @@ def test_admin_hub_panel_fills_full_width():
     assert "Back to System Settings" in section
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "System Settings" in docs
-    assert "hub of short tiles" in docs
+    assert "hub of short light red tiles" in docs
     assert "Utilities" in docs
     assert "utilities.audit" in docs
     assert "utilities.health" in docs

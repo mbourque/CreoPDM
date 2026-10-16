@@ -705,3 +705,44 @@ def test_product_checkouts_lists_active_locks(client, repo_parent, identity):
     assert ".tab-panel:not([hidden])" in css.text
 
 
+@requires_git
+def test_checkout_many_continues_after_oserror(client, app, repo_parent):
+    """One OSError in a checkout batch is a failed row; the other file still checks out."""
+    product = client.post("/api/products", json={"name": "Batch Arm"}).json()
+    first = client.post(
+        f"/api/products/{product['uuid']}/objects",
+        files={"file": ("shaft.prt", b"shaft", "application/octet-stream")},
+        data={"comment": "Shaft"},
+    ).json()
+    second = client.post(
+        f"/api/products/{product['uuid']}/objects",
+        files={"file": ("pin.prt", b"pin", "application/octet-stream")},
+        data={"comment": "Pin"},
+    ).json()
+    real = app.state.ctx.checkouts.checkout
+
+    def wrapped(session, object_uuid):
+        if object_uuid == first["uuid"]:
+            raise OSError("disk locked")
+        return real(session, object_uuid)
+
+    app.state.ctx.checkouts.checkout = wrapped
+    try:
+        result = client.post(
+            "/api/objects/batch/checkout",
+            json={"object_ids": [first["uuid"], second["uuid"]]},
+        )
+    finally:
+        app.state.ctx.checkouts.checkout = real
+    assert result.status_code == 200, result.text
+    body = result.json()
+    failed = {item["uuid"]: item for item in body["failed"]}
+    ok = {item["uuid"]: item for item in body["ok"]}
+    assert failed[first["uuid"]]["code"] == "APPLICATION_ERROR"
+    assert ok[second["uuid"]]["status"] == "checked_out"
+    shaft = client.get(f"/api/objects/{first['uuid']}").json()
+    pin = client.get(f"/api/objects/{second['uuid']}").json()
+    assert shaft["owned_by_me"] is False
+    assert pin["owned_by_me"] is True
+
+

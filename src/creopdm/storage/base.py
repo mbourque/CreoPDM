@@ -66,6 +66,10 @@ class VersionStore(ABC):
     def restore_checkpoint(self, repository_path: Path, checkpoint: str) -> None:
         """Restore storage to a captured checkpoint. Never used as a user-facing undo."""
 
+    def abandon_staged_paths(self, repository_path: Path, relative_paths: list[str]) -> None:
+        """Unstage paths after a failed commit. Default is a no-op."""
+        return
+
     @abstractmethod
     def remove_files(
         self,
