@@ -20,7 +20,7 @@
     <section class="settings-card">
       {% if error %}<p class="error">{{ error }}</p>{% endif %}
       <p>Copies the current vault files into a new product, the same way <strong>Add</strong> does on a new product. Each file starts at <strong>A.1</strong>, <strong>In Work</strong>, and not checked out. The copy gets a new id and a new vault whose Git history is only that first Add.</p>
-      <p class="muted small">Copying files from <strong>{{ form.source_name }}</strong>. Name must be different from every product on this server. Leave the vault folder blank for a new id, or type a folder name that no other product uses. Revision history, checkouts, and product watches are not copied. Collected metadata and Where Used are copied onto the new A.1 files. Thumbnails stay with the original file bytes, so both products still show them when the bytes match.{% if form.file_count == 0 %} This product has no vault files to copy; the new product will be empty.{% else %} {{ form.file_count }} file{{ 's' if form.file_count != 1 else '' }} will be copied.{% endif %}</p>
+      <p class="muted small">Copying files from <strong>{{ form.source_name }}</strong>. Name must be different from every product on this server. Vault/Workspace name uses the same <strong>Use hash</strong> control as New product. Revision history, checkouts, and product watches are not copied. Collected metadata and Where Used are copied onto the new A.1 files. Thumbnails stay with the original file bytes, so both products still show them when the bytes match.{% if form.file_count == 0 %} This product has no vault files to copy; the new product will be empty.{% else %} {{ form.file_count }} file{{ 's' if form.file_count != 1 else '' }} will be copied.{% endif %}</p>
       <label>Name
         <input name="name" type="text" value="{{ form.name }}" required maxlength="255" autocomplete="off">
       </label>
@@ -30,11 +30,9 @@
       <label>Description <span class="muted small">(optional)</span>
         <input name="description" type="text" value="{{ form.description }}" maxlength="256" autocomplete="off">
       </label>
-      <label>Vault / workspace folder <span class="muted small">(optional)</span>
-        <input name="vault_folder" type="text" value="{{ form.vault_folder }}" maxlength="200" autocomplete="off"
-               placeholder="Leave blank for a unique id; no spaces">
-      </label>
-      <p class="muted small">Blank uses a unique folder name under the server vault. A custom name cannot contain spaces or match another product’s vault folder.</p>
+      {% with vault_folder=form.vault_folder, use_hash=form.use_hash %}
+      {% include "partials/product_vault_fields.html" %}
+      {% endwith %}
       <label>Initial comment <span class="muted small">(optional)</span>
         <textarea name="comment" rows="3" placeholder="{{ form.default_comment }}">{{ form.comment }}</textarea>
       </label>

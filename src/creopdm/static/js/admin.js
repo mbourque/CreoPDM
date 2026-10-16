@@ -94,7 +94,7 @@ window.__creopdmModules.admin = {
       const input = $("#product-vault-folder");
       const useHash = $("#product-use-hash");
       if (!input || useHash?.checked || productVaultCustomTouched) return;
-      const slug = slugifyVaultFolder(productForm?.elements?.name?.value || "");
+      const slug = slugifyVaultFolder(input.form?.elements?.name?.value || "");
       input.value = slug;
       productVaultCustom = slug;
     }
@@ -103,14 +103,23 @@ window.__creopdmModules.admin = {
       const input = $("#product-vault-folder");
       const useHash = $("#product-use-hash");
       if (!input || !useHash) return;
-      if (resetHash || !productVaultHash) productVaultHash = newProductVaultHash();
       if (useHash.checked) {
+        const shown = String(input.value || "").trim();
+        if (!resetHash && !productVaultHash && shown) productVaultHash = shown;
+        if (resetHash || !productVaultHash) productVaultHash = newProductVaultHash();
+        input.dataset.vaultHash = productVaultHash;
         input.value = productVaultHash;
         input.disabled = true;
         input.readOnly = true;
       } else {
         input.disabled = false;
         input.readOnly = false;
+        const shown = String(input.value || "").trim();
+        const wasHash = Boolean(shown) && shown === String(input.dataset.vaultHash || productVaultHash || "");
+        if (!productVaultCustomTouched && shown && !wasHash) {
+          productVaultCustomTouched = true;
+          productVaultCustom = shown;
+        }
         if (!productVaultCustomTouched) {
           fillVaultFolderFromName();
         } else {
@@ -273,9 +282,35 @@ window.__creopdmModules.admin = {
       }
     });
 
-    onPage(productForm?.elements?.name, "input", () => {
+    onPage($("#product-vault-folder")?.form?.elements?.name, "input", () => {
       fillVaultFolderFromName();
     });
+
+    onPage($("#product-vault-folder")?.form, "submit", (event) => {
+      const input = $("#product-vault-folder");
+      const useHash = $("#product-use-hash");
+      if (!input || !useHash) return;
+      if (useHash.checked) {
+        // Disabled fields are omitted from a normal form post. Unlock so the
+        // UUID shown in the box is the vault folder that gets created.
+        input.disabled = false;
+        input.value = productVaultHash || input.value || newProductVaultHash();
+        productVaultHash = input.value;
+        return;
+      }
+      const vaultFolder = String(input.value || "").trim();
+      const errorEl = $("#product-error") || $("#product-vault-error");
+      if (!vaultFolder) {
+        event.preventDefault();
+        showError(errorEl, "Enter a vault/workspace name, or check Use hash.");
+        input.focus();
+        return;
+      }
+      if (/\s/.test(vaultFolder)) {
+        event.preventDefault();
+        showError(errorEl, "Vault/workspace name cannot contain spaces.");
+      }
+    }, true);
 
     onPage($("#product-vault-folder"), "input", () => {
       const useHash = $("#product-use-hash");
@@ -283,6 +318,10 @@ window.__creopdmModules.admin = {
       productVaultCustomTouched = true;
       productVaultCustom = String($("#product-vault-folder")?.value || "").trim();
     });
+
+    if ($("#product-vault-folder") && !$("#product-dialog")?.open) {
+      syncProductVaultFolderField(false);
+    }
 
     onPage(productForm, "submit", async (event) => {
       event.preventDefault();

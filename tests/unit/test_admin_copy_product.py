@@ -187,7 +187,10 @@ def test_admin_copy_product_is_a_fresh_add(auth_client, auth_ctx):
     assert 'name="name" type="text" value=""' in form.text
     assert 'name="number" type="text" value=""' in form.text
     assert 'name="description" type="text" value=""' in form.text
-    assert 'name="vault_folder" type="text" value=""' in form.text
+    assert 'id="product-vault-folder"' in form.text
+    assert 'id="product-use-hash" checked' in form.text
+    assert "Vault/Workspace name" in form.text
+    assert "With Use hash, the UUID is locked in." in form.text
     assert (
         '<textarea name="comment" rows="3" placeholder="First check in: Add 2 files"></textarea>'
         in form.text

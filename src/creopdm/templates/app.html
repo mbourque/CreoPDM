@@ -611,16 +611,7 @@
     <label>Description
       <textarea name="description" rows="3" maxlength="256" placeholder="Prototype robotic arm"></textarea>
     </label>
-    <div id="product-vault-fields" class="product-vault-fields">
-      <label>Vault/Workspace name
-        <input name="vault_folder" id="product-vault-folder" maxlength="200" autocomplete="off" spellcheck="false" placeholder="robot-arm">
-      </label>
-      <div class="checkbox-row">
-        <input type="checkbox" name="use_hash" id="product-use-hash" checked>
-        <label for="product-use-hash">Use hash</label>
-      </div>
-      <p class="muted small" id="product-vault-hint">Folder under the vaults directory. With Use hash, the UUID is locked in. Uncheck to type your own name (no spaces).</p>
-    </div>
+    {% include "partials/product_vault_fields.html" %}
     <p class="error" id="product-error" hidden></p>
     <div class="dialog-actions">
       <button type="button" class="btn" value="cancel" id="product-cancel">Cancel</button>

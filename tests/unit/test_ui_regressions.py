@@ -699,13 +699,22 @@ def test_dropped_folder_keeps_nested_relative_paths():
 
 def test_product_dialog_has_vault_folder_and_use_hash():
     html = APP_HTML.read_text(encoding="utf-8")
-    assert "Vault/Workspace name" in html
-    assert 'id="product-use-hash"' in html
-    assert 'name="vault_folder"' in html
-    assert 'class="checkbox-row"' in html
-    assert 'for="product-use-hash"' in html
+    partial_path = ROOT / "src" / "creopdm" / "templates" / "partials" / "product_vault_fields.html"
+    partial = partial_path.read_text(encoding="utf-8")
+    admin_form = (ROOT / "src" / "creopdm" / "templates" / "admin_product_form.html").read_text(
+        encoding="utf-8"
+    )
+    include = '{% include "partials/product_vault_fields.html" %}'
+    assert include in html
+    assert include in admin_form
+    assert "Vault/Workspace name" in partial
+    assert 'id="product-use-hash"' in partial
+    assert 'name="vault_folder"' in partial
+    assert 'class="checkbox-row"' in partial
+    assert 'for="product-use-hash"' in partial
     # Use hash is the default — uncheck to type a custom vault folder.
-    assert 'id="product-use-hash" checked' in html
+    assert "use_hash|default(true)" in partial
+    assert "checked" in partial
     assert "data-vault-folder=" in html
     script = _app_js()
     assert "syncProductVaultFolderField" in script

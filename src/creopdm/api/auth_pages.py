@@ -2253,6 +2253,7 @@ def _copy_form_payload(summary: dict, **overrides) -> dict:
         "description": "",
         "comment": "",
         "vault_folder": "",
+        "use_hash": True,
         "file_count": int(summary.get("file_count") or 0),
         "source_name": summary.get("name") or "",
         "default_comment": summary.get("comment") or "",
@@ -2300,6 +2301,7 @@ def admin_product_copy(
     description: str = Form(""),
     comment: str = Form(""),
     vault_folder: str = Form(""),
+    use_hash: str = Form(""),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
@@ -2317,6 +2319,7 @@ def admin_product_copy(
         description=description,
         comment=comment,
         vault_folder=vault_folder,
+        use_hash=str(use_hash or "").strip().lower() in {"1", "on", "true", "yes"},
     )
     try:
         product = ctx.products.copy_product(
