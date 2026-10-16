@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{% if mode == 'new' %}Add product{% else %}Edit product{% endif %} — {{ app_name }}{% endblock %}
+{% block title %}{% if mode == 'new' %}Add product{% elif mode == 'copy' %}Copy product{% else %}Edit product{% endif %} — {{ app_name }}{% endblock %}
 {% block content %}
 <article class="detail settings-page admin-page">
   <nav class="crumb">
@@ -11,11 +11,41 @@
     <span>/</span>
     <a href="/admin/products">Products</a>
     <span>/</span>
-    <span>{% if mode == 'new' %}Add product{% else %}{{ form.name }}{% endif %}</span>
+    <span>{% if mode == 'new' %}Add product{% elif mode == 'copy' %}Copy {{ form.source_name or form.name }}{% else %}{{ form.name }}{% endif %}</span>
   </nav>
-  <h1>{% if mode == 'new' %}Add product{% else %}Edit product{% endif %}</h1>
+  <h1>{% if mode == 'new' %}Add product{% elif mode == 'copy' %}Copy product{% else %}Edit product{% endif %}</h1>
 
-  {% if mode == 'new' %}
+  {% if mode == 'copy' %}
+  <form method="post" action="/admin/products/{{ form.uuid }}/copy" class="settings-form settings-form-wide">
+    <section class="settings-card">
+      {% if error %}<p class="error">{{ error }}</p>{% endif %}
+      <p>Copies the current vault files into a new product, the same way <strong>Add</strong> does on a new product. Each file starts at <strong>A.1</strong>, <strong>In Work</strong>, and not checked out. The copy gets a new id and a new vault whose Git history is only that first Add.</p>
+      <p class="muted small">Copying files from <strong>{{ form.source_name }}</strong>. Name must be different from every product on this server. Leave the vault folder blank for a new id, or type a folder name that no other product uses. Revision history, checkouts, and product watches are not copied. Collected metadata and Where Used are copied onto the new A.1 files. Thumbnails stay with the original file bytes, so both products still show them when the bytes match.{% if form.file_count == 0 %} This product has no vault files to copy; the new product will be empty.{% else %} {{ form.file_count }} file{{ 's' if form.file_count != 1 else '' }} will be copied.{% endif %}</p>
+      <label>Name
+        <input name="name" type="text" value="{{ form.name }}" required maxlength="255" autocomplete="off">
+      </label>
+      <label>Number <span class="muted small">(optional)</span>
+        <input name="number" type="text" value="{{ form.number }}" maxlength="25" autocomplete="off">
+      </label>
+      <label>Description <span class="muted small">(optional)</span>
+        <input name="description" type="text" value="{{ form.description }}" maxlength="256" autocomplete="off">
+      </label>
+      <label>Vault / workspace folder <span class="muted small">(optional)</span>
+        <input name="vault_folder" type="text" value="{{ form.vault_folder }}" maxlength="200" autocomplete="off"
+               placeholder="Leave blank for a unique id; no spaces">
+      </label>
+      <p class="muted small">Blank uses a unique folder name under the server vault. A custom name cannot contain spaces or match another product’s vault folder.</p>
+      <label>Initial comment <span class="muted small">(optional)</span>
+        <textarea name="comment" rows="3" placeholder="{{ form.default_comment }}">{{ form.comment }}</textarea>
+      </label>
+      <p class="muted small">Leave blank to use the same History comment as Add{% if form.default_comment %}: {{ form.default_comment }}{% endif %}.</p>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Copy product</button>
+        <a class="btn" href="/admin/products">Back to list</a>
+      </div>
+    </section>
+  </form>
+  {% elif mode == 'new' %}
   <form method="post" action="/admin/products/new" class="settings-form settings-form-wide">
     <section class="settings-card">
       {% if error %}<p class="error">{{ error }}</p>{% endif %}
@@ -77,6 +107,7 @@
       <p class="muted small">New products default to <strong>In Work</strong>.{% if can_manage_lifecycle_states %} Edit the matrix under <a href="/admin/lifecycle">Administration → Lifecycle states</a>.{% endif %}</p>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Save</button>
+        <a class="btn" href="/admin/products/{{ form.uuid }}/copy">Copy product</a>
         <a class="btn" href="/admin/products">Back to list</a>
       </div>
     </section>

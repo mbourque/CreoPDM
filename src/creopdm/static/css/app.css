@@ -411,6 +411,11 @@ a.brand:hover { text-decoration: none; color: inherit; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.admin-products-table .col-copy {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
 /* Lifecycle matrix: stripe + center only the permission checkbox columns. */
 .lifecycle-matrix th.col-op,
 .lifecycle-matrix td.col-op {

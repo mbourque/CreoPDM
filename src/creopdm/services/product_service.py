@@ -2,21 +2,26 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import delete, or_, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from creopdm.constants import (
     DEFAULT_BRANCH,
+    DEFAULT_REVISION,
+    INITIAL_ITERATION,
     PRODUCT_JSON_NAME,
     PRODUCT_MARKER_DIR,
     ActivityAction,
     CheckoutStatus,
+    LifecycleState,
     ProductState,
 )
+from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import (
     DuplicateProductError,
     PathValidationError,
@@ -39,6 +44,7 @@ from creopdm.models.remote import Remote
 from creopdm.models.version import ObjectVersion
 from creopdm.services.activity_service import ActivityService
 from creopdm.services.git_service import GitService
+from creopdm.services.object_service import ObjectService
 from creopdm.services.lock_manager import ProductLockManager
 from creopdm.services.workspace_service import WorkspaceService
 from creopdm.utils.files import remove_tree
@@ -215,6 +221,219 @@ class ProductService:
         logger.info("Created product %s in workspace %s", product.uuid, vault)
         session.commit()
         return product
+
+    def copy_source_summary(self, session: Session, source_uuid: str) -> dict[str, str | int]:
+        """Name, number, description, and the Add-style default comment for the copy form."""
+        source = self.load_product_for_delete(session, source_uuid)
+        jobs = self._vault_content_jobs(self._workspaces.vault_for(source))
+        single = jobs[0][1] if len(jobs) == 1 else None
+        from creopdm.utils.import_comments import resolve_add_commit_message
+
+        comment = resolve_add_commit_message(
+            None,
+            planned_count=len(jobs),
+            single_filename=single,
+            first_check_in=True,
+        )
+        return {
+            "name": source.name,
+            "number": source.number or "",
+            "description": source.description or "",
+            "comment": comment,
+            "file_count": len(jobs),
+            "uuid": source.uuid,
+        }
+
+    def copy_product(
+        self,
+        session: Session,
+        objects: ObjectService,
+        source_uuid: str,
+        name: str,
+        number: str | None = None,
+        description: str | None = None,
+        comment: str | None = None,
+        vault_folder: str | None = None,
+    ) -> Product:
+        """Create a new product and Add the source vault's current files into it.
+
+        New id, new vault, one Add commit. Files are A.1 / In Work and not
+        checked out. Current metadata and Where Used are copied onto those
+        new rows. Revision history, checkouts, watches, and membership are not.
+        Thumbnails stay keyed by file hash, so the original product keeps them.
+        """
+        source = self.load_product_for_delete(session, source_uuid)
+        source_vault = self._workspaces.vault_for(source)
+        if not source_vault.is_dir():
+            raise PathValidationError(
+                "This product has no vault folder to copy.",
+                details={"uuid": source.uuid},
+            )
+        with self._locks.acquire(source.uuid):
+            jobs = self._vault_content_jobs(source_vault)
+            from creopdm.utils.import_comments import resolve_add_commit_message
+
+            single = jobs[0][1] if len(jobs) == 1 else None
+            message = resolve_add_commit_message(
+                comment,
+                planned_count=len(jobs),
+                single_filename=single,
+                first_check_in=True,
+            )
+            # Always a new In Work product — do not carry the source lifecycle state.
+            created = self.create_product(
+                session,
+                name,
+                number,
+                description,
+                vault_folder=(vault_folder or "").strip() or None,
+                state=ProductState.IN_WORK.value,
+            )
+            if not jobs:
+                return created
+            try:
+                outcomes = objects.import_files(session, created, jobs, message)
+                failed = [item for item in outcomes if item.error is not None]
+                if failed:
+                    first = failed[0].error
+                    detail = first.message if first is not None else "A file could not be copied."
+                    raise ValidationAppError(
+                        f"Could not copy {failed[0].filename}: {detail}",
+                        details={"filename": failed[0].filename},
+                    )
+                self._copy_current_metadata(session, source, created)
+                session.commit()
+            except Exception:
+                session.rollback()
+                self._discard_copied_product(session, created.uuid)
+                raise
+        logger.info(
+            "Copied product %s to %s (%s files)",
+            source.uuid,
+            created.uuid,
+            len(jobs),
+        )
+        return created
+
+    def _vault_content_jobs(self, vault: Path) -> list[tuple[Path, str, str]]:
+        """Current vault files an Add would store. Skips Git, the product marker, and ignored names."""
+        if not vault.is_dir():
+            return []
+        ignore = self._workspaces._config.ignore_patterns()
+        skip_dirs = {".git", PRODUCT_MARKER_DIR}
+        jobs: list[tuple[Path, str, str]] = []
+        for dirpath, dirnames, filenames in os.walk(vault):
+            dirnames[:] = [name for name in dirnames if name not in skip_dirs]
+            for name in filenames:
+                if name == ".gitignore":
+                    continue
+                if CreoFileManager.is_ignored(name, ignore):
+                    continue
+                path = Path(dirpath) / name
+                if not path.is_file():
+                    continue
+                relative = path.relative_to(vault).as_posix()
+                jobs.append((path, name, relative))
+        jobs.sort(key=lambda item: item[2])
+        return jobs
+
+    def _copy_current_metadata(self, session: Session, source: Product, dest: Product) -> None:
+        """Copy the source tip's collected metadata and Where Used onto the new A.1 rows.
+
+        Does not copy older versions, checkouts, AI snapshots, or watches.
+        """
+        purgeable = self._workspaces._config.purgeable_cad_extensions()
+        source_objects = session.scalars(
+            select(EngineeringObject)
+            .where(EngineeringObject.product_id == source.id)
+            .options(joinedload(EngineeringObject.current_version))
+        ).unique()
+        by_logical: dict[str, EngineeringObject] = {}
+        for obj in source_objects:
+            by_logical[CreoFileManager.logical_repo_path(obj.relative_path, purgeable)] = obj
+
+        dest_objects = list(
+            session.scalars(
+                select(EngineeringObject)
+                .where(EngineeringObject.product_id == dest.id)
+                .options(joinedload(EngineeringObject.current_version))
+            ).unique()
+        )
+        id_map: dict[int, EngineeringObject] = {}
+        json_fields = (
+            "identity_json",
+            "materials_json",
+            "bom_json",
+            "units_json",
+            "mass_json",
+            "family_table_json",
+            "features_json",
+        )
+        for dest_obj in dest_objects:
+            # import_files already stored A.1 / In Work. Keep that even if the source was released.
+            dest_obj.revision = DEFAULT_REVISION
+            dest_obj.iteration = INITIAL_ITERATION
+            dest_obj.lifecycle_state = LifecycleState.IN_WORK.value
+            key = CreoFileManager.logical_repo_path(dest_obj.relative_path, purgeable)
+            src = by_logical.get(key)
+            if src is None:
+                continue
+            id_map[src.id] = dest_obj
+            src_version = src.current_version
+            dest_version = dest_obj.current_version
+            if src_version is None or dest_version is None:
+                continue
+            dest_version.revision = DEFAULT_REVISION
+            dest_version.iteration = INITIAL_ITERATION
+            for field in json_fields:
+                setattr(dest_version, field, getattr(src_version, field))
+            if src_version.creo_release:
+                dest_version.creo_release = src_version.creo_release
+            params = session.scalars(
+                select(Parameter).where(
+                    Parameter.object_id == src.id,
+                    or_(
+                        Parameter.version_id == src_version.id,
+                        Parameter.version_id.is_(None),
+                    ),
+                )
+            )
+            for param in params:
+                session.add(
+                    Parameter(
+                        object_id=dest_obj.id,
+                        version_id=dest_version.id,
+                        name=param.name,
+                        value=param.value,
+                        data_type=param.data_type,
+                        units=param.units,
+                        description=param.description,
+                        is_designated=param.is_designated,
+                    )
+                )
+        edges = session.scalars(select(Dependency).where(Dependency.product_id == source.id))
+        for edge in edges:
+            parent = id_map.get(edge.parent_object_id)
+            child = id_map.get(edge.child_object_id)
+            if parent is None or child is None:
+                continue
+            session.add(
+                Dependency(
+                    product_id=dest.id,
+                    parent_object_id=parent.id,
+                    child_object_id=child.id,
+                    dependency_type=edge.dependency_type,
+                    quantity=edge.quantity,
+                )
+            )
+        session.flush()
+
+    def _discard_copied_product(self, session: Session, product_uuid: str) -> None:
+        """Remove a product left behind when copy fails after create."""
+        try:
+            self.delete_product(session, product_uuid)
+        except Exception:
+            logger.exception("Could not remove incomplete product copy %s", product_uuid)
 
     def update_product(
         self,

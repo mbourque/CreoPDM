@@ -12,7 +12,7 @@
     <span>Products</span>
   </nav>
   <h1>Products</h1>
-  <p class="muted">Every product on this CreoPDM server (including Archived). Click a name to edit, or add a new product.{% if can_delete_product and can_utilities_delete_product %} To delete a product and its vault, use <a href="/admin/utilities/delete-products">Utilities → Delete products</a>.{% endif %}</p>
+  <p class="muted">Every product on this CreoPDM server (including Archived). Click a name to edit, or add a new product. <strong>Copy</strong> makes a new product from the current vault files (new id, A.1, In Work, clean history).{% if can_delete_product and can_utilities_delete_product %} To delete a product and its vault, use <a href="/admin/utilities/delete-products">Utilities → Delete products</a>.{% endif %}</p>
   <p><a class="btn btn-primary" href="/admin/products/new">Add product</a></p>
 
   <section class="settings-card admin-products-table">
@@ -26,6 +26,7 @@
           <th class="col-state">State</th>
           <th class="col-vault">Vault folder</th>
           <th>Description</th>
+          <th class="col-copy"></th>
         </tr>
       </thead>
       <tbody>
@@ -40,9 +41,10 @@
           <td class="col-state">{{ product_state_labels.get(p.state, p.state) }}</td>
           <td class="mono col-vault" title="{{ p.vault_folder }}">{{ p.vault_folder }}</td>
           <td>{{ p.description or "—" }}</td>
+          <td class="col-copy"><a class="btn" href="/admin/products/{{ p.uuid }}/copy">Copy</a></td>
         </tr>
         {% else %}
-        <tr><td colspan="6" class="muted">No products yet.</td></tr>
+        <tr><td colspan="7" class="muted">No products yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>

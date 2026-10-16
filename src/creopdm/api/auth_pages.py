@@ -2245,6 +2245,110 @@ def admin_product_create(
         )
 
 
+def _copy_form_payload(summary: dict, **overrides) -> dict:
+    """Copy form starts blank. Source name is only a label, not a field value."""
+    payload = {
+        "name": "",
+        "number": "",
+        "description": "",
+        "comment": "",
+        "vault_folder": "",
+        "file_count": int(summary.get("file_count") or 0),
+        "source_name": summary.get("name") or "",
+        "default_comment": summary.get("comment") or "",
+        "uuid": summary.get("uuid") or "",
+        "state": "IN_WORK",
+    }
+    payload.update(overrides)
+    return payload
+
+
+@router.get("/admin/products/{product_uuid}/copy", response_class=HTMLResponse)
+def admin_product_copy_form(
+    product_uuid: str,
+    request: Request,
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_products_manager(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    try:
+        summary = ctx.products.copy_source_summary(db, product_uuid)
+    except CreoPDMError:
+        return RedirectResponse("/admin/products", status_code=303)
+    return templates.TemplateResponse(
+        request,
+        "admin_product_form.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "error": None,
+            "mode": "copy",
+            "form": _copy_form_payload(summary),
+            "delete_error": None,
+            **_lifecycle_form_ctx(),
+        },
+    )
+
+
+@router.post("/admin/products/{product_uuid}/copy", response_class=HTMLResponse)
+def admin_product_copy(
+    product_uuid: str,
+    request: Request,
+    name: str = Form(...),
+    number: str = Form(""),
+    description: str = Form(""),
+    comment: str = Form(""),
+    vault_folder: str = Form(""),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_products_manager(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    try:
+        summary = ctx.products.copy_source_summary(db, product_uuid)
+    except CreoPDMError:
+        return RedirectResponse("/admin/products", status_code=303)
+    form = _copy_form_payload(
+        summary,
+        name=name,
+        number=number,
+        description=description,
+        comment=comment,
+        vault_folder=vault_folder,
+    )
+    try:
+        product = ctx.products.copy_product(
+            db,
+            ctx.objects,
+            product_uuid,
+            name=name,
+            number=number or None,
+            description=description or None,
+            comment=comment,
+            vault_folder=vault_folder,
+        )
+        ctx.user_accounts.grant_product_access(db, manager, product)
+        db.commit()
+        return RedirectResponse("/admin/products", status_code=303)
+    except CreoPDMError as exc:
+        db.rollback()
+        return templates.TemplateResponse(
+            request,
+            "admin_product_form.html",
+            {
+                **_base_ctx(request, ctx, current_user=manager),
+                "error": exc.message,
+                "mode": "copy",
+                "form": form,
+                "delete_error": None,
+                **_lifecycle_form_ctx(),
+            },
+            status_code=400,
+        )
+
+
 @router.get("/admin/products/{product_uuid}", response_class=HTMLResponse)
 def admin_product_detail(
     product_uuid: str,
