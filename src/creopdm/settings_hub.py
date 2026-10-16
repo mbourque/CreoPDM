@@ -14,10 +14,19 @@ class SettingsHubTile:
     partial: str | None = None
     # Full page template when not using settings_section.html + partial.
     page_template: str | None = None
+    # Password confirm (light yellow tile). Availability takes the site offline for non-admins.
+    caution: bool = False
 
 
-# Same order as the old monolithic System Settings form (Availability lives under Utilities).
+# Same order as the old monolithic System Settings form.
 SETTINGS_HUB_TILES: tuple[SettingsHubTile, ...] = (
+    SettingsHubTile(
+        slug="availability",
+        title="Availability",
+        blurb="Mark CreoPDM available, or show a maintenance message to non-administrators.",
+        partial="availability.html",
+        caution=True,
+    ),
     SettingsHubTile(
         slug="open",
         title="Open Creo models",

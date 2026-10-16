@@ -446,7 +446,7 @@ def test_admin_can_open_settings(auth_client):
     assert 'href="/admin/products"' in hub.text
     assert 'href="/admin/email"' not in hub.text
     assert 'href="/admin/utilities"' in hub.text
-    assert "Email all users, site availability, Audit log, and server health checks." in hub.text
+    assert "Email all users, Audit log, and server health checks." in hub.text
     assert ">Manage products</a>" in hub.text
     assert "Server options hub: Open Creo models, Vault, file types, agent, database, Email, AI, and more." in hub.text
     assert "Availability, Open Creo models" not in hub.text
@@ -497,8 +497,8 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert hub.status_code == 200
     assert "admin-page" in hub.text
     assert "admin-hub" in hub.text
-    assert 'href="/admin/utilities/availability"' in hub.text
     assert 'href="/admin/utilities/email-all"' in hub.text
+    assert 'href="/admin/utilities/availability"' not in hub.text
     assert 'href="/admin/utilities/compact"' not in hub.text
     assert 'href="/admin/utilities/rebuild-product"' not in hub.text
     assert 'href="/admin/utilities/delete-products"' not in hub.text
@@ -515,11 +515,14 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert 'action="/admin/utilities/rebuild-product-db"' not in hub.text
     assert "Disk space" not in hub.text
 
-    avail_page = auth_client.get("/admin/utilities/availability")
+    avail_moved = auth_client.get("/admin/utilities/availability", follow_redirects=False)
+    assert avail_moved.status_code == 303
+    assert avail_moved.headers["location"] == "/settings/availability"
+    avail_page = auth_client.get("/settings/availability")
     assert avail_page.status_code == 200
     assert 'id="settings-form"' in avail_page.text
     assert 'name="site_availability"' in avail_page.text
-    assert "Back to Utilities" in avail_page.text
+    assert "Back to System Settings" in avail_page.text
 
     audit_page = auth_client.get("/admin/utilities/audit")
     assert audit_page.status_code == 200

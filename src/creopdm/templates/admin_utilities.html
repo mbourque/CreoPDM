@@ -12,15 +12,9 @@
     <span>Utilities</span>
   </nav>
   <h1>Utilities</h1>
-  <p class="muted">Email all users, site availability, Audit log, server health, and Logs. Each tile requires its own Utilities permission. Compact, rebuild, and delete products are under Manage products.</p>
+  <p class="muted">Email all users, Audit log, server health, and Logs. Each tile requires its own Utilities permission. Compact, rebuild, and delete products are under Manage products. Availability is under System Settings.</p>
 
   <div class="admin-tile-grid">
-    {% if can_utilities_availability or can_manage_settings %}
-    <section class="admin-tile">
-      <h2><a href="/admin/utilities/availability">Availability</a></h2>
-      <p>Mark CreoPDM available, or show a maintenance message to non-administrators.</p>
-    </section>
-    {% endif %}
     {% if can_utilities_email_users %}
     <section class="admin-tile">
       <h2><a href="/admin/utilities/email-all">Email all users</a></h2>

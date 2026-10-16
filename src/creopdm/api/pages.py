@@ -751,6 +751,20 @@ def _require_ai_settings_page(request: Request, ctx: AppContext) -> HTMLResponse
     return None
 
 
+def _require_availability_settings_page(request: Request, ctx: AppContext) -> HTMLResponse | None:
+    if not ctx.auth_enabled:
+        return None
+    if getattr(request.state, "can_manage_settings", False) or getattr(
+        request.state, "can_utilities_availability", False
+    ):
+        return None
+    return HTMLResponse(
+        "<h1>403 Forbidden</h1><p>Availability or Settings access required "
+        "(utilities.availability or settings.manage).</p>",
+        status_code=403,
+    )
+
+
 def _can_open_settings_hub(request: Request, ctx: AppContext) -> bool:
     if not ctx.auth_enabled:
         return True
@@ -758,6 +772,7 @@ def _can_open_settings_hub(request: Request, ctx: AppContext) -> bool:
         getattr(request.state, "can_manage_settings", False)
         or getattr(request.state, "can_manage_ai", False)
         or getattr(request.state, "can_manage_email", False)
+        or getattr(request.state, "can_utilities_availability", False)
     )
 
 
@@ -771,6 +786,10 @@ def _settings_hub_tiles(request: Request, ctx: AppContext):
     can_email = not ctx.auth_enabled or bool(
         getattr(request.state, "can_manage_email", False)
     )
+    can_availability = not ctx.auth_enabled or bool(
+        getattr(request.state, "can_utilities_availability", False)
+        or can_settings
+    )
     tiles = []
     for tile in SETTINGS_HUB_TILES:
         if tile.slug == "ai":
@@ -778,6 +797,9 @@ def _settings_hub_tiles(request: Request, ctx: AppContext):
                 tiles.append(tile)
         elif tile.slug == "email":
             if can_email:
+                tiles.append(tile)
+        elif tile.slug == "availability":
+            if can_availability:
                 tiles.append(tile)
         elif can_settings:
             tiles.append(tile)
@@ -815,15 +837,13 @@ def settings_section_page(
     from creopdm.api.settings import settings_to_response
     from creopdm.settings_hub import settings_tile
 
-    # Availability moved to Utilities — keep old bookmarks / soft-nav working.
-    if (section or "").strip().lower() == "availability":
-        return RedirectResponse("/admin/utilities/availability", status_code=303)
-
     slug = (section or "").strip().lower()
     # Email is owned by auth_pages (/settings/email) — registered before this router.
     if slug == "email":
         return RedirectResponse("/settings/email", status_code=303)
-    if slug == "ai":
+    if slug == "availability":
+        blocked = _require_availability_settings_page(request, ctx)
+    elif slug == "ai":
         blocked = _require_ai_settings_page(request, ctx)
     else:
         blocked = _require_settings_page(request, ctx)

@@ -108,12 +108,24 @@ def test_unavailable_hides_pages_from_viewer_keeps_api_and_admin(auth_client, au
     _login(auth_client, "admin", "AdminPass1")
     product = auth_client.post("/api/products", json={"name": "Avail Prod"}).json()
 
+    denied = auth_client.put(
+        "/api/settings",
+        json={
+            "site_availability": SITE_UNAVAILABLE,
+            "site_unavailable_message": "Down for a vault move. Back soon.",
+        },
+    )
+    assert denied.status_code == 400, denied.text
+    assert "password" in denied.text.lower()
+    assert auth_client.get("/api/settings").json()["site_availability"] == "available"
+
     custom = auth_client.put(
         "/api/settings",
         json={
             "creo_open_mode": "association",
             "site_availability": SITE_UNAVAILABLE,
             "site_unavailable_message": "Down for a vault move. Back soon.",
+            "confirm_password": "AdminPass1",
         },
     )
     assert custom.status_code == 200, custom.text
@@ -123,7 +135,7 @@ def test_unavailable_hides_pages_from_viewer_keeps_api_and_admin(auth_client, au
     assert (
         auth_client.put(
             "/api/settings",
-            json={"creo_open_mode": "association", "site_availability": "available"},
+            json={"creo_open_mode": "association", "site_availability": "available", "confirm_password": "AdminPass1"},
         ).status_code
         == 200
     )
@@ -133,6 +145,7 @@ def test_unavailable_hides_pages_from_viewer_keeps_api_and_admin(auth_client, au
             "creo_open_mode": "association",
             "site_availability": SITE_UNAVAILABLE,
             "site_unavailable_message": DEFAULT_SITE_UNAVAILABLE_MESSAGE,
+            "confirm_password": "AdminPass1",
         },
     )
     assert saved.status_code == 200, saved.text
@@ -147,30 +160,28 @@ def test_unavailable_hides_pages_from_viewer_keeps_api_and_admin(auth_client, au
     assert admin_home.status_code == 200
     assert 'id="site-unavailable-pill"' in admin_home.text
     assert "Unavailable" in admin_home.text
-    assert 'href="/admin/utilities/availability"' in admin_home.text
+    assert 'href="/settings/availability"' in admin_home.text
     # Pill is in the DOM when settings.manage; hidden only when available.
     assert "hidden" not in admin_home.text.split('id="site-unavailable-pill"', 1)[1].split(">", 1)[0]
     assert 'id="object-table"' in admin_home.text
     settings_hub = auth_client.get("/settings")
     assert settings_hub.status_code == 200
-    # Availability is no longer a System Settings hub tile (pill still links to Utilities).
-    assert 'href="/settings/availability"' not in settings_hub.text
-    assert ">Availability</a>" not in settings_hub.text
+    assert 'href="/settings/availability"' in settings_hub.text
+    assert "admin-tile is-caution" in settings_hub.text
+    assert ">Availability</a>" in settings_hub.text
     util_hub = auth_client.get("/admin/utilities")
     assert util_hub.status_code == 200
-    assert 'href="/admin/utilities/availability"' in util_hub.text
-    assert "Availability" in util_hub.text
-    settings_page = auth_client.get("/admin/utilities/availability")
+    assert 'href="/admin/utilities/availability"' not in util_hub.text
+    moved = auth_client.get("/admin/utilities/availability", follow_redirects=False)
+    assert moved.status_code == 303
+    assert moved.headers.get("location") == "/settings/availability"
+    settings_page = auth_client.get("/settings/availability")
     assert settings_page.status_code == 200
     assert 'id="site-availability"' in settings_page.text
     assert 'id="site-unavailable-pill"' in settings_page.text
     assert "CreoPDM available" in settings_page.text
     assert "CreoPDM unavailable" in settings_page.text
     assert "display-only" in settings_page.text
-    # Old Settings URL redirects to Utilities.
-    legacy = auth_client.get("/settings/availability", follow_redirects=False)
-    assert legacy.status_code == 303
-    assert legacy.headers.get("location") == "/admin/utilities/availability"
 
     # Viewer HTML is replaced; product API still works (no mid-flight disruption).
     _login(auth_client, "view", "ViewPass1")
@@ -196,10 +207,11 @@ def test_unavailable_hides_pages_from_viewer_keeps_api_and_admin(auth_client, au
 def test_settings_html_and_js_wire_availability(auth_client, auth_ctx):
     _setup_admin_and_viewer(auth_client, auth_ctx)
     _login(auth_client, "admin", "AdminPass1")
-    hub = auth_client.get("/admin/utilities")
+    hub = auth_client.get("/settings")
     assert hub.status_code == 200
-    assert 'href="/admin/utilities/availability"' in hub.text
-    page = auth_client.get("/admin/utilities/availability")
+    assert 'href="/settings/availability"' in hub.text
+    assert "is-caution" in hub.text
+    page = auth_client.get("/settings/availability")
     assert page.status_code == 200
     assert 'name="site_availability"' in page.text
     assert 'id="site-unavailable-message"' in page.text
@@ -211,7 +223,8 @@ def test_settings_html_and_js_wire_availability(auth_client, auth_ctx):
     assert "function syncSiteAvailabilityOptions(" in script.text
     assert "function syncUnavailableAdminPill(" in script.text
     assert "function prettyUnavailableSince(" in script.text
-    assert "syncUnavailableAdminPill(" in script.text
+    assert "confirmByProductName" in script.text
+    assert "Change site availability" in script.text
     assert "site_availability" in script.text
     assert "site_unavailable_message" in script.text
     assert 'data-default-base=' in page.text

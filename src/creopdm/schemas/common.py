@@ -625,6 +625,7 @@ class SettingsUpdateRequest(BaseModel):
     workspace_poll_idle_minutes: int | None = None
     site_availability: str | None = None
     site_unavailable_message: str | None = None
+    confirm_password: str = ""
     ai_enabled: bool | None = None
     ollama_base_url: str | None = None
     ollama_model: str | None = None

@@ -3134,23 +3134,6 @@ def _utilities_hub_response(
     )
 
 
-def _utilities_availability_response(
-    request: Request,
-    ctx: AppContext,
-    manager: User,
-):
-    from creopdm.api.settings import settings_to_response
-
-    return templates.TemplateResponse(
-        request,
-        "admin_utilities_availability.html",
-        {
-            **_base_ctx(request, ctx, current_user=manager),
-            "settings": settings_to_response(ctx),
-        },
-    )
-
-
 def _utilities_email_response(
     request: Request,
     ctx: AppContext,
@@ -3502,7 +3485,7 @@ def admin_utilities_availability_page(
     manager = _require_utilities_or_settings(request, ctx, db)
     if _is_blocked(manager):
         return manager
-    return _utilities_availability_response(request, ctx, manager)
+    return RedirectResponse("/settings/availability", status_code=303)
 
 
 @router.get("/admin/utilities/email-all", response_class=HTMLResponse)

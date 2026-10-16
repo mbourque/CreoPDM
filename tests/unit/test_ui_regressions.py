@@ -2554,15 +2554,15 @@ def test_admin_hub_panel_fills_full_width():
     )
     assert "<h1>Utilities</h1>" in utilities
     assert "admin-hub" in utilities
-    assert "can_utilities_availability or can_manage_settings" in utilities
+    assert "can_utilities_availability or can_manage_settings" not in utilities
     assert "can_utilities_email_users" in utilities
     assert "can_utilities_compact_product" not in utilities
     assert "can_utilities_rebuild_product" not in utilities
     assert "can_utilities_audit" in utilities
     assert "can_utilities_health" in utilities
     assert "can_utilities_logs" in utilities
-    assert 'href="/admin/utilities/availability"' in utilities
     assert 'href="/admin/utilities/email-all"' in utilities
+    assert 'href="/admin/utilities/availability"' not in utilities
     assert 'href="/admin/utilities/compact"' not in utilities
     assert 'href="/admin/utilities/rebuild-product"' not in utilities
     assert 'href="/admin/utilities/delete-products"' not in utilities
@@ -2661,18 +2661,22 @@ def test_admin_hub_panel_fills_full_width():
     assert "audit-events-heading" in css
     assert "justify-content: space-between" in css
     assert "margin-left: auto" in css
-    avail_util = (
-        ROOT / "src" / "creopdm" / "templates" / "admin_utilities_availability.html"
-    ).read_text(encoding="utf-8")
-    assert 'id="settings-form"' in avail_util
-    assert 'data-settings-section="availability"' in avail_util
-    assert "settings_partials/availability.html" in avail_util
-    assert 'href="/admin/utilities"' in avail_util
+    settings_hub_py = (ROOT / "src" / "creopdm" / "settings_hub.py").read_text(encoding="utf-8")
+    assert 'slug="availability"' in settings_hub_py
+    assert "caution=True" in settings_hub_py
+    settings_hub_tmpl = (ROOT / "src" / "creopdm" / "templates" / "settings.html").read_text(
+        encoding="utf-8"
+    )
+    assert "tile.caution" in settings_hub_tmpl
+    partial = (ROOT / "src" / "creopdm" / "templates" / "settings_partials" / "availability.html").read_text(
+        encoding="utf-8"
+    )
+    assert 'name="site_availability"' in partial
     base_html = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(
         encoding="utf-8"
     )
-    assert 'href="/admin/utilities/availability"' in base_html
-    assert 'href="/settings/availability"' not in base_html
+    assert 'href="/settings/availability"' in base_html
+    assert 'href="/admin/utilities/availability"' not in base_html
     email_util = (
         ROOT / "src" / "creopdm" / "templates" / "admin_utilities_email.html"
     ).read_text(encoding="utf-8")
@@ -2916,7 +2920,7 @@ def test_admin_hub_panel_fills_full_width():
     assert "Search" in docs or "dropdowns" in docs
     assert "Compacting vault history" in docs
     assert "Availability" in docs
-    assert "/admin/utilities/availability" in docs or "Utilities**" in docs
+    assert "/settings/availability" in docs
     assert "Rebuild product database" in docs
     assert "Delete products" in docs
     admin = _admin_js()

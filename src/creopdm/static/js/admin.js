@@ -584,6 +584,28 @@ window.__creopdmModules.admin = {
       if (promptEl) {
         body.snapshot_compare_prompt = String(promptEl.value || "");
       }
+      if (settingsForm.dataset.settingsSection === "availability") {
+        const turningOff = body.site_availability === "unavailable";
+        const message = String(body.site_unavailable_message || "").trim();
+        const escapeHtml = (value) => String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+        const confirmed = await shell.confirmByProductName({
+          title: "Change site availability",
+          lead: turningOff
+            ? "CreoPDM will be marked unavailable."
+            : "CreoPDM will be marked available.",
+          note: "Work already in progress is not cancelled.",
+          submitLabel: "Save availability",
+          detailsHtml: turningOff
+            ? `<p>People who are not administrators see this message on their next page open. Administrators can still use the app.</p>`
+              + (message ? `<p>${escapeHtml(message)}</p>` : "")
+            : "<p>The maintenance message is hidden. Non-administrators can open CreoPDM again on their next page.</p>",
+        });
+        if (!confirmed.ok) return;
+        body.confirm_password = confirmed.password || "";
+      }
       const response = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },

@@ -43,6 +43,8 @@ router = APIRouter()
 _AI_SETTINGS_FIELDS = frozenset(
     ("ai_enabled", "ollama_base_url", "ollama_model", "snapshot_compare_prompt")
 )
+_NON_SETTING_FIELDS = frozenset(("confirm_password",))
+_AVAILABILITY_FIELDS = frozenset(("site_availability", "site_unavailable_message"))
 
 
 def _require_settings_manage(request: Request, ctx: AppContext) -> None:
@@ -62,7 +64,25 @@ def _payload_touches_ai(payload: SettingsUpdateRequest) -> bool:
 
 
 def _payload_touches_non_ai(payload: SettingsUpdateRequest) -> bool:
-    return bool(payload.model_fields_set - _AI_SETTINGS_FIELDS)
+    return bool(
+        payload.model_fields_set - _AI_SETTINGS_FIELDS - _NON_SETTING_FIELDS - _AVAILABILITY_FIELDS
+    )
+
+
+def _payload_touches_availability(payload: SettingsUpdateRequest) -> bool:
+    return bool(payload.model_fields_set & _AVAILABILITY_FIELDS)
+
+
+def _require_availability_change(request: Request, ctx: AppContext) -> None:
+    if not ctx.auth_enabled:
+        return
+    if getattr(request.state, "can_manage_settings", False) or getattr(
+        request.state, "can_utilities_availability", False
+    ):
+        return
+    raise PermissionDeniedError(
+        "Availability or Settings access required (utilities.availability or settings.manage)."
+    )
 
 
 def _resolved_creojs(ctx: AppContext) -> Path | None:
@@ -160,11 +180,14 @@ def update_settings(
 ) -> SettingsResponse:
     touches_ai = _payload_touches_ai(payload)
     touches_other = _payload_touches_non_ai(payload)
+    touches_availability = _payload_touches_availability(payload)
     if touches_other:
         _require_settings_manage(request, ctx)
+    if touches_availability:
+        _require_availability_change(request, ctx)
     if touches_ai:
         _require_settings_ai(request, ctx)
-    if not touches_ai and not touches_other:
+    if not touches_ai and not touches_other and not touches_availability:
         _require_settings_manage(request, ctx)
     current = ctx.settings.model_copy(deep=True)
     before = _settings_audit_snapshot(current)
@@ -274,6 +297,10 @@ def update_settings(
     if payload.workspace_poll_idle_minutes is not None:
         current.ui.workspace_poll_idle_minutes = payload.workspace_poll_idle_minutes
     was_unavailable = current.ui.site_availability == SITE_UNAVAILABLE
+    if payload.model_fields_set & {"site_availability", "site_unavailable_message"}:
+        from creopdm.utils.danger_confirm import require_danger_password
+
+        require_danger_password(ctx, db, payload.confirm_password or "")
     if payload.site_availability is not None:
         current.ui.site_availability = payload.site_availability
     if payload.site_unavailable_message is not None:
