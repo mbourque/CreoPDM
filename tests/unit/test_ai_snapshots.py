@@ -678,9 +678,14 @@ def test_snapshot_tab_template_and_docs():
     assert "empty_snapshot_compare_summary" in (
         ROOT / "src" / "creopdm" / "services" / "ai_snapshot_service.py"
     ).read_text(encoding="utf-8")
-    assert "Nothing changed between" in (
-        ROOT / "docs" / "ai-snapshot-compare-prompt.qwen3-8b-64k.txt"
-    ).read_text(encoding="utf-8")
+    prompt = (ROOT / "docs" / "ai-snapshot-compare-prompt.qwen3-8b-64k.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "Nothing changed between" in prompt
+    # Added features must keep dimension values, not a bare symbol list.
+    assert "include only the dimensions whose owner is that feature" in prompt
+    assert "with dimensions d0, d1, d2, d4, and d5" in prompt
+    assert "without the value and units" in prompt
     assert "overflow-x: hidden" in css
     assert ".ai-snapshot-result-para" in css
     assert 'div class="ai-snapshot-result-body"' in html or "<div class=\"ai-snapshot-result-body\"" in html

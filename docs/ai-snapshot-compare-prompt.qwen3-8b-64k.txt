@@ -20,6 +20,7 @@ Never say “snapshot,” “block,” “capture,” “recorded,” or “meta
 Assembly outlines may end with a "Simplified representations (active: …):" section listing saved simplified representations (name, default include/exclude, item-rule counts), and/or an "Assembly constraints:" section listing per-occurrence mates/aligns/placement flags. Part and assembly outlines may also include "Relations:", "Post-regeneration relations:", and "Feature relations:" sections (Creo relation text). Those sections are not Structure membership. Structure lines do not include SIMP_REP_* statuses. "Not captured" for constraints or relations means an older revision never stored them — never invent mass removals.
 
 Return only one short paragraph of natural engineering prose. No headings, bullets, tables, JSON, or preamble.
+Do not shorten a dimension to fit that paragraph. A symbol without “=” and a unit is wrong.
 
 === Grounding (mandatory) ===
 Only report OLD→NEW differences that appear in the outlines or Computed differences.
@@ -32,6 +33,9 @@ Whenever you mention a Creo dimension symbol, copy the exact form from OLD/NEW o
   Form: d29 (CHAMFER (168)) = 0.438 in
   Form: height (BASE (PROTRUSION)) = 50 mm
 Never write a bare symbol (d29) if the outline shows an owner. If the outline has no owner, the bare symbol is OK.
+That includes Dimensions added. Never summarize them as “added dimensions d0, d1, and d4” or any list of symbols without values.
+Invalid: “Added the CHAMFER and ROUND features with dimensions d0, d1, d2, d4, and d5.”
+Valid shape (use this outline’s numbers, not these): “Added CHAMFER (67), d4 (CHAMFER (67)) = 9.406 in. Added ROUND (105), d5 (ROUND (105)) = 3.563 in. Added d0 (PROTRUSION (40)) = 25.23 in on the existing protrusion.”
 Match dimensions by symbol only. Missing from NEW = removed. Say reduced/increased only when the same symbol exists in both with different values.
 Include units from the outlines. Never invent units or degrees. Round to three decimals when that does not hide a real change. Report tolerance limits as written (limits a–b), never as ±.
 
@@ -61,12 +65,14 @@ Features:
 - Feature lines may repeat (ROUND (146), ROUND (1804)). Use the exact outline label including the trailing id in parentheses when present.
 - Mention a feature removal only if Computed differences lists it under Features removed, or the exact feature line (name + id) is in OLD Features and not in NEW.
 - Mention a feature add only if Features added lists it, or the exact line is only in NEW.
+- When a feature is added, name it and include only the dimensions whose owner is that feature. Copy each one in the exact outline form (symbol, owner, value, units), including “=” and the unit. Do not stop at the feature name. Do not hang another feature’s dimensions on it.
 - Do NOT claim a removal just because PROTRUSION/Extrude/Hole/etc. appears elsewhere as a type word, or because dimensions changed on a feature that still exists.
-- If a feature instance was removed and its dims disappear, say the feature removal first; fold those dims into that sentence. Do not replace the removal with a long bare-symbol list.
+- If a feature instance was removed and its dims disappear, say the feature removal first; fold those dims into that sentence, still with value and units. Do not replace the removal with a bare-symbol list.
 - Patterns: PATTERN in OLD only = deleted; NEW only = added. Placeholder members are already collapsed — never list Feature NNNN / IFX_ID_*. Say “hole pattern” only if the outlines indicate holes. If any PATTERN add/delete exists, mention it.
 
 Dimensions:
 - Walk by symbol for value/tolerance changes on symbols present in both.
+- Dimensions added (on NEW only, including when OLD Dimensions is (none)): repeat every line with its value and units. Do not shorten them to symbol names.
 - Quote exact outline forms with owners when present.
 - Do not invent physical meaning (“thickness”) unless that word is the symbol or appears in a parameter/description.
 
@@ -118,6 +124,8 @@ Hard bans:
 - Never say “numerous/several features,” “unnamed patterns,” “placeholder features,” “reducing the feature count,” or any feature-count summary.
 - Never write “Feature 12345” or list placeholder member names.
 - Never claim “no significant dimension changes” if any dimension value or tolerance differs.
+- Never mention a dimension symbol without the value and units shown on that outline line. “with dimensions d0, d1, d2, d4, and d5” is invalid.
+- Never attach a dimension to a feature unless that feature name and id are the owner on that dimension line. A new chamfer does not own an existing protrusion’s d0.
 - Never mention chamfer, round, hole, extrude, or any other type unless that exact change is in Features removed/added (or the matching OLD/NEW feature lines).
 - Never invent “SIMP_REP_SUPPRESSED removed” or “components now fully included” narratives.
 - Never treat PTC_SYSTEM_MTRL_PROPS as a real material choice, or invent zero-mass / wiped-solid wording when mass is “(not captured)” — say mass properties were removed.
@@ -127,7 +135,7 @@ Hard bans:
 
 Compose when applicable (this order), only steps with real diffs:
 1. Components removed / added / quantity changed (from Computed differences)
-2. Feature removals/additions/renames (exact outline labels)
+2. Feature removals/additions/renames (exact outline labels, with each added or removed feature’s dimensions, values, and units in that sentence)
 3. Pattern add/delete
 4. Remaining same-symbol dimension value/tolerance changes
 5. Material clear/assign/change (fold PTC_* material params into that sentence)
@@ -150,7 +158,9 @@ Before returning, verify:
 - Every sentence is backed by an OLD→NEW diff in the outlines or Computed differences.
 - No invented Extrude/feature removal when Features lists match and Computed differences does not list Features removed.
 - Every real Features removed/added and PATTERN add/delete that matters is mentioned.
-- No long bare dim lists standing in for a removed feature.
+- No bare symbol list standing in for a dimension that has a value (added, removed, or changed).
+- Every added feature’s dimensions include the value and units from the outline, not only the feature name.
+- Every dimension symbol in the comment is followed by “=” and a unit. If any symbol is not, rewrite before returning.
 - Material → PTC_SYSTEM_MTRL_PROPS is phrased as cleared/removed, not “updated to system props.”
 - Mass → (not captured) is phrased as mass properties were removed (not zero mass).
 - No copied sample sentences from this prompt.
