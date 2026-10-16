@@ -97,9 +97,13 @@ def _cors_headers(origin: str) -> dict[str, str]:
         "Vary": "Origin",
     }
 
-# Allow spaces so vault folders like "from ptc" stay "from ptc" in the agent
-# cache (older builds turned spaces into underscores → false New/Modified).
-_SAFE_NAME = re.compile(r"[^A-Za-z0-9._\- ]+")
+# Windows file-name bans only. Unicode letters and digits stay (café.prt, 部品.prt).
+# Older builds replaced every non-ASCII byte with "_" (café.prt → caf_.prt).
+_WINDOWS_FORBIDDEN_NAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_RESERVED_WINDOWS_NAME = re.compile(
+    r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$",
+    re.IGNORECASE,
+)
 _LEGACY_SAFE_NAME = re.compile(r"[^A-Za-z0-9._\-]+")
 # Dotfile (+ Windows hidden attr on save). Legacy underscore name is migrated on load.
 _CACHE_INDEX_NAME = ".creopdm_cache_index.json"
@@ -107,14 +111,67 @@ _LEGACY_CACHE_INDEX_NAME = "_creopdm_cache_index.json"
 
 
 def _safe_segment(value: str, fallback: str = "file") -> str:
-    text = _SAFE_NAME.sub("_", (value or "").strip()) or fallback
+    """Keep the real tip name. Replace only characters Windows cannot store."""
+    text = _WINDOWS_FORBIDDEN_NAME.sub("_", (value or "").strip())
+    text = text.rstrip(" .")
+    if not text:
+        text = fallback
+    base = text.split(".", 1)[0]
+    if _RESERVED_WINDOWS_NAME.match(base) or _RESERVED_WINDOWS_NAME.match(text):
+        if "." in text:
+            head, rest = text.split(".", 1)
+            text = f"{head}_.{rest}"
+        else:
+            text = f"{text}_"
     return text[:180]
 
 
 def _legacy_safe_segment(value: str, fallback: str = "file") -> str:
-    """Pre-space-preserving sanitizer (spaces → _). Used to find old cache paths."""
+    """Pre-Unicode sanitizer (spaces and é → _). Used only to find old cache paths."""
     text = _LEGACY_SAFE_NAME.sub("_", (value or "").strip()) or fallback
     return text[:180]
+
+
+def _drop_legacy_sanitized_hit(
+    cache_dir: Path,
+    relative_path: str | None,
+    disk_name: str,
+    found: Path | None,
+) -> Path | None:
+    """Do not open an old underscore copy (caf_.prt) when the tip is café.prt.
+
+    If the correctly named file is missing, the caller re-downloads it.
+    ``_legacy_safe_segment`` still locates the old path so download can trash it.
+    """
+    if found is None or not found.is_file():
+        return None
+    from creopdm.creo.file_manager import CreoFileManager
+
+    dest_rel = _cache_dest_relative(relative_path, disk_name)
+    legacy_rel = _legacy_cache_dest_relative(relative_path, disk_name)
+    if legacy_rel == dest_rel:
+        return found
+    try:
+        found_rel = found.resolve().relative_to(cache_dir.resolve())
+    except (OSError, ValueError):
+        found_rel = Path(found.name)
+    desired_logical = CreoFileManager.logical_filename(dest_rel.name, None).lower()
+    legacy_logical = CreoFileManager.logical_filename(legacy_rel.name, None).lower()
+    found_logical = CreoFileManager.logical_filename(found.name, None).lower()
+    legacy_hit = found_rel == legacy_rel or found.name == legacy_rel.name
+    # Numbered sibling of the old name (caf_.prt.1) is still not café.prt.
+    if (
+        not legacy_hit
+        and legacy_logical != desired_logical
+        and found_logical == legacy_logical
+    ):
+        legacy_hit = True
+    if not legacy_hit:
+        return found
+    correct = cache_dir / dest_rel
+    if correct.is_file():
+        return correct
+    return None
 
 
 def _legacy_cache_dest_relative(relative_path: str | None, disk_name: str) -> Path:
@@ -666,6 +723,10 @@ def _try_reuse_local_materialize(
             file_size=int(item.file_size or 0),
         )
         local = _find_planned_cache_file(target_dir, plan)
+    # caf_.prt is the old sanitizer, not the tip Creo should open.
+    local = _drop_legacy_sanitized_hit(
+        target_dir, item.relative_path, disk_name, local
+    )
     if local is None or not local.is_file():
         return None
     try:
@@ -750,7 +811,7 @@ def _download(
     target.write_bytes(response.content)
     # write_bytes stamps "now"; restore vault mtime from Last-Modified when present.
     _apply_mtime(target, _mtime_from_http_headers(getattr(response, "headers", None)))
-    # Drop legacy underscore path when vault folders used spaces ("from ptc" → "from_ptc").
+    # Drop the old sanitized path (spaces → _, café.prt → caf_.prt) after the real tip is written.
     legacy_rel = _legacy_cache_dest_relative(item.relative_path, disk_name)
     if legacy_rel != dest_rel:
         legacy = target_dir / legacy_rel
@@ -1037,6 +1098,9 @@ def _plan_cache_downloads(
                     continue
 
         local = _find_planned_cache_file(cache_dir, item)
+        local = _drop_legacy_sanitized_hit(
+            cache_dir, item.relative_path, disk_name or filename, local
+        )
         if local is None or not local.is_file():
             download_ids.append(object_id)
             continue

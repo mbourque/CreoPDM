@@ -468,6 +468,113 @@ def test_agent_materialize_preserves_spaces_in_vault_folders(tmp_path, monkeypat
         assert not (legacy / "gab.prt.1").is_file()
 
 
+def test_safe_segment_keeps_unicode_and_blocks_windows_names():
+    from creopdm_agent.server import _legacy_safe_segment, _safe_segment
+
+    assert _safe_segment("café.prt") == "café.prt"
+    assert _safe_segment("café.prt.1") == "café.prt.1"
+    assert _safe_segment("部品.prt") == "部品.prt"
+    assert _safe_segment("a\x01b.prt") == "a_b.prt"
+    assert _safe_segment("a<b>c.prt") == "a_b_c.prt"
+    assert _safe_segment("CON.prt") == "CON_.prt"
+    assert _safe_segment("name. ") == "name"
+    assert _safe_segment("from ptc") == "from ptc"
+    # Old cache keys stay findable; they are not the name Creo opens.
+    assert _legacy_safe_segment("café.prt") == "caf_.prt"
+
+
+def test_embed_explorer_open_keeps_unicode_tip_for_creo(tmp_path, monkeypatch):
+    """Open café.prt from the navigator path: disk name is café.prt, Creo model CAFÉ.
+
+    An existing caf_.prt copy must be re-downloaded, not reused. Toolkit /open
+    stays percent-encoded UTF-8.
+    """
+    import hashlib
+    from urllib.parse import quote
+
+    root = tmp_path / "cache"
+    product_id = "proj-cafe"
+    cache = root / product_id
+    cache.mkdir(parents=True)
+    legacy = cache / "caf_.prt"
+    legacy.write_bytes(b"old-underscore")
+    digest = hashlib.sha256(b"old-underscore").hexdigest()
+    (cache / ".creopdm_cache_index.json").write_text(
+        '{"caf_.prt": {"hash": "%s", "size": %s}}' % (digest, legacy.stat().st_size),
+        encoding="utf-8",
+    )
+    settings = AgentConfig(
+        host="127.0.0.1",
+        port=8766,
+        local_root=str(root),
+        toolkit_base_url="http://127.0.0.1:8767",
+    )
+    app = create_agent_app(settings)
+    seen: list[str] = []
+
+    class FakeResponse:
+        def __init__(self, status_code: int, body: bytes):
+            self.status_code = status_code
+            self.content = body
+            self.headers = {}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url, headers=None):
+            seen.append(url)
+            if "/api/objects/cafe/content" in url:
+                return FakeResponse(200, b"cafe-tip")
+            if "/open?" in url:
+                return FakeResponse(200, b'{"ok": true, "opened": true}')
+            return FakeResponse(404, b'{"ok": false}')
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    with TestClient(app) as client:
+        saved = client.post(
+            "/materialize",
+            json={
+                "pdm_url": "http://pdm.example:52113",
+                "object_id": "cafe",
+                "product_id": product_id,
+                "filename": "café.prt",
+                "disk_name": "café.prt",
+                "content_hash": digest,
+                "file_size": legacy.stat().st_size,
+            },
+        )
+        assert saved.status_code == 200, saved.text
+        body = saved.json()
+        path = Path(body["path"])
+        assert path.name == "café.prt"
+        assert path.name != "caf_.prt"
+        assert not path.name.endswith(".1")
+        assert body["disk_name"] == "café.prt"
+        assert body["filename"] == "café.prt"
+        assert path.read_bytes() == b"cafe-tip"
+        assert not legacy.is_file()
+        # Creo shows the model name in uppercase; CAF_ would mean the underscore file.
+        assert path.stem.upper() == "CAFÉ"
+
+        opened = client.get(
+            "/toolkit/open",
+            params={"fileName": "café.prt", "path": str(path)},
+        )
+        assert opened.status_code == 200, opened.text
+        assert opened.json()["fileName"] == "café.prt"
+        open_urls = [url for url in seen if "/open?" in url]
+        assert open_urls
+        assert f"fileName={quote('café.prt')}" in open_urls[-1]
+        assert quote(str(path), safe="") in open_urls[-1] or quote(str(path)) in open_urls[-1]
+
+
 def test_agent_materialize_replace_newer_trashes_higher_local_saves(tmp_path, monkeypatch):
     """History revert / open-without-checkout must drop local .prt.3 when vault tip is .prt.1."""
     root = tmp_path / "cache"
