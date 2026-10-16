@@ -567,10 +567,14 @@ a.brand:hover { text-decoration: none; color: inherit; }
   color: var(--accent-2);
   text-decoration: underline;
 }
-.admin-tile.is-disabled {
-  opacity: 0.55;
-  background: #f4f6f8;
-  cursor: not-allowed;
+.admin-tile.is-danger {
+  background: #fdecec;
+  border-color: #e0a0a0;
+}
+.admin-tile.is-danger:not(.is-disabled):hover,
+.admin-tile.is-danger:not(.is-disabled):focus-within {
+  background: #f8d6d6;
+  border-color: #d7a3a3;
 }
 .admin-tile.is-disabled h2 span {
   color: #6a7a88;

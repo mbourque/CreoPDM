@@ -2712,6 +2712,10 @@ def test_admin_hub_panel_fills_full_width():
     assert 'href="/admin/products/rebuild"' in hub
     assert "can_utilities_compact_product" in hub
     assert "can_utilities_rebuild_product" in hub
+    assert hub.count("admin-tile is-danger") == 3
+    assert 'class="admin-tile is-danger"' in hub.split('href="/admin/products/delete"')[0][-80:]
+    css_danger = _between(css, ".admin-tile.is-danger {", "}")
+    assert "#fdecec" in css_danger
     promote = (ROOT / "src" / "creopdm" / "templates" / "admin_products_promote.html").read_text(
         encoding="utf-8"
     )
