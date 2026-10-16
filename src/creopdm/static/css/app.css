@@ -321,8 +321,8 @@ a.brand:hover { text-decoration: none; color: inherit; }
   cursor: pointer;
 }
 .product-settings-item:hover { background: #eef3f7; }
-.product-settings-item.is-danger { color: #9b1c1c; }
-.product-settings-item.is-danger:hover { background: #f8e8e8; }
+.product-settings-item.is-danger { color: #9b1c1c; background: #fdecec; }
+.product-settings-item.is-danger:hover { background: #f8d6d6; }
 .content-head { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
 .content-head .muted { margin: 0; }
 .content-head .product-meta-number { font-weight: 600; letter-spacing: 0.02em; }
@@ -575,6 +575,15 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .admin-tile.is-danger:not(.is-disabled):focus-within {
   background: #f8d6d6;
   border-color: #d7a3a3;
+}
+.admin-tile.is-caution {
+  background: #fff6e5;
+  border-color: #e0c48a;
+}
+.admin-tile.is-caution:not(.is-disabled):hover,
+.admin-tile.is-caution:not(.is-disabled):focus-within {
+  background: #f8e8c4;
+  border-color: #c9a45a;
 }
 .admin-tile.is-disabled h2 span {
   color: #6a7a88;
@@ -1321,8 +1330,10 @@ span.object-open:hover { text-decoration: underline; }
 }
 .toolbar-menu-item:hover:not(:disabled) { background: #eef2f6; }
 .toolbar-menu-item:disabled { opacity: 0.45; cursor: not-allowed; }
-.toolbar-menu-item.is-danger { color: #9b1c1c; }
-.toolbar-menu-item.is-danger:hover:not(:disabled) { background: #fdf2f2; }
+.toolbar-menu-item.is-danger { color: #9b1c1c; background: #fdecec; }
+.toolbar-menu-item.is-danger:hover:not(:disabled) { background: #f8d6d6; }
+.toolbar .btn-danger { background: #fdecec; }
+.toolbar .btn-danger:hover:not(:disabled) { background: #f8d6d6; }
 
 /* Files list right-click menu (replaces browser context menu when offered).
    Above .thumb-preview (1200) so a linger hover cannot cover the menu. */

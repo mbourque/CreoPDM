@@ -77,8 +77,8 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 - Custom vault/workspace name: no spaces; or use the hash option instead.
 - **Edit Products** (Administration → Manage products) shows **Created** (date/time) so you can tell products apart when cleaning up. That page edits name, number, and description. It does not copy a product or change lifecycle state.
 - **Copy Products** opens a blank form (name, number, description, and initial comment are not filled in from the original). **Vault/Workspace name** is the same **Use hash** control as **New product**: the UUID is filled in and locked as soon as Copy opens (no hard refresh) until you uncheck it and type a folder name (no spaces, and not a vault folder another product already uses). Leave the comment blank to use the same History text as Add (**First check in: Add N files**). Copy creates a new product id and vault, then Adds the current vault files once: each file is **A.1**, **In Work**, and not checked out. Collected metadata and Where Used are copied onto those new A.1 rows. Git history on the copy is only the new product plus that Add. The original product is unchanged. Revision history, checkouts, product watches, and other people’s membership are not copied. Thumbnails stay stored by file bytes, so the original still has them (the copy shows them when the bytes match). The product name must be different from every existing product. Audit log records **Product copied** for the new product (summary names the source), not **Product created**.
-- **Promote Products** changes one product at a time. Pick the product and the new lifecycle state, then confirm with your password. The confirm window lists what that state **Allows** and **Blocks** using the same operations as **Administration → Lifecycle states** (including what the change turns on or off compared with the current state). Role permissions still apply on top. That records **Product state changed**. Saving a name on Edit Products stays **Product updated**.
-- **Delete products**, **Compact product vault history**, and **Rebuild product database** on Manage products use a light red tile (password confirm). Edit, Copy, and Promote stay white.
+- **Promote Products** changes one product at a time. Pick the product and the new lifecycle state, then confirm with your password. The Manage products tile is light yellow. The confirm window lists what that state **Allows** and **Blocks** using the same operations as **Administration → Lifecycle states** (including what the change turns on or off compared with the current state). Role permissions still apply on top. That records **Product state changed**. Saving a name on Edit Products stays **Product updated**.
+- **Delete products**, **Compact product vault history**, and **Rebuild product database** on Manage products use a light red tile (password confirm). Edit and Copy stay white.
 - The **Delete products** tip on Edit Products (list and the edit form) appears only when the role can delete products. The page itself is **Manage products → Delete products** (not Utilities).
 
 ---
@@ -388,7 +388,7 @@ Destructive actions ask you to enter your password ([§13](#13-entering-your-pas
 
 ## 13. Entering your password to confirm
 
-Used for delete product, remove from product/vault, purge, History **Revert to selected…**, Utilities compact/rebuild/delete, and similar. **Clear workspace…** uses the same danger-confirm warning dialog but does **not** require your password.
+Used for delete product, remove from product/vault, purge, **Remove from Workspace…**, History **Revert to selected…**, Manage products compact/rebuild/delete/promote, and similar. Those entry points use a light red control (Promote’s hub tile is light yellow). **Clear workspace…** uses the same danger-confirm warning dialog but does **not** require your password.
 
 | You do | App should | App must not |
 |--------|------------|--------------|

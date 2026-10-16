@@ -2099,7 +2099,9 @@ def test_files_context_menu_download_to_workspace():
     assert "ensureItems(menu" in ensure
     html = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     assert 'id="discard-local-btn"' in html
+    assert 'class="toolbar-menu-item is-danger" role="menuitem" id="discard-local-btn"' in html
     assert ">Remove from Workspace…</button>" in html
+    assert "danger: true" in shared
     open_menu = _between(script, "function openFilesContextMenu(", "async function downloadSelectedToWorkspace(")
     assert "applyVisibility(menu, caps)" in open_menu
     assert "anyVisible(caps)" in open_menu
@@ -2713,9 +2715,12 @@ def test_admin_hub_panel_fills_full_width():
     assert "can_utilities_compact_product" in hub
     assert "can_utilities_rebuild_product" in hub
     assert hub.count("admin-tile is-danger") == 3
-    assert 'class="admin-tile is-danger"' in hub.split('href="/admin/products/delete"')[0][-80:]
+    assert hub.count("admin-tile is-caution") == 1
+    assert 'class="admin-tile is-caution"' in hub.split('href="/admin/products/promote"')[0][-80:]
     css_danger = _between(css, ".admin-tile.is-danger {", "}")
     assert "#fdecec" in css_danger
+    css_caution = _between(css, ".admin-tile.is-caution {", "}")
+    assert "#fff6e5" in css_caution
     promote = (ROOT / "src" / "creopdm" / "templates" / "admin_products_promote.html").read_text(
         encoding="utf-8"
     )

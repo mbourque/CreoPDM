@@ -533,7 +533,7 @@
               aria-haspopup="menu" aria-expanded="false" disabled
               title="Remove local workspace files, vault copies, or files from the product.">Remove ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
-        <button type="button" class="toolbar-menu-item" role="menuitem" id="discard-local-btn"
+        <button type="button" class="toolbar-menu-item is-danger" role="menuitem" id="discard-local-btn"
                 {% if selected %}data-product-name="{{ selected.name }}"{% endif %}
                 disabled
                 title="Move selected files from the local workspace on this PC to the Recycle Bin. Does not affect the vault or product list.">Remove from Workspace…</button>

@@ -64,6 +64,7 @@
       title:
         "Move selected files from the local workspace on this PC to the Recycle Bin. Does not affect the vault or product list.",
       needsEmbedded: true,
+      danger: true,
     },
   ];
 
@@ -225,7 +226,7 @@
       if (!id && menuEl.querySelector('[data-action="' + spec.action + '"]')) return;
       var btn = document.createElement("button");
       btn.type = "button";
-      btn.className = itemClass;
+      btn.className = itemClass + (spec.danger ? " is-danger" : "");
       if (id) btn.id = id;
       btn.dataset.action = spec.action;
       btn.setAttribute("role", "menuitem");
