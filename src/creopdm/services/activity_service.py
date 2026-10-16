@@ -38,6 +38,7 @@ _REDACT_DETAIL_KEYS = frozenset(
 
 ACTION_LABELS: dict[str, str] = {
     ActivityAction.PRODUCT_CREATED.value: "Product created",
+    ActivityAction.PRODUCT_COPIED.value: "Product copied",
     ActivityAction.PRODUCT_UPDATED.value: "Product updated",
     ActivityAction.PRODUCT_DELETED.value: "Product deleted",
     ActivityAction.STATE_CHANGED.value: "Product state changed",
@@ -79,6 +80,7 @@ AUDIT_ACTION_FILTER_CHOICES: list[tuple[str, str]] = [
     (ActivityAction.PASSWORD_CHANGED.value, "Password changed"),
     (ActivityAction.OBJECT_REMOVED.value, "Object removed"),
     (ActivityAction.PRODUCT_CREATED.value, "Product created"),
+    (ActivityAction.PRODUCT_COPIED.value, "Product copied"),
     (ActivityAction.PRODUCT_UPDATED.value, "Product updated"),
     (ActivityAction.STATE_CHANGED.value, "Product state changed"),
     (ActivityAction.CHECKOUT_CANCELLED.value, "Checkout cancelled"),
@@ -707,6 +709,10 @@ def _event_summary(
     parts: list[str] = []
     if comment:
         parts.append(comment)
+    if action in {ActivityAction.PRODUCT_COPIED.value, "PRODUCT_COPIED"}:
+        source = details.get("source_name")
+        if source:
+            parts.append(f"from {source}")
     if action in {ActivityAction.PRODUCT_DELETED.value, "PRODUCT_DELETED"}:
         name = details.get("name") or details.get("product_name")
         if name:

@@ -160,6 +160,8 @@ class ProductService:
         vault_folder: str | None = None,
         *,
         state: str | None = None,
+        copied_from: Product | None = None,
+        copied_file_count: int | None = None,
     ) -> Product:
         if not name.strip():
             raise PathValidationError("A product name is required.")
@@ -211,14 +213,30 @@ class ProductService:
         )
         session.add(product)
         session.flush()
+        details: dict[str, str | int] = {"name": product.name, "vault_folder": folder}
+        action = ActivityAction.PRODUCT_CREATED
+        if copied_from is not None:
+            action = ActivityAction.PRODUCT_COPIED
+            details["source_name"] = copied_from.name
+            details["source_uuid"] = copied_from.uuid
+            if copied_file_count is not None:
+                details["file_count"] = copied_file_count
         self._activities.record(
             session,
-            ActivityAction.PRODUCT_CREATED,
+            action,
             user,
             product_id=product.id,
-            details={"name": product.name, "vault_folder": folder},
+            details=details,
         )
-        logger.info("Created product %s in workspace %s", product.uuid, vault)
+        if copied_from is not None:
+            logger.info(
+                "Copied product %s to %s in workspace %s",
+                copied_from.uuid,
+                product.uuid,
+                vault,
+            )
+        else:
+            logger.info("Created product %s in workspace %s", product.uuid, vault)
         session.commit()
         return product
 
@@ -288,6 +306,8 @@ class ProductService:
                 description,
                 vault_folder=(vault_folder or "").strip() or None,
                 state=ProductState.IN_WORK.value,
+                copied_from=source,
+                copied_file_count=len(jobs),
             )
             if not jobs:
                 return created

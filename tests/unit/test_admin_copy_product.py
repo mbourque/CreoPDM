@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,8 @@ from sqlalchemy import func, select
 from creopdm.app import build_context, create_app
 from creopdm.auth_constants import BuiltinRole
 from creopdm.config import ConfigManager
-from creopdm.constants import CheckoutStatus, LifecycleState
+from creopdm.constants import ActivityAction, CheckoutStatus, LifecycleState
+from creopdm.models.activity import Activity
 from creopdm.models.ai_snapshot import ObjectVersionSnapshot
 from creopdm.models.checkout import Checkout
 from creopdm.models.dependency import Dependency
@@ -21,6 +23,7 @@ from creopdm.models.product import Product
 from creopdm.models.thumbnail import Thumbnail
 from creopdm.models.user import ProductWatch, User, UserProduct
 from creopdm.models.version import ObjectVersion
+from creopdm.services.activity_service import action_label
 from creopdm.utils.hashing import calculate_sha256
 from tests.conftest import requires_git
 from tests.unit.test_auth import _login, _setup_admin_and_users
@@ -303,6 +306,29 @@ def test_admin_copy_product_is_a_fresh_add(auth_client, auth_ctx):
     with auth_ctx.session_factory() as db:
         dest = db.scalar(select(Product).where(Product.uuid == copy["uuid"]))
         assert dest is not None
+        copy_events = list(
+            db.scalars(
+                select(Activity).where(
+                    Activity.product_id == dest.id,
+                    Activity.action == ActivityAction.PRODUCT_COPIED.value,
+                )
+            )
+        )
+        assert len(copy_events) == 1
+        assert action_label(copy_events[0].action) == "Product copied"
+        assert "Product created" not in action_label(copy_events[0].action)
+        created_on_copy = db.scalar(
+            select(func.count())
+            .select_from(Activity)
+            .where(
+                Activity.product_id == dest.id,
+                Activity.action == ActivityAction.PRODUCT_CREATED.value,
+            )
+        )
+        assert created_on_copy == 0
+        details = json.loads(copy_events[0].details_json or "{}")
+        assert details["source_name"] == "Source Widget"
+        assert details["source_uuid"] == source["uuid"]
         dest_ids = list(
             db.scalars(select(EngineeringObject.id).where(EngineeringObject.product_id == dest.id))
         )
