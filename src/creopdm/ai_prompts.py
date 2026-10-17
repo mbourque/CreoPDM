@@ -82,11 +82,28 @@ _DRAWING_INVENTORY_SKIP_COMPARE = frozenset(
 )
 
 
-def _is_drawing_inventory_compare_feature(feat: dict[str, Any]) -> bool:
-    """Views / notes / tables / detail items — not sheet shells or dim duplicates."""
+_DRAWING_DIM_TYPES = frozenset({"DIMENSION", "DIM", "ITEM_DIMENSION"})
+
+
+def _snapshot_has_dimension_list(snapshot: dict[str, Any]) -> bool:
+    dims = snapshot.get("dimensions")
+    return isinstance(dims, list) and bool(_iter_compare_dimensions(dims))
+
+
+def _is_drawing_inventory_compare_feature(
+    feat: dict[str, Any], *, dims_listed: bool = True
+) -> bool:
+    """Views / notes / tables / detail items — not sheet shells or dim duplicates.
+
+    Drawings get their dimensions only as DIMENSION inventory rows (the Toolkit sends no
+    separate dimensions list), so those rows stay in unless a real list covers them.
+    """
     if not isinstance(feat, dict):
         return False
-    return _feature_type_label(feat) not in _DRAWING_INVENTORY_SKIP_COMPARE
+    typ = _feature_type_label(feat)
+    if typ in _DRAWING_DIM_TYPES and not dims_listed:
+        return True
+    return typ not in _DRAWING_INVENTORY_SKIP_COMPARE
 
 
 def _drawing_has_rich_inventory(features: list[dict[str, Any]]) -> bool:
@@ -151,14 +168,16 @@ def _inventory_outline_line(row: dict[str, Any]) -> str:
     indent = "  " * max(0, level - 1)
     nest = "└ " if level > 1 else ""
     extras: list[str] = []
-    if typ and typ.upper() not in name.upper():
+    detail = str(row.get("detail") or "").strip()
+    if typ.upper() == "DIMENSION" and detail:
+        extras.append(detail)  # kind (LINEAR / ANGLE / RADIUS) instead of the word DIMENSION
+    elif typ and typ.upper() not in name.upper():
         extras.append(typ)
     if status:
         extras.append(status)
     sheet = row.get("sheet")
     if sheet not in (None, "") and typ.upper() != "SHEET":
         extras.append(f"sheet {sheet}")
-    detail = str(row.get("detail") or "").strip()
     if detail and typ.upper() == "NOTE":
         short = detail if len(detail) <= 80 else detail[:77] + "…"
         extras.append(short)
@@ -699,8 +718,9 @@ def _feature_outline_labels(snapshot: dict[str, Any]) -> list[str]:
     features = _iter_compare_features(features_raw)
     labels: list[str] = []
     if drawing:
+        dims_listed = _snapshot_has_dimension_list(snapshot)
         for feat in features:
-            if not _is_drawing_inventory_compare_feature(feat):
+            if not _is_drawing_inventory_compare_feature(feat, dims_listed=dims_listed):
                 continue
             if _is_view_feature(feat):
                 labels.append(_view_display_line(feat).lstrip("- ").strip())
@@ -2250,10 +2270,12 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
             nested = nest_drawing_inventory_by_sheet(
                 [f for f in features if isinstance(f, dict)]
             )
+            dims_listed = _snapshot_has_dimension_list(snapshot)
             inv_rows = [
                 f
                 for f in nested
-                if _feature_type_label(f) not in {"DRAWING", "DIMENSION", "DIM"}
+                if _feature_type_label(f) != "DRAWING"
+                and (not dims_listed or _feature_type_label(f) not in _DRAWING_DIM_TYPES)
             ]
             if inv_rows:
                 lines.extend(_inventory_outline_line(f) for f in inv_rows)
@@ -2344,7 +2366,11 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
             lines.append("- (none)")
 
     dimensions = snapshot.get("dimensions")
-    if isinstance(dimensions, list):
+    # Drawing dimensions are listed in the inventory above; an empty "(none)" would contradict it.
+    dims_in_inventory = drawing and any(
+        _feature_type_label(f) in _DRAWING_DIM_TYPES for f in features if isinstance(f, dict)
+    )
+    if isinstance(dimensions, list) and not (dims_in_inventory and not dimensions):
         feat_labels = _feature_id_label_map(snapshot)
         dim_lines = [
             f"- {_dimension_outline_line(dim, feature_labels=feat_labels)}"

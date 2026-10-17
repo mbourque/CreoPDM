@@ -1495,6 +1495,40 @@ def test_snapshot_compare_prompt_requires_saved_text():
     assert "1.64961176644" not in mass_outline.split("Mass properties:", 1)[-1]
 
 
+def _wedge_drawing_snapshot(dim_rows: list[dict]) -> dict:
+    rows = [
+        {"name": "Sheet 1", "type": "SHEET", "id": "sheet:1", "level": 1, "status": "CURRENT"},
+        {"name": "A", "type": "VIEW", "id": "view:4", "level": 2, "status": "ACTIVE", "sheet": 1},
+        *dim_rows,
+    ]
+    return {
+        "identity": {"file_name": "wedge.drw", "model_type": "DRAWING"},
+        "features": rows,
+        "dimensions": [],
+        "parameters": [],
+    }
+
+
+def test_drawing_outline_lists_dimension_inventory_rows():
+    """Drawings get dimensions only as DIMENSION inventory rows: Modifications must show them."""
+    snap = _wedge_drawing_snapshot(
+        [
+            {"name": "add2", "type": "DIMENSION", "detail": "ANGLE", "id": "dim:wedge.drw:2", "level": 2, "sheet": 1},
+            {"name": "d2", "type": "DIMENSION", "detail": "LINEAR", "id": "dim:wedge.prt:2", "level": 2, "sheet": 1},
+        ]
+    )
+    outline = format_snapshot_compare_text(snap)
+    assert "add2 (ANGLE" in outline
+    assert "d2 (LINEAR" in outline
+    assert "Dimensions:\n- (none)" not in outline
+
+
+def test_drawing_outline_without_dimensions_still_says_none():
+    outline = format_snapshot_compare_text(_wedge_drawing_snapshot([]))
+    assert "Dimensions:" in outline
+    assert "- (none)" in outline
+
+
 @requires_git
 def test_ai_snapshot_api_upsert_list_and_detail_tab(client, repo_parent, tmp_path):
     """POST tip snapshot, list by rev, GET returns JSON; one snap → pending Modifications."""
