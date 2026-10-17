@@ -130,3 +130,26 @@ def test_nothing_useful_or_a_failed_domain_means_no_sketch_view():
     assert sketch_overview({}) is None
     assert sketch_overview({"ok": False, "error": "x"}) is None
     assert sketch_overview({"ok": True, "entities": {"total": 0, "counts": {}}}) is None
+
+
+def test_a_failed_sketch_domain_keeps_the_toolkit_reason_instead_of_vanishing():
+    # Real Toolkit 0.5.0 answer for a section it could not read.
+    payload = {
+        "ok": True,
+        "domains": {
+            "identity": {"ok": True, "identity": {"file_name": "test-sec.sec", "model_type": "SECTION"}},
+            "sketch": {"ok": False, "error": "could not read the section entities (ProSectionEntityIdsGet=-2)"},
+        },
+    }
+    snap = map_toolkit_collect_to_snapshot(payload, fallback_filename="test-sec.sec")
+    assert snap["sketch"] == {
+        "ok": False,
+        "error": "could not read the section entities (ProSectionEntityIdsGet=-2)",
+    }
+    from creopdm.utils.sketch_metadata import sketch_error
+
+    assert sketch_error(snap["sketch"]).endswith("ProSectionEntityIdsGet=-2)")
+    assert sketch_overview(snap["sketch"]) is None  # no rows from an error
+    assert sketch_error(SKETCH) == ""
+    assert sketch_error(None) == ""
+    assert sketch_error({"ok": False}) == "the Toolkit could not read this sketch"

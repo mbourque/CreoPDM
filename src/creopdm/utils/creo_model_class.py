@@ -58,6 +58,9 @@ _MODEL_ROLE_ALIASES: dict[str, str] = {
 }
 
 
+# identity.subtype values that mean "no subtype".
+_NO_SUBTYPE = frozenset({"NONE", "NIL", "NULL", "N/A", "UNSPECIFIED"})
+
 # Toolkit identity.subtype → model role, used when the Toolkit sent no recognised role.
 _SUBTYPE_ROLE_ALIASES: dict[str, str] = {
     "ASM_PROCPLAN": "PROCESS",
@@ -173,7 +176,8 @@ def creo_subtype_display(identity: dict[str, Any] | None) -> dict[str, str] | No
     if not isinstance(identity, dict):
         return None
     subtype = str(identity.get("subtype") or identity.get("subType") or "").strip()
-    if not subtype:
+    # The Toolkit sends the string "NONE" when a model has no subtype (2D sections do).
+    if not subtype or subtype.upper() in _NO_SUBTYPE:
         return None
     role = str(identity.get("model_role") or "").strip()
     label = role or subtype

@@ -215,6 +215,9 @@
           </tr>
           {% endif %}
           <tr><td>Size</td><td>{% if object.current_version %}{{ object.current_version.file_size | byte_size }}{% else %}—{% endif %}</td></tr>
+          {% if sketch_error and not sketch_view %}
+          <tr id="overview-sketch-error"><td>Sketch data</td><td class="muted">Not available — Toolkit: {{ sketch_error }}</td></tr>
+          {% endif %}
           {% if sketch_view %}
           {# 2D section (.sec) from the Toolkit sketch domain; a null field reads "—", never 0/No. #}
           <tr id="overview-sketch-size"><td>Sketch size</td><td>{{ sketch_view.size or "—" }}</td></tr>

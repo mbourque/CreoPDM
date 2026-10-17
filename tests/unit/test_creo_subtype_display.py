@@ -103,3 +103,10 @@ def test_a_role_the_toolkit_did_send_is_never_overridden_by_the_subtype():
     assert normalize_creo_identity({"model_role": "WEIRD", "subtype": "PRT_SOLID"})[
         "model_role"
     ] == ""
+
+
+def test_toolkit_none_subtype_is_not_a_subtype():
+    # Toolkit 0.5.0 sends the string "NONE" for 2D sections (and other models without one).
+    assert creo_subtype_display({"model_type": "SECTION", "subtype": "NONE", "model_role": ""}) is None
+    assert creo_subtype_display({"subtype": "none"}) is None
+    assert creo_subtype_display({"subtype": "ASM_PROCPLAN", "model_role": "PROCESS"}) is not None

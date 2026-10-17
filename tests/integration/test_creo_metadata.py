@@ -890,3 +890,36 @@ def test_section_without_sketch_data_shows_no_sketch_tab(client, repo_parent, tm
     assert detail.status_code == 200
     assert 'data-tab="sketch"' not in detail.text
     assert 'id="overview-sketch-size"' not in detail.text
+
+
+@requires_git
+def test_section_the_toolkit_could_not_read_says_why_and_shows_no_subtype_none(client, repo_parent, tmp_path):
+    """Toolkit sketch error + subtype "NONE": a clear reason, no empty tab, no "NONE" row."""
+    product = _create_product(client, repo_parent)
+    sec = _add_part(client, product["uuid"], tmp_path, "unreadable.sec")
+    posted = client.post(
+        f"/api/objects/{sec['uuid']}/creo-metadata",
+        json={
+            "identity": {
+                "file_name": "unreadable.sec",
+                "model_type": "SECTION",
+                "model_role": "",
+                "subtype": "NONE",
+                "saved_release": "13.4.1.0",
+            },
+            "sketch": {
+                "ok": False,
+                "error": "could not read the section entities (ProSectionEntityIdsGet=-2)",
+            },
+        },
+    )
+    assert posted.status_code == 200, posted.text
+    detail = client.get(f"/products/{product['uuid']}/objects/{sec['uuid']}")
+    assert detail.status_code == 200
+    text = detail.text
+    assert 'id="overview-sketch-error"' in text
+    assert "ProSectionEntityIdsGet=-2" in text
+    assert 'data-tab="sketch"' not in text  # nothing to show on a tab
+    assert 'id="overview-subtype-row"' not in text
+    assert "<td>NONE</td>" not in text
+    assert "<td>Model type</td><td>SKETCH</td>" in text

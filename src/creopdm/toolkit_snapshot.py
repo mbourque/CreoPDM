@@ -701,6 +701,16 @@ def map_toolkit_collect_to_snapshot(
             for k, v in source.items()
             if k not in {"ok", "fileName", "error", "partial", "partial_missing", "timings_ms"}
         } or None
+    else:
+        raw_domains = payload.get("domains")
+        raw_sketch = raw_domains.get("sketch") if isinstance(raw_domains, dict) else None
+        if isinstance(raw_sketch, dict) and raw_sketch.get("ok") is False:
+            # Keep the Toolkit's reason so Details can say why there is no sketch data
+            # (for example ProSectionEntityIdsGet=-2) instead of showing nothing.
+            sketch = {
+                "ok": False,
+                "error": str(raw_sketch.get("error") or "sketch not available")[:300],
+            }
 
     # Nested ai_snapshot so Ask AI / postAiSnapshotFromGather work without Creo.JS.
     identity_ai = dict(identity)

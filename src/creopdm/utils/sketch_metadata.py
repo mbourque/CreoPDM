@@ -66,6 +66,13 @@ def _tolerance(value: Any) -> str:
     return text or "—"
 
 
+def sketch_error(sketch: Any) -> str:
+    """The Toolkit's reason when it could not read the sketch ("" when there is none)."""
+    if isinstance(sketch, dict) and sketch.get("ok") is False:
+        return _text(sketch.get("error")) or "the Toolkit could not read this sketch"
+    return ""
+
+
 def sketch_overview(sketch: Any) -> dict[str, Any] | None:
     """Rows for the Overview tab and the Sketch tab, or None when there is no sketch data."""
     if not isinstance(sketch, dict) or sketch.get("ok") is False:

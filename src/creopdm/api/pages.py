@@ -38,7 +38,7 @@ from creopdm.utils.classify import (
     type_icon_client_payload,
 )
 from creopdm.utils.creo_model_class import creo_subtype_display, model_type_display
-from creopdm.utils.sketch_metadata import sketch_overview
+from creopdm.utils.sketch_metadata import sketch_error, sketch_overview
 from creopdm.utils.files import format_byte_size
 from creopdm.utils.folders import folder_crumbs, folder_of, folder_view_counts, normalize_folder_query
 from creopdm.utils.native_dialog import native_picker_available
@@ -687,6 +687,7 @@ def object_detail(
             # Overview "Model type": a 2D section reads SKETCH.
             "model_type_label": model_type_display(identity.get("model_type")),
             "sketch_view": sketch_view,
+            "sketch_error": sketch_error(metadata.sketch),
             "show_sketch_tab": bool(sketch_view),
             "materials": materials,
             "units": units,
