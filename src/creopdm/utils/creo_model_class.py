@@ -129,9 +129,9 @@ def normalize_creo_identity(identity: dict[str, Any] | None) -> dict[str, Any] |
 def creo_subtype_display(identity: dict[str, Any] | None) -> dict[str, str] | None:
     """Overview "Subtype" row from the Toolkit identity (subtype + model_role).
 
-    The row reads the model role (``PROCESS``) like every other Subtype row, or the raw
-    subtype when the Toolkit sent no role. The raw ``subtype`` (``ASM_PROCPLAN``) stays
-    available as ``detail`` (muted text) and in ``raw`` (tooltip).
+    The row reads only the model role (``PROCESS``) like every other Subtype row, or the
+    raw subtype when the Toolkit sent no role. The raw ``subtype`` (``ASM_PROCPLAN``)
+    stays available in ``raw`` (tooltip) and as a data attribute, not as visible text.
 
     Returns ``None`` when the Toolkit gave no subtype (the model was not collected, or an
     older Collect) — the caller then shows what it showed before.
@@ -147,7 +147,6 @@ def creo_subtype_display(identity: dict[str, Any] | None) -> dict[str, str] | No
         "label": label,
         "subtype": subtype,
         "model_role": role,
-        "detail": subtype if subtype.upper() != label.upper() else "",
         "raw": f"{subtype} · {role}" if role and role.upper() != subtype.upper() else subtype,
     }
 
@@ -195,6 +194,8 @@ _FILES_LIST_ROLE_LABELS: frozenset[str] = frozenset(
         "MOLD_LAYOUT",
         "CONFIGURABLE_MODULE",
         "CABLING_DATA",
+        # Toolkit subtype ASM_PROCPLAN: Files list Type reads PROCESS, not ASSEMBLY.
+        "PROCESS",
     }
 )
 

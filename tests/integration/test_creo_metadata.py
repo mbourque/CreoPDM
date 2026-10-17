@@ -734,12 +734,20 @@ def test_overview_subtype_row_from_toolkit_identity_replaces_system(client, repo
     assert 'id="overview-subtype-row"' in text
     assert 'data-subtype="ASM_PROCPLAN"' in text
     assert 'data-model-role="PROCESS"' in text
-    assert 'title="ASM_PROCPLAN · PROCESS">PROCESS' in text  # the row reads PROCESS
-    assert '<span class="muted small">ASM_PROCPLAN</span>' in text  # raw subtype kept
+    # The row reads only PROCESS; the raw subtype stays in the tooltip / data attribute.
+    assert 'title="ASM_PROCPLAN · PROCESS">PROCESS</td>' in text
     assert "Process assembly" not in text
     assert "<td>System</td>" not in text
     assert "Asm Proc" not in text
     assert "<td>Length</td>" in text  # the other unit rows are untouched
+
+    # Files list Type column reads PROCESS too (API rows and the rendered Files page).
+    listed = client.get(f"/api/products/{product['uuid']}/objects")
+    assert listed.status_code == 200, listed.text
+    assert {item["uuid"]: item["type_label"] for item in listed.json()}[plan["uuid"]] == "PROCESS"
+    home = client.get(f"/?product={product['uuid']}")
+    assert home.status_code == 200
+    assert ">PROCESS<" in home.text or 'title="PROCESS"' in home.text
 
 
 @requires_git

@@ -188,10 +188,10 @@
           <tr><td>Model type</td><td>ASSEMBLY (Top Level)</td></tr>
           {% endif %}
           {% if subtype_display %}
-          {# Toolkit identity: reads the model role (PROCESS); raw subtype kept (muted text + title). #}
+          {# Toolkit identity: the row reads only the model role (PROCESS); raw subtype in title + data attributes. #}
           <tr id="overview-subtype-row" data-subtype="{{ subtype_display.subtype }}" data-model-role="{{ subtype_display.model_role }}">
             <td>Subtype</td>
-            <td title="{{ subtype_display.raw }}">{{ subtype_display.label }}{% if subtype_display.detail %} <span class="muted small">{{ subtype_display.detail }}</span>{% endif %}</td>
+            <td title="{{ subtype_display.raw }}">{{ subtype_display.label }}</td>
           </tr>
           {% elif identity.model_role %}
           <tr><td>Subtype</td><td>{{ identity.model_role }}</td></tr>
