@@ -912,3 +912,21 @@ def test_deleting_a_revised_product_or_file_removes_its_revise_operation_rows(
         auth_ctx.objects._delete_metadata(db, row)
         db.commit()
     assert operation_rows() == 0
+
+
+def test_help_page_explains_revise_when_and_how():
+    from pathlib import Path
+
+    html = (
+        Path(__file__).resolve().parents[2] / "src" / "creopdm" / "static" / "help" / "index.html"
+    ).read_text(encoding="utf-8")
+    assert 'id="revise"' in html and 'href="#revise"' in html
+    for needle in (
+        "When Revise is available",
+        "How to revise a file",
+        "Revision Reason",
+        "Discard changes",
+        "undo the release",
+        "Check In</strong> keeps the revision",
+    ):
+        assert needle in html, needle

@@ -348,6 +348,7 @@
         <a href="#open">Open in Creo</a>
         <a href="#checkout">Checkout</a>
         <a href="#checkin">Check In</a>
+        <a href="#revise">Revise</a>
         <a href="#remove">Remove &amp; cleanup</a>
         <a href="#watch">Watch &amp; email</a>
         <a href="#details">Details &amp; history</a>
@@ -368,6 +369,7 @@
           <a class="chip" href="#agent">Agent tray</a>
           <a class="chip" href="#toolkit">Toolkit</a>
           <a class="chip" href="#checkout">Checkout → Check In</a>
+          <a class="chip" href="#revise">Revise</a>
           <a class="chip" href="#open">Open assemblies</a>
           <a class="chip" href="#tips">If something fails</a>
         </div>
@@ -666,7 +668,11 @@ END</pre>
           </article>
           <article class="tile">
             <h3>Undo Checkout</h3>
-            <p>Releases <em>your</em> locks without creating a new version. Does not delete vault files. Hidden when the lifecycle matrix blocks Check Out (for example Locked or In Review).</p>
+            <p>Releases <em>your</em> locks without creating a new version. Does not delete vault files, and a save you already made is kept so it can still be checked in. Hidden when the lifecycle matrix blocks Check Out (for example Locked or In Review).</p>
+          </article>
+          <article class="tile">
+            <h3>Discard changes…</h3>
+            <p>For a file that keeps reading <strong>Modified</strong> after you no longer want the change. Right-click the file (or its row on the <strong>Modified</strong> tab) → <strong>Discard changes…</strong>. A save staged in the vault is thrown away and the file goes back to its checked-in version; a <em>Newer local save</em> (for example <code>shaft.prt.2</code>) moves to the Recycle Bin on this PC. No new version is created. If someone has the file checked out, undo that checkout first.</p>
           </article>
           <article class="tile">
             <h3>Force Undo Checkout</h3>
@@ -692,6 +698,63 @@ END</pre>
         </div>
       </section>
 
+      <section id="revise">
+        <h2>Revise</h2>
+        <p><strong>Revise</strong> starts the next engineering <em>revision</em> of a file that has been released — for example <strong>A.3 → B.1</strong> — without touching the released one. It is the only way to edit a Released file.</p>
+        <div class="grid-2">
+          <article class="tile">
+            <h3>Revise vs Check In</h3>
+            <p><strong>Check In</strong> keeps the revision and moves the iteration (A.1 → A.2 → A.3). <strong>Revise</strong> moves to the next revision and restarts at iteration 1 (A.3 → B.1). They are separate actions.</p>
+          </article>
+          <article class="tile">
+            <h3>What you get</h3>
+            <p>The <em>same</em> file gets a <em>new</em> version, <strong>B.1</strong>, In Work, that starts from the released content with its own copy of the metadata. The released version stays Released, unchanged. Then you check B.1 out, edit it and check in to get B.2.</p>
+          </article>
+        </div>
+        <h3>When Revise is available</h3>
+        <p>You see <strong>Revise…</strong> only when all of these are true:</p>
+        <ul class="clean">
+          <li>The file is <strong>Released</strong> (releasing a product releases its files).</li>
+          <li>Nobody has the file <strong>checked out</strong>.</li>
+          <li>You have the <strong>Revise</strong> permission (Engineers, PDM Managers and Administrators by default).</li>
+          <li>The product’s state allows it — <strong>In Work</strong> and <strong>Under Change</strong> by default. A product that is itself <strong>Released</strong> is frozen: reopen it first (<strong>Under Change</strong> is meant for this).</li>
+        </ul>
+        <div class="callout">
+          Not seeing it? Right-click the file: if <strong>Revise…</strong> is missing, check that the file reads <em>Released</em>, that it is not checked out, and what state the product is in (shown next to the product name).
+        </div>
+        <h3>How to revise a file</h3>
+        <div class="panel">
+          <ol class="steps">
+            <li>Right-click the Released file → <strong>Revise…</strong> (also a <strong>Revise…</strong> button on the file’s Details page).</li>
+            <li>The dialog shows the file, the <strong>source version</strong> (for example A.3), the <strong>new version</strong> (B.1, chosen by the server) and that the new version starts <strong>In Work</strong> at iteration 1.</li>
+            <li>Enter a <strong>Revision Reason</strong> — required. It is saved with the revision and the audit trail.</li>
+            <li>On the Files list you can tick <strong>Check out B.1 after creating it</strong> to go straight to editing.</li>
+            <li>Press <strong>Create Revision B</strong>. The list refreshes and shows the new revision.</li>
+          </ol>
+        </div>
+        <h3>After a revise</h3>
+        <ul class="clean">
+          <li><strong>History</strong> on Details is grouped by revision, newest first (<em>Revision B</em> above <em>Revision A</em>), and the released versions are marked <strong>Released</strong>.</li>
+          <li><strong>Overview</strong> shows <strong>Created From</strong> (for example A.3) and the <strong>Revision Reason</strong>.</li>
+          <li>The audit trail has a <strong>Revision created</strong> entry (<em>A.3 → B.1</em>, with the reason).</li>
+          <li>Baselines, product releases and Where Used keep pointing at the version they used — a new revision never rewrites them.</li>
+        </ul>
+        <h3>Good to know</h3>
+        <ul class="clean">
+          <li><strong>The server chooses the revision</strong> (A → B → C … Z → AA). It cannot be typed in.</li>
+          <li><strong>Safe to retry.</strong> If the answer is lost, press Create again — you get the same B.1, never a second revision.</li>
+          <li><strong>Unchanged-file note.</strong> If a released revision is identical to the version it started from, the dialog adds a note (“has not changed since A.1”). You can still go ahead.</li>
+          <li>All or nothing: if anything fails, no revision is created.</li>
+          <li>Revise is <em>not</em> Save As (that would be a new file name) and Creo’s numbered saves (<code>shaft.prt.2</code>) are not revisions.</li>
+        </ul>
+        <h3>Releasing and reopening a product</h3>
+        <ul class="clean">
+          <li>Moving a product to <strong>Released</strong> releases its files. It is refused while any file is checked out (so is <strong>In Review</strong> and <strong>Approved</strong>) — check the files in or undo the checkout first.</li>
+          <li>Moving the product back to <strong>Under Change</strong> or <strong>In Work</strong> leaves its files Released; each one needs a Revise before it can be edited.</li>
+          <li>Administrators can choose <strong>Also set the Released files back to In Work (undo the release)</strong> when promoting to In Work or Pre-Work, for example after a release by mistake.</li>
+        </ul>
+      </section>
+
       <section id="remove">
         <h2>Remove &amp; cleanup</h2>
         <p>Use <strong>Remove ▾</strong> carefully — some actions only clean your PC; others change the shared product.</p>
@@ -701,7 +764,7 @@ END</pre>
               <tr><th>Action</th><th>Affects</th></tr>
             </thead>
             <tbody>
-              <tr><td><strong>Remove from Workspace…</strong></td><td>Local copies on this PC only. Vault unchanged.</td></tr>
+              <tr><td><strong>Remove from Workspace…</strong></td><td>Local copies on this PC only (new files, or a <em>Newer local save</em> row on the Modified tab). Vault unchanged.</td></tr>
               <tr><td><strong>Purge workspace…</strong></td><td>Older local numbered saves below the vault tip. Vault unchanged.</td></tr>
               <tr><td><strong>Clear workspace…</strong></td><td>Everything inside this product’s local workspace folder. Vault unchanged.</td></tr>
               <tr><td><strong>Remove from Vault…</strong></td><td>Deletes CreoPDM vault copies. Your original CAD folders on disk are not the same thing.</td></tr>
@@ -729,7 +792,8 @@ END</pre>
         <h2>Details, history &amp; modifications</h2>
         <p>Open a file’s <strong>Details</strong> (toolbar or double-click) for overview information, history, and (when available) Creo structure and AI compare tools.</p>
         <ul class="clean">
-          <li><strong>History</strong> lists versions and check-in comments. Restore / revert needs the matching permission.</li>
+          <li><strong>History</strong> lists versions and check-in comments, grouped by revision (newest first). Restore / revert needs the matching permission; a restore is recorded as a new version and the audit says which version it came from (for example <em>Restored A.1 as D.3</em>).</li>
+          <li><strong>Revision created</strong> by <a href="#revise">Revise</a> shows <strong>Created From</strong> and the <strong>Revision Reason</strong> on Overview.</li>
           <li><strong>Modifications</strong> compares checked-in snapshots and, when the file is modified, a live gather of the current model.</li>
           <li><strong>Ask AI what changed</strong> uses the prompt saved under System Settings → AI (when enabled).</li>
         </ul>
