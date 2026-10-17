@@ -723,6 +723,18 @@ def _event_summary(
         name = details.get("name") or details.get("product_name")
         if name:
             parts.append(str(name))
+    if action in {ActivityAction.VERSION_RESTORED.value, "VERSION_RESTORED"}:
+        # "Restored A.2 as A.5": which version came back and the new version it became.
+        source = details.get("from_display")
+        if source:
+            target = details.get("to_display")
+            iteration = details.get("to_iteration")
+            if target:
+                parts.append(f"Restored {source} as {target}")
+            elif isinstance(iteration, int):
+                parts.append(f"Restored {source} as iteration {iteration}")
+            else:
+                parts.append(f"Restored {source}")
     if action in {ActivityAction.REVISION_CREATED.value, "REVISION_CREATED"}:
         old_v = details.get("source_version")
         new_v = details.get("new_version")

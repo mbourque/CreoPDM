@@ -771,6 +771,14 @@ def test_revert_to_older_version_restores_vault_content(client, repo_parent, dat
     assert older["display"] in new_history[0]["comment"]
     assert new_history[0]["filename"] == older["filename"]
 
+    # The audit row says which version came back and what it became.
+    ctx = client.app.state.ctx
+    with ctx.session_factory() as db:
+        events = ctx.activities.list_events(db, q="shaft.prt")
+        restored = [e for e in events if e.action == "VERSION_RESTORED"]
+        assert restored
+        assert f"Restored {older['display']} as A.4" in (restored[0].summary or "")
+
 
 @requires_git
 def test_revert_restores_logical_vault_tip(client, repo_parent, data_dir):

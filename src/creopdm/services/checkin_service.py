@@ -472,6 +472,7 @@ class CheckinService:
             details={
                 "from_version": version_uuid,
                 "from_display": display,
+                "to_display": f"{restored.revision}.{restored.iteration}",
                 "to_iteration": restored.iteration,
                 "restored_path": dest_rel,
             },
