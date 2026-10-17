@@ -398,3 +398,44 @@ def test_admin_copy_product_is_a_fresh_add(auth_client, auth_ctx):
         assert db.get(Thumbnail, original_hash) is not None
         assert db.get(Thumbnail, original_hash).bytes == b"jpeg-original"
         assert db.get(Thumbnail, dirty_hash).bytes == b"jpeg-dirty"
+
+
+def test_admin_add_product_uses_the_shared_vault_fields(auth_client, auth_ctx):
+    """Add product (admin) has the same Use hash / Vault/Workspace name control as the web dialog."""
+    _setup_admin_and_users(auth_client, auth_ctx, ("pat", BuiltinRole.ENGINEER.value))
+    _login(auth_client, "admin", "AdminPass1")
+
+    page = auth_client.get("/admin/products/new")
+    assert page.status_code == 200, page.text
+    assert 'id="product-vault-folder"' in page.text
+    assert 'id="product-use-hash" checked' in page.text
+    assert "Vault/Workspace name" in page.text
+    assert "With Use hash, the UUID is locked in." in page.text
+    assert "Leave blank for a unique id" not in page.text
+
+    created = auth_client.post(
+        "/admin/products/new",
+        data={"name": "Hashed", "number": "", "description": "", "vault_folder": "", "use_hash": "on"},
+        follow_redirects=False,
+    )
+    assert created.status_code == 303, created.text
+    named = auth_client.post(
+        "/admin/products/new",
+        data={"name": "Named", "number": "", "description": "", "vault_folder": "my-vault"},
+        follow_redirects=False,
+    )
+    assert named.status_code == 303, named.text
+    products = {p["name"]: p for p in auth_client.get("/api/products").json()}
+    assert products["Hashed"]["vault_folder"] == products["Hashed"]["uuid"]
+    assert products["Named"]["vault_folder"] == "my-vault"
+
+    # A custom name that another product already uses is refused, and the form keeps what was typed
+    # with Use hash unchecked.
+    dup = auth_client.post(
+        "/admin/products/new",
+        data={"name": "Other", "number": "", "description": "", "vault_folder": "my-vault"},
+    )
+    assert dup.status_code == 400, dup.text
+    assert "already uses vault/workspace name" in dup.text
+    assert 'id="product-use-hash" checked' not in dup.text
+    assert 'value="my-vault"' in dup.text

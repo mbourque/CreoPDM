@@ -1949,12 +1949,14 @@ def _product_form(
     vault_folder: str = "",
     state: str = "IN_WORK",
     uuid: str | None = None,
+    use_hash: bool = True,
 ) -> dict:
     payload = {
         "name": name,
         "number": number,
         "description": description,
         "vault_folder": vault_folder,
+        "use_hash": use_hash,
         "state": state or "IN_WORK",
     }
     if uuid is not None:
@@ -2242,6 +2244,7 @@ def admin_product_create(
     number: str = Form(""),
     description: str = Form(""),
     vault_folder: str = Form(""),
+    use_hash: str = Form(""),
     state: str = Form("IN_WORK"),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
@@ -2255,6 +2258,8 @@ def admin_product_create(
         description=description,
         vault_folder=vault_folder,
         state=state,
+        # Same checkbox as the Products page dialog and Copy product; kept on re-render.
+        use_hash=str(use_hash or "").strip().lower() in {"1", "on", "true", "yes"},
     )
     try:
         product = ctx.products.create_product(
