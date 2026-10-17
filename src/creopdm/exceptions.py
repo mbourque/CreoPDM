@@ -89,6 +89,27 @@ class ReviseActiveCheckoutError(CreoPDMError):
     http_status = 409
 
 
+class ReviseSourceNotFoundError(CreoPDMError):
+    """The file has no current version to revise from."""
+
+    code = "REVISE_SOURCE_NOT_FOUND"
+    http_status = 404
+
+
+class ReviseNextRevisionExistsError(CreoPDMError):
+    """The revision that would come next is already used (history is linear)."""
+
+    code = "REVISE_NEXT_REVISION_EXISTS"
+    http_status = 409
+
+
+class ReviseRevisionSchemeError(CreoPDMError):
+    """The current revision does not fit the revision scheme."""
+
+    code = "REVISE_REVISION_SCHEME_ERROR"
+    http_status = 409
+
+
 class WorkspaceConflictError(CreoPDMError):
     code = "WORKSPACE_CONFLICT"
     http_status = 409

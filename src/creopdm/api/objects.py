@@ -44,6 +44,7 @@ from creopdm.schemas.common import (
     ObjectResponse,
     ObjectVersionResponse,
     ReviseEligibilityResponse,
+    RevisePreviewResponse,
     WhereUsedResponse,
     WorkspaceContentResponse,
 )
@@ -442,6 +443,46 @@ def revise_eligibility(
         iteration=obj.iteration,
         display_version=revision_display(obj.revision, obj.iteration),
         lifecycle_state=obj.lifecycle_state,
+    )
+
+
+@router.get("/api/objects/{object_id}/revise-preview", response_model=RevisePreviewResponse)
+def revise_preview(
+    object_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> RevisePreviewResponse:
+    """Source version and the new revision the server would create. Creates nothing."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_REVISE)
+    obj = ctx.objects.get_object(db, object_id)
+    require_product_access(request, ctx, obj.product)
+    from creopdm.api.serializers import revision_display
+    from creopdm.services.revise_service import preview_revise
+
+    preview = preview_revise(db, obj, ctx.checkouts.active_for(db, obj.id))
+    result = preview.eligibility
+    return RevisePreviewResponse(
+        object_id=obj.uuid,
+        name=obj.name,
+        number=obj.number,
+        filename=obj.filename,
+        allowed=result.allowed,
+        code=result.code,
+        message=result.message,
+        source_version_id=preview.source_version_id,
+        source_revision=preview.source_revision,
+        source_iteration=preview.source_iteration,
+        source_display_version=revision_display(preview.source_revision, preview.source_iteration),
+        source_lifecycle_state=obj.lifecycle_state,
+        new_revision=preview.new_revision,
+        new_iteration=preview.new_iteration,
+        new_display_version=(
+            revision_display(preview.new_revision, preview.new_iteration)
+            if preview.new_revision
+            else ""
+        ),
+        new_lifecycle_state=preview.new_lifecycle_state,
     )
 
 

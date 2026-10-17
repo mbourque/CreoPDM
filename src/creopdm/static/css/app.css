@@ -1426,6 +1426,9 @@ button.forgot-password-btn,
 }
 .dialog form { display: flex; flex-direction: column; gap: 0.7rem; padding: 1.1rem; }
 .dialog h2 { margin: 0; }
+.revise-facts { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 1rem; margin: 0; }
+.revise-facts dt { color: #5d6b79; font-weight: 600; font-size: 0.88rem; }
+.revise-facts dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
 [hidden] { display: none !important; }
 dialog:not([open]) { display: none !important; }
 /* Creo CEF fallback when only the open attribute is set (no top-layer showModal). */

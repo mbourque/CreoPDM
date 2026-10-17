@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-thumb-preview">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-thumb-preview-revise">
   <script>
     /* Suppress PTC creojs.js noise outside Creo's browser (and when Creo injects its own copy). */
     (function () {
@@ -84,6 +84,26 @@
       <div class="dialog-actions">
         <button type="button" class="btn" id="danger-confirm-cancel">Cancel</button>
         <button type="submit" class="btn btn-danger" id="danger-confirm-submit">Confirm</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="revise-dialog" class="dialog revise-dialog">
+    <form method="dialog" id="revise-form">
+      <h2>Create New Revision</h2>
+      <dl class="revise-facts">
+        <dt>Object</dt><dd id="revise-object"></dd>
+        <dt>File</dt><dd id="revise-file"></dd>
+        <dt>Source Version</dt><dd id="revise-source"></dd>
+        <dt>Source Lifecycle</dt><dd id="revise-source-state"></dd>
+        <dt>New Version</dt><dd id="revise-new"></dd>
+        <dt>Starting Iteration</dt><dd id="revise-iteration"></dd>
+        <dt>New Lifecycle</dt><dd id="revise-new-state"></dd>
+      </dl>
+      <p class="muted small" id="revise-note"></p>
+      <p class="error" id="revise-error" hidden></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn" id="revise-cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="revise-confirm">Create Revision</button>
       </div>
     </form>
   </dialog>

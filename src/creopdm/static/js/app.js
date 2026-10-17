@@ -4174,11 +4174,40 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   /**
-   * Revise (Story 1): ask the server whether this file may get a new revision and say so.
-   * The server enforces permission, product state, Released lifecycle and checkouts; the
-   * button/menu only hide what it would refuse. Creating the revision is a later step.
+   * Revise: ask the server for the source version and the revision it WOULD create, and show
+   * them for confirmation. The server calculates everything (the client never picks the
+   * revision) and enforces permission, product state, Released lifecycle and checkouts; the
+   * button/menu only hide what it would refuse. Nothing is created yet.
    */
-  async function checkReviseEligibility(objectUuid) {
+  function reviseDialogEls() {
+    const dialog = $("#revise-dialog");
+    return dialog instanceof HTMLDialogElement ? dialog : null;
+  }
+
+  function fillReviseDialog(body) {
+    const set = (id, text) => {
+      const el = $(id);
+      if (el) el.textContent = text;
+    };
+    const label = (value) => String(value || "").replace(/_/g, " ");
+    set("#revise-object", body.number ? `${body.name} (${body.number})` : body.name || body.filename);
+    set("#revise-file", body.filename);
+    set("#revise-source", body.source_display_version);
+    set("#revise-source-state", label(body.source_lifecycle_state));
+    set("#revise-new", body.new_display_version);
+    set("#revise-iteration", String(body.new_iteration));
+    set("#revise-new-state", label(body.new_lifecycle_state));
+    set(
+      "#revise-note",
+      `This preserves ${body.source_display_version} as an immutable historical version. ` +
+        `${body.new_display_version} starts from its content.`
+    );
+    const confirm = $("#revise-confirm");
+    if (confirm) confirm.textContent = `Create Revision ${body.new_revision}`;
+    showError($("#revise-error"), "");
+  }
+
+  async function openReviseDialog(objectUuid) {
     const uuid = String(objectUuid || "").trim();
     if (!uuid) {
       showError($("#toolbar-error"), "Select one file to revise.");
@@ -4187,7 +4216,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     showError($("#toolbar-error"), "");
     let response;
     try {
-      response = await fetch(`/api/objects/${encodeURIComponent(uuid)}/revise-eligibility`);
+      response = await fetch(`/api/objects/${encodeURIComponent(uuid)}/revise-preview`);
     } catch {
       showError($("#toolbar-error"), "Could not reach the server to check Revise.");
       return;
@@ -4197,23 +4226,52 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return;
     }
     const body = await response.json();
-    if (body.allowed) {
-      showOk(
-        `Revise is allowed for ${body.filename} ${body.display_version}. ` +
-          "Creating the new revision is not available yet."
-      );
-    } else {
+    if (!body.allowed) {
       showError($("#toolbar-error"), body.message || "Revise is not allowed for this file.");
+      return;
     }
+    const dialog = reviseDialogEls();
+    if (!dialog) {
+      showOk(`Revise would create ${body.filename} ${body.new_display_version}.`);
+      return;
+    }
+    fillReviseDialog(body);
+    await new Promise((resolve) => {
+      const form = $("#revise-form");
+      const cancel = $("#revise-cancel");
+      const done = (confirmed) => {
+        form?.removeEventListener("submit", onSubmit);
+        cancel?.removeEventListener("click", onCancel);
+        dialog.removeEventListener("close", onClose);
+        if (dialog.open) dialog.close();
+        if (confirmed) {
+          showOk(
+            `Revise ${body.filename} ${body.source_display_version} → ${body.new_display_version}: ` +
+              "creating the new revision is not available yet."
+          );
+        }
+        resolve();
+      };
+      const onSubmit = (event) => {
+        event.preventDefault();
+        done(true);
+      };
+      const onCancel = () => done(false);
+      const onClose = () => done(false);
+      form?.addEventListener("submit", onSubmit);
+      cancel?.addEventListener("click", onCancel);
+      dialog.addEventListener("close", onClose);
+      dialog.showModal();
+    });
   }
 
   async function reviseSelected() {
     const rows = selectedRows();
-    await checkReviseEligibility(rows.length === 1 ? rows[0].dataset.uuid : "");
+    await openReviseDialog(rows.length === 1 ? rows[0].dataset.uuid : "");
   }
 
   document.querySelector("#revise-btn")?.addEventListener("click", () => {
-    void checkReviseEligibility(document.querySelector("#revise-btn")?.dataset.uuid || "");
+    void openReviseDialog(document.querySelector("#revise-btn")?.dataset.uuid || "");
   });
 
   function onFileTableContextMenu(event) {
@@ -8265,7 +8323,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return;
     }
     if (action === "revise") {
-      await checkReviseEligibility(String(row.dataset.uuid || "").trim());
+      await openReviseDialog(String(row.dataset.uuid || "").trim());
       return;
     }
     if (action === "export") {

@@ -289,6 +289,27 @@ class ReviseEligibilityResponse(BaseModel):
     lifecycle_state: str
 
 
+class RevisePreviewResponse(BaseModel):
+    """What Revise would create. The server calculates it; the client never picks the revision."""
+
+    object_id: str
+    name: str
+    number: str | None = None
+    filename: str
+    allowed: bool
+    code: str = ""
+    message: str = ""
+    source_version_id: str = ""
+    source_revision: str
+    source_iteration: int
+    source_display_version: str
+    source_lifecycle_state: str
+    new_revision: str = ""
+    new_iteration: int = 1
+    new_display_version: str = ""
+    new_lifecycle_state: str = "IN_WORK"
+
+
 class CheckinRequest(BaseModel):
     comment: str = Field(min_length=1)
     add_relative_paths: list[str] = Field(default_factory=list)

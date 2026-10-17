@@ -15,9 +15,10 @@ from creopdm.auth_constants import (
     BuiltinRole,
 )
 from creopdm.config import ConfigManager
-from creopdm.exceptions import ReviseInvalidLifecycleError
+from creopdm.exceptions import ReviseInvalidLifecycleError, ReviseRevisionSchemeError
 from creopdm.lifecycle_policy import default_lifecycle_policy, policy_from_dicts
 from creopdm.services.revise_service import ensure_can_revise, evaluate_revise
+from creopdm.utils.revision_scheme import get_initial_revision, get_next_revision, validate_revision
 from tests.conftest import requires_git
 from tests.unit.test_auth import _login, _setup_admin_and_users
 
@@ -83,6 +84,20 @@ def test_ensure_can_revise_raises_the_matching_code():
         ensure_can_revise(_obj(lifecycle="IN_WORK"), None)
     assert err.value.code == "REVISE_INVALID_LIFECYCLE"
     ensure_can_revise(_obj(), None)  # allowed: no raise
+
+
+def test_revision_scheme_is_alphabetic_and_server_side():
+    assert get_initial_revision() == "A"
+    assert [get_next_revision(r) for r in ("A", "B", "Y")] == ["B", "C", "Z"]
+    assert get_next_revision("Z") == "AA"
+    assert get_next_revision("AZ") == "BA"
+    assert get_next_revision("ZZ") == "AAA"
+    for bad in ("", None, "b", "1", "A1", " "):
+        with pytest.raises(ReviseRevisionSchemeError):
+            validate_revision(bad)
+    with pytest.raises(ReviseRevisionSchemeError) as err:
+        get_next_revision("1")
+    assert err.value.code == "REVISE_REVISION_SCHEME_ERROR"
 
 
 # ---- release cascade + eligibility API --------------------------------------------------
@@ -200,7 +215,10 @@ def test_revise_ui_is_wired_through_the_shared_menu_and_details():
     app = (root / "static" / "js" / "app.js").read_text(encoding="utf-8")
     assert "canRevise: row.dataset.canRevise" in app
     assert 'action === "revise"' in app
-    assert "/revise-eligibility" in app
+    assert "/revise-preview" in app and "openReviseDialog" in app
+    base = (root / "templates" / "base.html").read_text(encoding="utf-8")
+    assert 'id="revise-dialog"' in base and 'id="revise-confirm"' in base
+    assert "Starting Iteration" in base and "New Lifecycle" in base
     files = (root / "templates" / "app.html").read_text(encoding="utf-8")
     assert "product_ui.show_revise and obj.can_revise" in files
     assert 'data-show-revise="{{ ' in files and "product_ui.show_revise else" in files
@@ -216,3 +234,81 @@ def test_revise_ui_is_wired_through_the_shared_menu_and_details():
         assert "files_context_menu.js?v={{ app_version }}-files-ctx-revise" in page, name
     nav = (root / "static" / "js" / "embed_explorer.js").read_text(encoding="utf-8")
     assert "canRevise: showRevise && Boolean(obj.can_revise)" in nav
+
+
+@requires_git
+def test_revise_preview_is_calculated_by_the_server_and_creates_nothing(auth_client, auth_ctx):
+    _setup_admin_and_users(auth_client, auth_ctx, ("view", BuiltinRole.VIEWER.value))
+    _login(auth_client, "admin", "AdminPass1")
+    product, obj = _make_product_with_file(auth_client)
+
+    # Not Released yet: the preview refuses and names why, with no new revision.
+    early = auth_client.get(f"/api/objects/{obj['uuid']}/revise-preview")
+    assert early.status_code == 200, early.text
+    body = early.json()
+    assert (body["allowed"], body["code"]) == (False, "REVISE_INVALID_LIFECYCLE")
+    assert body["new_revision"] == "" and body["new_display_version"] == ""
+
+    assert _promote(auth_client, product, "RELEASED").status_code == 200
+    assert _promote(auth_client, product, "UNDER_CHANGE").status_code == 200
+
+    versions_before = auth_client.get(f"/api/objects/{obj['uuid']}/history").json()
+    preview = auth_client.get(f"/api/objects/{obj['uuid']}/revise-preview")
+    assert preview.status_code == 200, preview.text
+    data = preview.json()
+    assert data["allowed"] is True
+    assert data["source_display_version"] == "A.1"
+    assert data["source_lifecycle_state"] == "RELEASED"
+    assert data["new_revision"] == "B"
+    assert data["new_iteration"] == 1
+    assert data["new_display_version"] == "B.1"
+    assert data["new_lifecycle_state"] == "IN_WORK"
+    assert data["source_version_id"] == obj["current_version"]["uuid"]
+    assert data["name"] and data["filename"] == obj["filename"]
+
+    # The client cannot choose the revision: query parameters are ignored.
+    forced = auth_client.get(f"/api/objects/{obj['uuid']}/revise-preview?revision=D")
+    assert forced.json()["new_revision"] == "B"
+
+    # Previewing creates nothing: same history, same object revision/lifecycle.
+    assert auth_client.get(f"/api/objects/{obj['uuid']}/history").json() == versions_before
+    after = auth_client.get(f"/api/objects/{obj['uuid']}").json()
+    assert (after["revision"], after["iteration"], after["lifecycle_state"]) == ("A", 1, "RELEASED")
+
+    # Permission is enforced server-side on the preview too.
+    _login(auth_client, "view", "ViewPass1")
+    assert auth_client.get(f"/api/objects/{obj['uuid']}/revise-preview").status_code == 403
+
+
+@requires_git
+def test_revise_preview_refuses_when_the_next_revision_already_exists(auth_client, auth_ctx):
+    from sqlalchemy import select
+
+    from creopdm.models.object import EngineeringObject
+    from creopdm.models.version import ObjectVersion
+
+    _setup_admin_and_users(auth_client, auth_ctx)
+    _login(auth_client, "admin", "AdminPass1")
+    product, obj = _make_product_with_file(auth_client)
+    assert _promote(auth_client, product, "RELEASED").status_code == 200
+    assert _promote(auth_client, product, "UNDER_CHANGE").status_code == 200
+
+    with auth_ctx.session_factory() as db:
+        row = db.scalar(select(EngineeringObject).where(EngineeringObject.uuid == obj["uuid"]))
+        src = row.current_version
+        db.add(
+            ObjectVersion(
+                uuid="ver-existing-b",
+                object_id=row.id,
+                revision="B",
+                iteration=1,
+                content_hash=src.content_hash,
+                created_by="test",
+                comment="pre-existing B",
+            )
+        )
+        db.commit()
+
+    data = auth_client.get(f"/api/objects/{obj['uuid']}/revise-preview").json()
+    assert (data["allowed"], data["code"]) == (False, "REVISE_NEXT_REVISION_EXISTS")
+    assert data["new_revision"] == ""
