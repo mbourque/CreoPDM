@@ -740,6 +740,9 @@ def _event_summary(
         released = details.get("objects_released")
         if isinstance(released, int) and released > 0:
             parts.append(f"{released} file{'s' if released != 1 else ''} released")
+        reopened = details.get("objects_reopened")
+        if isinstance(reopened, int) and reopened > 0:
+            parts.append(f"{reopened} file{'s' if reopened != 1 else ''} set back to In Work")
     if action in {ActivityAction.PRODUCT_UPDATED.value, "PRODUCT_UPDATED"}:
         old_name = details.get("old_name")
         new_name = details.get("name")

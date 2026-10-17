@@ -701,3 +701,71 @@ def test_operation_id_is_unique_in_the_database(auth_client, auth_ctx):
         )
         with pytest.raises(IntegrityError):
             db.commit()
+
+
+# ---- Promote back from Released --------------------------------------------------------
+
+
+def _promote_with(auth_client, product, state, **extra):
+    data = {"product_id": product["uuid"], "state": state, "confirm_password": "AdminPass1"}
+    data.update(extra)
+    return auth_client.post("/admin/products/promote", data=data)
+
+
+@requires_git
+def test_promote_back_keeps_files_released_unless_asked_to_undo_the_release(
+    auth_client, auth_ctx
+):
+    _setup_admin_and_users(auth_client, auth_ctx)
+    _login(auth_client, "admin", "AdminPass1")
+    product, obj = _make_product_with_file(auth_client)
+
+    assert _promote(auth_client, product, "RELEASED").status_code == 200
+    assert auth_client.get(f"/api/objects/{obj['uuid']}").json()["lifecycle_state"] == "RELEASED"
+
+    # Back to In Work without the choice: the file stays Released (needs Revise to edit).
+    assert _promote_with(auth_client, product, "IN_WORK").status_code == 200
+    kept = auth_client.get(f"/api/objects/{obj['uuid']}").json()
+    assert kept["lifecycle_state"] == "RELEASED" and kept["can_checkout"] is False
+    assert auth_client.get(f"/api/objects/{obj['uuid']}/revise-eligibility").json()["allowed"] is True
+
+    # The choice is ignored for transitions it does not apply to (Released -> Under Change).
+    assert _promote(auth_client, product, "RELEASED").status_code == 200
+    assert _promote_with(auth_client, product, "UNDER_CHANGE", reopen_files="1").status_code == 200
+    assert auth_client.get(f"/api/objects/{obj['uuid']}").json()["lifecycle_state"] == "RELEASED"
+
+    # Released -> In Work WITH the choice undoes the release.
+    assert _promote(auth_client, product, "RELEASED").status_code == 200
+    assert _promote_with(auth_client, product, "IN_WORK", reopen_files="1").status_code == 200
+    reopened = auth_client.get(f"/api/objects/{obj['uuid']}").json()
+    assert reopened["lifecycle_state"] == "IN_WORK" and reopened["can_checkout"] is True
+    _oid, versions = _versions(auth_ctx, obj["uuid"])
+    assert versions[-1]["lifecycle"] == "IN_WORK"
+    with auth_ctx.session_factory() as db:
+        events = auth_ctx.activities.list_events(db, q="Gearbox")
+        assert any("set back to In Work" in (e.summary or "") for e in events)
+
+
+@requires_git
+def test_reopen_leaves_earlier_released_revisions_released(auth_client, auth_ctx):
+    product, obj = _released_under_change(auth_client, auth_ctx)
+    assert (
+        auth_client.post(f"/api/objects/{obj['uuid']}/revise", json={"reason": "r"}).status_code
+        == 200
+    )
+    # B.1 is In Work; release again (B.1 becomes Released), then undo that release.
+    assert _promote(auth_client, product, "RELEASED").status_code == 200
+    assert _promote_with(auth_client, product, "IN_WORK", reopen_files="1").status_code == 200
+    _oid, versions = _versions(auth_ctx, obj["uuid"])
+    assert [(v["revision"], v["lifecycle"]) for v in versions] == [("A", "RELEASED"), ("B", "IN_WORK")]
+
+
+def test_promote_page_offers_the_undo_release_choice():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2] / "src" / "creopdm"
+    page = (root / "templates" / "admin_products_promote.html").read_text(encoding="utf-8")
+    assert 'id="promote-reopen"' in page and 'name="reopen_files"' in page
+    assert "undo the release" in page
+    js = (root / "static" / "js" / "admin.js").read_text(encoding="utf-8")
+    assert "syncReopenChoice" in js and '"RELEASED" && (stateSel.value === "IN_WORK"' in js

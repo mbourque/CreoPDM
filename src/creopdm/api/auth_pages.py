@@ -2374,6 +2374,7 @@ def admin_products_promote(
     product_id: str = Form(""),
     state: str = Form(""),
     confirm_password: str = Form(""),
+    reopen_files: str = Form(""),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
@@ -2418,6 +2419,7 @@ def admin_products_promote(
             number=product.number,
             description=product.description,
             state=parsed,
+            reopen_released_files=str(reopen_files or "").strip().lower() in {"1", "on", "true", "yes"},
         )
         db.commit()
         return _promote_products_response(

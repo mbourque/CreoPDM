@@ -464,8 +464,14 @@ class ProductService:
         description: str | None = None,
         *,
         state: str | None = None,
+        reopen_released_files: bool = False,
     ) -> Product:
-        """Update name/number/description/state. Never changes vault_folder."""
+        """Update name/number/description/state. Never changes vault_folder.
+
+        ``reopen_released_files`` (Promote Products, Released -> In Work / Pre-Work only) also sets
+        the product's Released files back to In Work, i.e. undoes a release. Without it they stay
+        Released and change only through Revise.
+        """
         product = self.get_product(session, product_uuid)
         new_name = name.strip()
         if not new_name:
@@ -486,6 +492,12 @@ class ProductService:
         old_name = product.name
         state_changed = new_state is not None and new_state != old_state
         releasing = state_changed and new_state == ProductState.RELEASED.value
+        reopening = bool(
+            reopen_released_files
+            and state_changed
+            and old_state == ProductState.RELEASED.value
+            and new_state in {ProductState.IN_WORK.value, ProductState.PRE_WORK.value}
+        )
         if releasing:
             # Releasing freezes every file: do not silently pull a checkout out from under someone.
             self._require_no_active_checkouts(session, product)
@@ -545,6 +557,7 @@ class ProductService:
                     )
                     if state_changed:
                         released = self._release_objects(session, product) if releasing else 0
+                        reopened = self._reopen_objects(session, product) if reopening else 0
                         self._activities.record(
                             session,
                             ActivityAction.STATE_CHANGED,
@@ -554,6 +567,7 @@ class ProductService:
                                 "old_state": old_state,
                                 "new_state": product.state,
                                 **({"objects_released": released} if releasing else {}),
+                                **({"objects_reopened": reopened} if reopening else {}),
                             },
                         )
                 except Exception as exc:
@@ -573,6 +587,7 @@ class ProductService:
             product.updated_at = datetime.now(timezone.utc)
             session.flush()
             released = self._release_objects(session, product) if releasing else 0
+            reopened = self._reopen_objects(session, product) if reopening else 0
             self._activities.record(
                 session,
                 ActivityAction.STATE_CHANGED,
@@ -582,6 +597,7 @@ class ProductService:
                     "old_state": old_state,
                     "new_state": product.state,
                     **({"objects_released": released} if releasing else {}),
+                    **({"objects_reopened": reopened} if reopening else {}),
                 },
             )
 
@@ -634,6 +650,33 @@ class ProductService:
                 EngineeringObject.lifecycle_state == LifecycleState.IN_WORK.value,
             )
             .values(lifecycle_state=LifecycleState.RELEASED.value)
+        )
+        session.flush()
+        return int(result.rowcount or 0)
+
+    def _reopen_objects(self, session: Session, product: Product) -> int:
+        """Undo a release: the product's Released files go back to In Work.
+
+        Only each file's current version changes; earlier Released revisions (A.x after a Revise)
+        keep their own Released state.
+        """
+        released = select(EngineeringObject.current_version_id).where(
+            EngineeringObject.product_id == product.id,
+            EngineeringObject.lifecycle_state == LifecycleState.RELEASED.value,
+            EngineeringObject.current_version_id.is_not(None),
+        )
+        session.execute(
+            update(ObjectVersion)
+            .where(ObjectVersion.id.in_(released))
+            .values(lifecycle_state=LifecycleState.IN_WORK.value)
+        )
+        result = session.execute(
+            update(EngineeringObject)
+            .where(
+                EngineeringObject.product_id == product.id,
+                EngineeringObject.lifecycle_state == LifecycleState.RELEASED.value,
+            )
+            .values(lifecycle_state=LifecycleState.IN_WORK.value)
         )
         session.flush()
         return int(result.rowcount or 0)

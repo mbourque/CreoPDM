@@ -923,10 +923,24 @@ window.__creopdmModules.admin = {
         }
       }
       const confirm = shell.confirmByProductName;
+      // Undo a release: only Released -> In Work / Pre-Work offers 'set Released files back'.
+      const syncReopenChoice = () => {
+        const from = productSel.selectedOptions?.[0]?.dataset?.state || "";
+        const wrap = $("#promote-reopen-wrap");
+        const hint = $("#promote-reopen-hint");
+        const box = $("#promote-reopen");
+        const show = from === "RELEASED" && (stateSel.value === "IN_WORK" || stateSel.value === "PRE_WORK");
+        if (wrap) wrap.hidden = !show;
+        if (hint) hint.hidden = !show;
+        if (!show && box) box.checked = false;
+      };
       onPage(productSel, "change", () => {
         const key = productSel.selectedOptions?.[0]?.dataset?.state || "";
         if (key && [...stateSel.options].some((opt) => opt.value === key)) stateSel.value = key;
+        syncReopenChoice();
       });
+      onPage(stateSel, "change", syncReopenChoice);
+      syncReopenChoice();
       onPage(form, "submit", async (event) => {
         if (form.dataset.promoteReady === "1") {
           form.dataset.promoteReady = "";
@@ -950,7 +964,9 @@ window.__creopdmModules.admin = {
         const confirmed = await confirm({
           title: "Change lifecycle state",
           lead: `${name} will change from ${fromLabel} to ${toLabel}.`,
-          note: "Role permissions still apply on top (state ∩ role).",
+          note: $("#promote-reopen")?.checked
+            ? "Its Released files will be set back to In Work. Role permissions still apply on top (state ∩ role)."
+            : "Role permissions still apply on top (state ∩ role).",
           submitLabel: "Change state",
           detailsHtml: (pack.effects || {})[`${fromKey}|${next}`] || "",
         });
