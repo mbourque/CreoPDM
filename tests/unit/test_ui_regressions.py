@@ -3041,3 +3041,21 @@ def test_membership_pages_are_labelled_product_membership():
         assert "Back to Membership" not in text, name
     hub = (templates / "admin_products_hub.html").read_text(encoding="utf-8")
     assert '<h2><a href="/admin/membership">Product Membership</a></h2>' in hub
+
+
+def test_collect_all_and_rebuild_refuse_when_agent_or_toolkit_is_down():
+    """Rebuild used to discard metadata, then 'finish' in seconds with every model skipped."""
+    meta = METADATA_JS.read_text(encoding="utf-8")
+    run = meta.split("async function runCollectAllMetadata", 1)[1]
+    # Preflight happens before the confirm dialog and before clear-creo-metadata.
+    assert "collectPreflightMessage()" in run
+    assert run.index("collectPreflightMessage()") < run.index("confirmCollectMetadata(")
+    assert run.index("collectPreflightMessage()") < run.index("clear-creo-metadata")
+    resume = meta.split("async function resumeMetadataCollectIfNeeded", 1)[1]
+    assert "collectPreflightMessage()" in resume
+    assert "The CreoPDM agent is not running on this PC" in meta
+    assert "Nothing was changed." in meta
+    # The probe ignores the cached 60 s "ok".
+    ws = CREO_WORKSPACE_JS.read_text(encoding="utf-8")
+    assert "options.force) _toolkitHealthOkUntil = 0" in ws
+    assert "ensureToolkitAgentReady" in APP_JS.read_text(encoding="utf-8")

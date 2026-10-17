@@ -4557,6 +4557,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return (await withCreoWorkspace()).gatherCreoMetadataForFilename(filename, filePath, options);
   }
 
+  /** Fresh agent + Toolkit health probe; `{ok:false, __error, __detail}` when either is down. */
+  async function ensureToolkitAgentReady() {
+    return (await withCreoWorkspace()).ensureToolkitAgentHealthy({ force: true });
+  }
+
   function aiSnapshotIdentityFromGather(raw) {
     if (!raw || typeof raw !== "object") return null;
     const out = { ...raw };
@@ -7957,6 +7962,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     pageSignal,
     publishBusyMessage,
     gatherCreoMetadataForFilename,
+    ensureToolkitAgentReady,
     aiSnapshotBodyFromGather,
     aiFeaturesEnabled,
     canGatherCreoMetadata,

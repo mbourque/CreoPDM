@@ -35,6 +35,7 @@ window.__creopdmModules.metadata = {
     const attachCollectLocalPaths = shell.attachCollectLocalPaths;
     const materializeCheckedOutToAgentCache = shell.materializeCheckedOutToAgentCache;
     const gatherCreoMetadataForFilename = shell.gatherCreoMetadataForFilename;
+    const ensureToolkitAgentReady = shell.ensureToolkitAgentReady;
     const postAiSnapshotFromGather = shell.postAiSnapshotFromGather;
     const reconcileProductLifecycleChrome = shell.reconcileProductLifecycleChrome;
     const metadataCollectJob = shell.metadataCollectJob;
@@ -820,6 +821,29 @@ window.__creopdmModules.metadata = {
       }
     }
 
+    /**
+     * Collect needs the CreoPDM agent (workspace files) and the Toolkit behind it. Without them
+     * every model "skips" in seconds — and Rebuild would already have discarded the metadata.
+     * Returns "" when ready, otherwise the message to show (nothing has been changed yet).
+     */
+    async function collectPreflightMessage() {
+      if (typeof ensureToolkitAgentReady !== "function") return "";
+      const health = await ensureToolkitAgentReady();
+      if (health && health.ok) return "";
+      if (health && health.__error === "toolkit_agent_offline") {
+        return (
+          "The CreoPDM agent is not running on this PC, so metadata cannot be collected. " +
+          "Start the CreoPDM agent (tray icon) and try again. Nothing was changed."
+        );
+      }
+      const detail = String(health?.__detail || "").trim();
+      return (
+        "The Creo Toolkit is not answering through the agent, so metadata cannot be collected" +
+        (detail ? ` (${detail})` : "") +
+        ". Start Creo with the Toolkit Companion loaded and try again. Nothing was changed."
+      );
+    }
+
     async function runCollectAllMetadata(productId, options = {}) {
       const rebuild = Boolean(options && options.rebuild);
       if (metadataCollectJob.running) {
@@ -836,6 +860,12 @@ window.__creopdmModules.metadata = {
           $("#toolbar-error"),
           "Collect metadata needs Creo’s embedded browser with Creo.JS available."
         );
+        return;
+      }
+      const notReady = await collectPreflightMessage();
+      if (notReady) {
+        showOk("");
+        showError($("#toolbar-error"), notReady);
         return;
       }
       showOk("");
@@ -968,6 +998,13 @@ window.__creopdmModules.metadata = {
               ? "Creo.JS still unavailable — open CreoPDM inside Creo, then click Resume."
               : "Click Resume when Creo.JS is connected, or re-open CreoPDM inside Creo.")
         );
+        syncMetadataCollectControls();
+        return;
+      }
+      const notReady = await collectPreflightMessage();
+      if (notReady) {
+        showOk(`Metadata collection paused at ${state.index || 0} of ${state.targets.length}.`);
+        showError($("#toolbar-error"), notReady.replace(" Nothing was changed.", ""));
         syncMetadataCollectControls();
         return;
       }

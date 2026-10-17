@@ -161,7 +161,9 @@ window.__creopdmModules.creo_workspace = {
     // Toolkit /health once per ~60s — Collect all was paying this every tip.
     let _toolkitHealthOkUntil = 0;
 
-    async function ensureToolkitAgentHealthy() {
+    async function ensureToolkitAgentHealthy(options) {
+      // force: Collect all / Rebuild must not trust a cached "ok" (the agent may have stopped).
+      if (options && options.force) _toolkitHealthOkUntil = 0;
       if (Date.now() < _toolkitHealthOkUntil) return { ok: true };
       const agentOnline = await probeCreoAgent();
       if (!agentOnline) {
@@ -722,6 +724,7 @@ window.__creopdmModules.creo_workspace = {
     mod.attachCollectLocalPaths = attachCollectLocalPaths;
     mod.prepareLocalPathForMetadata = prepareLocalPathForMetadata;
     mod.gatherCreoMetadataForFilename = gatherCreoMetadataForFilename;
+    mod.ensureToolkitAgentHealthy = ensureToolkitAgentHealthy;
     mod.pushCreoMetadataForItems = pushCreoMetadataForItems;
     mod.captureCreoMetadataAfterOpen = captureCreoMetadataAfterOpen;
     mod.rematerializeCheckedInLocalTips = rematerializeCheckedInLocalTips;
