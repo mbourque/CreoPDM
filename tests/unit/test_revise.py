@@ -203,6 +203,9 @@ def test_revise_ui_is_wired_through_the_shared_menu_and_details():
     assert "/revise-eligibility" in app
     files = (root / "templates" / "app.html").read_text(encoding="utf-8")
     assert "product_ui.show_revise and obj.can_revise" in files
+    assert 'data-show-revise="{{ ' in files and "product_ui.show_revise else" in files
+    # Search / soft-refresh rows are built in JS and must carry the same flag.
+    assert 'data-can-revise="${' in app and "dataset.showRevise" in app
     detail = (root / "templates" / "object_detail.html").read_text(encoding="utf-8")
     assert "product_ui.show_revise and object.can_revise" in detail
     assert 'id="revise-btn"' in detail

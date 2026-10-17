@@ -2361,6 +2361,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               data-relative-path="${escapeHtml(relative)}"
               data-can-checkout="${obj.can_checkout ? "1" : "0"}"
               data-can-checkin="${obj.can_checkin ? "1" : "0"}"
+              data-can-revise="${
+                document.querySelector("#metric-filters")?.dataset.showRevise === "1" && obj.can_revise
+                  ? "1"
+                  : "0"
+              }"
               data-owned="${obj.owned_by_me ? "1" : "0"}"
               data-checked-out="${obj.owned_by_me || obj.checkout_user ? "1" : "0"}"
               data-modified-locally="${modifiedLocally ? "1" : "0"}"
