@@ -196,3 +196,40 @@ def test_a_complete_sketch_has_no_partial_note_and_regenerated_only_when_true():
     view = sketch_overview(SKETCH)
     assert view["partial"] == ""
     assert view["regenerated"] is False  # null / absent is not "regenerated"
+
+
+def test_notes_are_informational_only_and_never_a_partial_data_warning():
+    """Companion 0.6.1: notes explain how data was read; partial_missing means a real gap."""
+    notes_only = dict(
+        SKETCH,
+        notes=["Creo 13: entity geometry rebuilt from sampled points; types are inferred."],
+    )
+    view = sketch_overview(notes_only)
+    assert view["partial"] == ""  # no banner
+    assert view["notes"] == ["Creo 13: entity geometry rebuilt from sampled points; types are inferred."]
+
+    empty_partial = dict(SKETCH, partial_missing=[])
+    assert sketch_overview(empty_partial)["partial"] == ""
+
+    real_gap = dict(SKETCH, partial_missing=["constraints (ProSectionConstraintIdsGet=-2)"], notes=["x"])
+    gap_view = sketch_overview(real_gap)
+    assert gap_view["partial"] == "constraints (ProSectionConstraintIdsGet=-2)"
+    assert "x" not in gap_view["partial"]  # notes never leak into the warning text
+
+    messy = dict(SKETCH, notes=["  keep me  ", "", None, 3, "also"])
+    assert sketch_overview(messy)["notes"] == ["keep me", "3", "also"]
+    assert sketch_overview(dict(SKETCH, notes="not a list"))["notes"] == []
+    assert sketch_overview(SKETCH)["notes"] == []
+
+
+def test_the_toolkit_snapshot_keeps_notes_and_partial_missing_apart():
+    payload = {
+        "ok": True,
+        "domains": {
+            "identity": {"ok": True, "identity": {"file_name": "test-sec.sec", "model_type": "SECTION"}},
+            "sketch": dict(SKETCH, notes=["rebuilt from sampled points"]),
+        },
+    }
+    snap = map_toolkit_collect_to_snapshot(payload, fallback_filename="test-sec.sec")
+    assert snap["sketch"]["notes"] == ["rebuilt from sampled points"]
+    assert "partial_missing" not in snap["sketch"]

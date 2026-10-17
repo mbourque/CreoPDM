@@ -276,6 +276,15 @@
     {% if sketch_view.regenerated %}
     <p class="muted small" id="sketch-regenerated-note">The Toolkit regenerated this sketch in Creo to read it.</p>
     {% endif %}
+    {% if sketch_view.notes %}
+    {# Informational (not a warning): how the Toolkit obtained the data. #}
+    <details class="muted small" id="sketch-notes">
+      <summary>How this was read</summary>
+      <ul>
+        {% for note in sketch_view.notes %}<li>{{ note }}</li>{% endfor %}
+      </ul>
+    </details>
+    {% endif %}
     <h3>Entities</h3>
     {% if sketch_view.entity_counts %}
     <div class="table-wrap">

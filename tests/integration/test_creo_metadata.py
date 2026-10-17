@@ -954,3 +954,35 @@ def test_partial_sketch_shows_data_and_names_what_is_missing(client, repo_parent
     assert "4 line, 2 arc" in text  # what was readable is still shown
     # Unknown (null) counts read "—", not 0.
     assert '<tr id="overview-sketch-dimensions"><td>Dimensions</td><td>—</td></tr>' in text
+
+
+@requires_git
+def test_sketch_notes_show_no_partial_banner_but_a_real_gap_does(client, repo_parent, tmp_path):
+    product = _create_product(client, repo_parent)
+    noted = _add_part(client, product["uuid"], tmp_path, "noted-sec.sec")
+    gap = _add_part(client, product["uuid"], tmp_path, "gap-sec.sec")
+    identity = {"model_type": "SECTION"}
+    notes_sketch = dict(_SKETCH_PAYLOAD, notes=["Creo 13: entity geometry rebuilt from sampled points."])
+    gap_sketch = dict(
+        _SKETCH_PAYLOAD,
+        partial_missing=["constraints (ProSectionConstraintIdsGet=-2)"],
+        notes=["informational note"],
+    )
+    for obj, sketch in ((noted, notes_sketch), (gap, gap_sketch)):
+        posted = client.post(
+            f"/api/objects/{obj['uuid']}/creo-metadata",
+            json={"identity": dict(identity, file_name=obj["filename"]), "sketch": sketch},
+        )
+        assert posted.status_code == 200, posted.text
+
+    noted_page = client.get(f"/products/{product['uuid']}/objects/{noted['uuid']}").text
+    assert 'id="sketch-notes"' in noted_page  # collapsed "How this was read"
+    assert "How this was read" in noted_page
+    assert 'id="sketch-partial-note"' not in noted_page  # notes are not a warning
+    assert 'id="overview-sketch-partial"' not in noted_page
+
+    gap_page = client.get(f"/products/{product['uuid']}/objects/{gap['uuid']}").text
+    assert 'id="sketch-partial-note"' in gap_page
+    assert 'id="overview-sketch-partial"' in gap_page
+    assert "ProSectionConstraintIdsGet=-2" in gap_page
+    assert "informational note" in gap_page  # still available under "How this was read"
