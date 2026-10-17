@@ -37,7 +37,6 @@ from creopdm.utils.classify import (
     resolve_type_icon,
     type_icon_client_payload,
 )
-from creopdm.client_stamp import CLIENT_JS_STAMP
 from creopdm.utils.creo_model_class import creo_subtype_display, model_type_display
 from creopdm.utils.sketch_metadata import sketch_error, sketch_overview
 from creopdm.utils.files import format_byte_size
@@ -61,8 +60,6 @@ _template_env.globals["byte_size"] = format_byte_size
 _template_env.globals["bom_qty"] = format_bom_qty
 _template_env.globals["type_icon"] = resolve_type_icon
 _template_env.globals["type_label"] = display_type_label
-# Deploy stamp on /client/app.js?v=… so soft-nav swaps in the new script after a deploy.
-_template_env.globals["client_js_stamp"] = CLIENT_JS_STAMP
 templates = Jinja2Templates(env=_template_env)
 router = APIRouter()
 

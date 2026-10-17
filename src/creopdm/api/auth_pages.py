@@ -31,7 +31,6 @@ from creopdm.constants import (
     APP_VERSION,
     ActivityAction,
 )
-from creopdm.client_stamp import CLIENT_JS_STAMP
 from creopdm.context import AppContext
 from creopdm.exceptions import CreoPDMError
 from creopdm.models.user import User
@@ -60,8 +59,6 @@ _template_env.filters["local_time"] = format_local
 _template_env.filters["local_time_pretty"] = format_local_pretty
 _template_env.globals["local_time"] = format_local
 _template_env.globals["local_time_pretty"] = format_local_pretty
-# Deploy stamp on /client/app.js?v=… (base.html) — same value as the Files pages.
-_template_env.globals["client_js_stamp"] = CLIENT_JS_STAMP
 templates = Jinja2Templates(env=_template_env)
 router = APIRouter()
 
