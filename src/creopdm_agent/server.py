@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import tempfile
+import time
 import uuid
 import zipfile
 from pathlib import Path
@@ -35,6 +36,103 @@ _AGENT_PUBLIC_PATHS = frozenset({"/health", "/docs", "/openapi.json", "/redoc"})
 # Large Add folders…: one ZIP_STORED upload to from-zip instead of 5-file multipart
 # chunks (keep in sync with ADD_PATHS_ZIP_MIN in static/js/add.js).
 ADD_PATHS_ZIP_MIN_FILES = 50
+
+
+def _format_megabytes(value: int) -> str:
+    return f"{max(0, int(value)) / 1_000_000:,.0f} MB"
+
+
+class _PackingProgress:
+    """"Packing N of M" while the agent zips picked files before the upload starts.
+
+    Writes a throttled line to the agent log and, when the page started a zip-import
+    job, posts the same count to CreoPDM so the busy overlay moves off its initial
+    "Starting compressed import…" text. Progress is best-effort: a failed post never
+    stops the Add.
+    """
+
+    def __init__(
+        self,
+        *,
+        total: int,
+        report_url: str = "",
+        headers: dict[str, str] | None = None,
+        report_interval: float = 1.0,
+        log_every_files: int = 100,
+        log_every_seconds: float = 10.0,
+        clock=time.monotonic,
+        post=None,
+    ) -> None:
+        self.total = max(0, int(total))
+        self._report_url = report_url
+        self._headers = dict(headers or {})
+        self._report_interval = report_interval
+        self._log_every_files = max(1, int(log_every_files))
+        self._log_every_seconds = log_every_seconds
+        self._clock = clock
+        self._post = post
+        self._client: httpx.Client | None = None
+        self._last_report: float | None = None
+        self._last_log = clock()
+        self._last_logged_done = 0
+        self._warned = False
+
+    def _send(self, done: int, bytes_done: int) -> None:
+        if not self._report_url:
+            return
+        body = {"files_done": done, "files_total": self.total, "bytes_done": bytes_done}
+        try:
+            if self._post is not None:
+                self._post(self._report_url, body, self._headers)
+                return
+            if self._client is None:
+                self._client = httpx.Client(timeout=3.0, follow_redirects=True)
+            self._client.post(self._report_url, headers=self._headers, json=body)
+        except Exception as exc:  # progress is optional
+            if not self._warned:
+                self._warned = True
+                logger.warning("Agent add-paths packing progress not reported: %s", exc)
+
+    def start(self) -> None:
+        """Move the overlay off "Starting compressed import…" before the first file is read."""
+        self._last_report = self._clock()
+        self._send(0, 0)
+        logger.info("Agent add-paths zip: starting to pack %s file(s)", self.total)
+
+    def tick(self, done: int, bytes_done: int) -> None:
+        now = self._clock()
+        if self._last_report is None or now - self._last_report >= self._report_interval:
+            self._last_report = now
+            self._send(done, bytes_done)
+        if (
+            done - self._last_logged_done >= self._log_every_files
+            or now - self._last_log >= self._log_every_seconds
+        ):
+            self._last_log = now
+            self._last_logged_done = done
+            logger.info(
+                "Agent add-paths zip: packed %s of %s files (%s)",
+                done,
+                self.total,
+                _format_megabytes(bytes_done),
+            )
+
+    def finish(self, done: int, bytes_done: int) -> None:
+        self._send(done, bytes_done)
+        logger.info(
+            "Agent add-paths zip: packed %s of %s files (%s) — packing done",
+            done,
+            self.total,
+            _format_megabytes(bytes_done),
+        )
+
+    def close(self) -> None:
+        if self._client is not None:
+            try:
+                self._client.close()
+            except Exception:
+                pass
+            self._client = None
 
 
 def _origin_from_url(url: str) -> str:
@@ -2078,13 +2176,34 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                 os.close(fd)
                 zip_tmp = Path(raw_name)
                 packed = 0
-                with zipfile.ZipFile(zip_tmp, "w", compression=zipfile.ZIP_STORED) as zf:
-                    for path, rel in jobs:
-                        arc = str(rel or path.name).replace("\\", "/").lstrip("/")
-                        if not arc:
-                            continue
-                        zf.write(path, arcname=arc)
-                        packed += 1
+                bytes_packed = 0
+                progress = _PackingProgress(
+                    total=len(jobs),
+                    report_url=(
+                        f"{base}/api/products/{quote(product_id)}"
+                        f"/zip-import/jobs/{quote(job_id)}/progress"
+                        if job_id
+                        else ""
+                    ),
+                    headers=headers,
+                )
+                progress.start()
+                try:
+                    with zipfile.ZipFile(zip_tmp, "w", compression=zipfile.ZIP_STORED) as zf:
+                        for path, rel in jobs:
+                            arc = str(rel or path.name).replace("\\", "/").lstrip("/")
+                            if not arc:
+                                continue
+                            zf.write(path, arcname=arc)
+                            packed += 1
+                            try:
+                                bytes_packed += path.stat().st_size
+                            except OSError:
+                                pass
+                            progress.tick(packed, bytes_packed)
+                    progress.finish(packed, bytes_packed)
+                finally:
+                    progress.close()
                 if packed <= 0:
                     logger.warning("Agent add-paths zip: nothing packed (%s jobs)", len(jobs))
                 else:

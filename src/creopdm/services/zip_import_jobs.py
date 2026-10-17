@@ -8,8 +8,11 @@ import uuid
 from dataclasses import dataclass, field
 
 
-# uploading | extracting | importing | committing | recording | done | error
-_ACTIVE = frozenset({"queued", "uploading", "extracting", "importing", "committing", "recording"})
+# packing | uploading | extracting | importing | committing | recording | done | error
+# (packing: creopdm-agent zips the picked files on the Creo PC before the upload starts.)
+_ACTIVE = frozenset(
+    {"queued", "packing", "uploading", "extracting", "importing", "committing", "recording"}
+)
 
 
 def _format_bytes(value: int) -> str:
@@ -123,6 +126,26 @@ class ZipImportJobs:
                 current.error = error
             if current.state in {"done", "error"} and current.finished_at is None:
                 current.finished_at = time.time()
+
+    def set_packing(self, job_id: str, *, files_done: int, files_total: int, bytes_done: int = 0) -> None:
+        """Agent progress while it zips local files. Never overrides a later phase."""
+        with self._lock:
+            current = self._jobs.get(job_id)
+            if current is None or current.phase not in {"queued", "packing"}:
+                return
+        total = max(0, int(files_total))
+        done = max(0, min(int(files_done), total)) if total else max(0, int(files_done))
+        msg = f"Packing files on this PC… {done} of {total}" if total else "Packing files on this PC…"
+        if int(bytes_done) > 0:
+            msg = f"{msg} ({_format_bytes(int(bytes_done))})"
+        self.update(
+            job_id,
+            phase="packing",
+            state="packing",
+            message=msg,
+            files_done=done,
+            files_total=total,
+        )
 
     def set_uploading(self, job_id: str, *, bytes_done: int, bytes_total: int) -> None:
         total = max(0, int(bytes_total))

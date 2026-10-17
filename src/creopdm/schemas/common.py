@@ -1114,6 +1114,14 @@ class ClearCreoMetadataResponse(BaseModel):
     versions_cleared: int = 0
 
 
+class ZipImportProgressRequest(BaseModel):
+    """creopdm-agent packing progress (before the zip upload starts)."""
+
+    files_done: int = Field(default=0, ge=0)
+    files_total: int = Field(default=0, ge=0)
+    bytes_done: int = Field(default=0, ge=0)
+
+
 class ZipImportJobResponse(BaseModel):
     """Progress for Add ▾ → Compressed data… (zip upload / extract / import)."""
 

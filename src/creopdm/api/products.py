@@ -67,6 +67,7 @@ from creopdm.schemas.common import (
     ClearCreoMetadataResponse,
     WhereUsedIndexJobResponse,
     ZipImportJobResponse,
+    ZipImportProgressRequest,
     WorkspaceContentResponse,
     WorkspacePickerResponse,
     WorkspaceWatchResponse,
@@ -1389,6 +1390,37 @@ def zip_import_job_status(
     if status is None or status.product_id != product_id:
         raise ValidationAppError("Zip import job not found.")
     return _zip_import_job_response(status)
+
+
+@router.post(
+    "/api/products/{product_id}/zip-import/jobs/{job_id}/progress",
+    response_model=ZipImportJobResponse,
+)
+def zip_import_job_progress(
+    product_id: str,
+    job_id: str,
+    payload: ZipImportProgressRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> ZipImportJobResponse:
+    """creopdm-agent reports "Packing N of M" while it zips picked files on the Creo PC.
+
+    The zip upload has not started yet, so the job would otherwise sit on its initial
+    "Starting compressed import…" text for the whole packing time.
+    """
+    require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
+    load_accessible_product(request, ctx, db, product_id)
+    status = ctx.zip_imports.get(job_id)
+    if status is None or status.product_id != product_id:
+        raise ValidationAppError("Zip import job not found.")
+    ctx.zip_imports.set_packing(
+        job_id,
+        files_done=payload.files_done,
+        files_total=payload.files_total,
+        bytes_done=payload.bytes_done,
+    )
+    return _zip_import_job_response(ctx.zip_imports.get(job_id) or status)
 
 
 @router.post("/api/products/{product_id}/objects/from-zip", response_model=BatchOperationResponse)
