@@ -297,6 +297,8 @@ class ReviseRequest(BaseModel):
     """Only the reason comes from the client; the server chooses the source and the revision."""
 
     reason: str = ""
+    # Client-made id for one logical Revise. A retry with the same id returns the same B.1.
+    operation_id: str | None = Field(default=None, max_length=64)
 
 
 class ReviseResponse(BaseModel):
@@ -309,6 +311,8 @@ class ReviseResponse(BaseModel):
     source_display_version: str
     lifecycle_state: str
     reason: str
+    # True when this answer is the stored result of an earlier request with the same operation id.
+    replayed: bool = False
 
 
 class RevisePreviewResponse(BaseModel):

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-thumb-preview-revise">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-thumb-preview-revise-2">
   <script>
     /* Suppress PTC creojs.js noise outside Creo's browser (and when Creo injects its own copy). */
     (function () {
@@ -102,6 +102,10 @@
       <label>Revision Reason
         <textarea id="revise-reason" name="reason" rows="3" maxlength="500" required
                   placeholder="Why is a new revision needed? (for example: Bearing redesign)"></textarea>
+      </label>
+      <label class="choice" id="revise-checkout-wrap" hidden>
+        <input type="checkbox" id="revise-checkout">
+        <span id="revise-checkout-label">Check out the new revision after creating it</span>
       </label>
       <p class="muted small" id="revise-note"></p>
       <p class="error" id="revise-error" hidden></p>

@@ -89,6 +89,13 @@ class ReviseActiveCheckoutError(CreoPDMError):
     http_status = 409
 
 
+class ReviseOperationAlreadyCompletedError(CreoPDMError):
+    """An operation id was reused for a different file."""
+
+    code = "REVISE_OPERATION_ALREADY_COMPLETED"
+    http_status = 409
+
+
 class ReviseSourceNotFoundError(CreoPDMError):
     """The file has no current version to revise from."""
 

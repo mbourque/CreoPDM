@@ -4209,6 +4209,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     const reason = $("#revise-reason");
     if (reason) reason.value = "";
+    // Revise and Check Out: offered on Files, where Checkout runs on the selected row. It is a
+    // second step after the revision exists, so a failed checkout leaves the new revision valid.
+    const checkoutWrap = $("#revise-checkout-wrap");
+    const checkoutBox = $("#revise-checkout");
+    if (checkoutWrap) checkoutWrap.hidden = !isListPage;
+    if (checkoutBox) checkoutBox.checked = false;
+    set("#revise-checkout-label", `Check out ${body.new_display_version} after creating it`);
     showError($("#revise-error"), "");
   }
 
@@ -4242,6 +4249,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     fillReviseDialog(body);
     let created = null;
+    let checkoutAfter = false;
+    // One id per logical Revise: pressing Create again after a lost response returns the same
+    // new revision instead of failing or making another one.
+    const operationId =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `op-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     await new Promise((resolve) => {
       const form = $("#revise-form");
       const cancel = $("#revise-cancel");
@@ -4269,10 +4283,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           response = await fetch(`/api/objects/${encodeURIComponent(uuid)}/revise`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ reason }),
+            body: JSON.stringify({ reason, operation_id: operationId }),
           });
         } catch {
-          showError($("#revise-error"), "Could not reach the server. Nothing was created.");
+          showError(
+            $("#revise-error"),
+            "The server did not answer. Press Create again — it will not make a second revision."
+          );
           if (confirm) confirm.disabled = false;
           return;
         }
@@ -4282,6 +4299,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           return;
         }
         created = await response.json();
+        checkoutAfter = Boolean($("#revise-checkout")?.checked) && isListPage;
         finish();
       };
       const onCancel = () => finish();
@@ -4302,6 +4320,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         );
       } catch {
         /* storage blocked: the refreshed list still shows the new revision */
+      }
+      if (checkoutAfter) {
+        // Second step: reload Files on the file's folder and run the normal Checkout on it.
+        const productId = currentProductId();
+        const row = document.querySelector(`#object-table tr[data-uuid="${CSS.escape(uuid)}"]`);
+        const relative = String(row?.dataset.relativePath || "").replace(/\\/g, "/");
+        const folder = relative.includes("/") ? relative.slice(0, relative.lastIndexOf("/")) : "";
+        if (productId) {
+          const q = new URLSearchParams();
+          q.set("product", productId);
+          q.set("folder", folder);
+          q.set("select", uuid);
+          q.set("action", "checkout");
+          q.set("_nav", String(Date.now()));
+          await softNavigate(`/?${q.toString()}`, "replace");
+          return;
+        }
       }
       await reloadPage({ force: true, keepBusy: true, busyMessage: "Refreshing…" });
     }

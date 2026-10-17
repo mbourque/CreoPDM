@@ -22,6 +22,7 @@ from creopdm.exceptions import (
     ReviseInvalidLifecycleError,
     ReviseNextRevisionExistsError,
     ReviseNotAllowedError,
+    ReviseOperationAlreadyCompletedError,
     ReviseRevisionSchemeError,
     ReviseSourceNotFoundError,
     ValidationAppError,
@@ -31,6 +32,7 @@ from creopdm.models.ai_snapshot import ObjectVersionSnapshot
 from creopdm.models.checkout import Checkout
 from creopdm.models.object import EngineeringObject
 from creopdm.models.parameter import Parameter
+from creopdm.models.revise_operation import ReviseOperation
 from creopdm.models.version import ObjectVersion
 from creopdm.product_state import (
     product_allows_op,
@@ -212,6 +214,8 @@ class RevisedVersion:
     obj: EngineeringObject
     source: ObjectVersion
     version: ObjectVersion
+    # True when this is the stored result of an earlier request with the same operation id.
+    replayed: bool = False
 
 
 class ReviseService:
@@ -235,16 +239,30 @@ class ReviseService:
         self._activities = activities
         self._users = users
 
-    def revise(self, session: Session, object_uuid: str, reason: str | None) -> RevisedVersion:
+    def revise(
+        self,
+        session: Session,
+        object_uuid: str,
+        reason: str | None,
+        operation_id: str | None = None,
+    ) -> RevisedVersion:
         """All-or-nothing: either B.1 exists and is current, or A.x is untouched.
 
-        The server picks the revision. Nothing the client sends other than the reason matters.
+        The server picks the revision. The client sends only the reason and, for retry safety,
+        an operation id: the same id always returns the same B.1 and never allocates C.1.
         """
-        note = clean_reason(reason)
+        op_id = (operation_id or "").strip() or None
         obj = self._objects.get_object(session, object_uuid)
         product = obj.product
         if product is not None:
             session.refresh(product)
+        # A retry after a lost response: answer from the stored result before anything else
+        # (B.1 is In Work now, so the normal Released-only check would refuse it).
+        if op_id is not None:
+            replay = self._replay(session, obj, op_id)
+            if replay is not None:
+                return replay
+        note = clean_reason(reason)
         # Cheap refusal before taking the lock; the real check repeats inside it.
         early = preview_revise(session, obj, self._checkouts.active_for(session, obj.id))
         raise_for(early.eligibility)
@@ -261,6 +279,11 @@ class ReviseService:
             )
             session.refresh(obj)
             session.refresh(product)
+            # Same operation id from a concurrent request that finished while we waited.
+            if op_id is not None:
+                replay = self._replay(session, obj, op_id)
+                if replay is not None:
+                    return replay
             preview = preview_revise(session, obj, self._checkouts.active_for(session, obj.id))
             raise_for(preview.eligibility)
             source = obj.current_version
@@ -330,6 +353,18 @@ class ReviseService:
                 obj.current_version_id = version.id
                 obj.updated_at = now
                 session.flush()
+                if op_id is not None:
+                    session.add(
+                        ReviseOperation(
+                            operation_id=op_id,
+                            object_id=obj.id,
+                            source_version_id=source.id,
+                            new_version_id=version.id,
+                            user_name=user.user_name,
+                            status="COMPLETED",
+                        )
+                    )
+                    session.flush()
                 self._activities.record(
                     session,
                     ActivityAction.REVISION_CREATED,
@@ -354,6 +389,12 @@ class ReviseService:
                 )
             except IntegrityError as exc:
                 self._rollback_git(repo, checkpoint)
+                session.rollback()
+                if op_id is not None:
+                    # The same operation id won a race: hand back its result, not an error.
+                    replay = self._replay(session, obj, op_id)
+                    if replay is not None:
+                        return replay
                 raise ReviseNextRevisionExistsError(
                     f"{obj.filename} already has a revision {new_revision}.",
                     details={"revision": new_revision},
@@ -365,9 +406,42 @@ class ReviseService:
                     "The revision could not be saved, so nothing was changed.",
                     details={"file": obj.filename},
                 ) from exc
+            # Commit while still holding the product lock: the next waiter (a retry, or another
+            # user) must see B.1 and the operation row, not the pre-revise state.
+            try:
+                session.commit()
+            except Exception as exc:
+                session.rollback()
+                self._rollback_git(repo, checkpoint)
+                logger.exception("Revise commit failed for %s", obj.filename)
+                raise RepositoryError(
+                    "The revision could not be saved, so nothing was changed.",
+                    details={"file": obj.filename},
+                ) from exc
             logger.info("Revised %s %s -> %s", obj.filename, old_display, new_display)
             session.refresh(obj)
             return RevisedVersion(obj=obj, source=source, version=version)
+
+    def _replay(
+        self, session: Session, obj: EngineeringObject, op_id: str
+    ) -> RevisedVersion | None:
+        """The stored result of an earlier, completed request with this operation id."""
+        done = session.scalar(
+            select(ReviseOperation).where(ReviseOperation.operation_id == op_id)
+        )
+        if done is None:
+            return None
+        if done.object_id != obj.id:
+            raise ReviseOperationAlreadyCompletedError(
+                "That operation id was already used for a different file.",
+                details={"operation_id": op_id},
+            )
+        version = session.get(ObjectVersion, done.new_version_id)
+        source = session.get(ObjectVersion, done.source_version_id)
+        if version is None or source is None:
+            return None
+        logger.info("Revise replay for %s (operation %s)", obj.filename, op_id)
+        return RevisedVersion(obj=obj, source=source, version=version, replayed=True)
 
     def _rollback_git(self, repo, checkpoint: str | None) -> None:
         if not checkpoint:

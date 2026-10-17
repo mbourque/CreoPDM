@@ -506,21 +506,22 @@ def revise_object(
     require_product_access(request, ctx, obj.product)
     from creopdm.api.serializers import revision_display
 
-    result = ctx.revisions.revise(db, object_id, payload.reason)
+    result = ctx.revisions.revise(db, object_id, payload.reason, payload.operation_id)
     db.commit()
     db.refresh(result.obj)
-    from creopdm.api.watch_notify import notify_product_watchers
+    if not result.replayed:
+        from creopdm.api.watch_notify import notify_product_watchers
 
-    notify_product_watchers(
-        request,
-        ctx,
-        db,
-        result.obj.product,
-        action="Revision created",
-        filenames=[result.obj.filename],
-        object_uuid=result.obj.uuid,
-        comment=result.version.comment,
-    )
+        notify_product_watchers(
+            request,
+            ctx,
+            db,
+            result.obj.product,
+            action="Revision created",
+            filenames=[result.obj.filename],
+            object_uuid=result.obj.uuid,
+            comment=result.version.comment,
+        )
     return ReviseResponse(
         object_id=result.obj.uuid,
         source_version_id=result.source.uuid,
@@ -531,6 +532,7 @@ def revise_object(
         source_display_version=revision_display(result.source.revision, result.source.iteration),
         lifecycle_state=result.obj.lifecycle_state,
         reason=result.version.revision_reason or "",
+        replayed=result.replayed,
     )
 
 

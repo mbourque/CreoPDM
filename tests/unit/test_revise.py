@@ -219,7 +219,11 @@ def test_revise_ui_is_wired_through_the_shared_menu_and_details():
     base = (root / "templates" / "base.html").read_text(encoding="utf-8")
     assert 'id="revise-dialog"' in base and 'id="revise-confirm"' in base
     assert 'id="revise-reason"' in base and "Revision Reason" in base
-    assert "/revise`" in app and "JSON.stringify({ reason })" in app
+    # Revise and Check Out: opt-in checkbox, done as a second step through the Files deep link.
+    assert 'id="revise-checkout"' in base
+    assert 'q.set("action", "checkout")' in app and "checkoutAfter" in app
+    assert "operationId" in app and "crypto.randomUUID" in app
+    assert "/revise`" in app and "JSON.stringify({ reason, operation_id: operationId })" in app
     assert "Starting Iteration" in base and "New Lifecycle" in base
     files = (root / "templates" / "app.html").read_text(encoding="utf-8")
     assert "product_ui.show_revise and obj.can_revise" in files
@@ -482,6 +486,11 @@ def test_revise_creates_b1_and_keeps_a1_untouched(auth_client, auth_ctx):
     detail = auth_client.get(f"/products/{product['uuid']}/objects/{obj['uuid']}")
     assert detail.status_code == 200
     # B.2 is current now; Overview still shows where revision B came from and why.
+    # History is grouped by revision, newest first, with the Released version labelled.
+    text = detail.text
+    assert text.count('class="revision-group-row"') == 2
+    assert text.index("Revision B</th>") < text.index("Revision A</th>")
+    assert "A.1 · Released" in text
     assert 'id="overview-created-from"' in detail.text
     assert 'id="overview-revision-reason"' in detail.text
     assert "Bearing redesign" in detail.text
@@ -578,3 +587,117 @@ def test_failed_revise_leaves_everything_as_it_was(auth_client, auth_ctx, monkey
     # And the retry works afterwards.
     ok = auth_client.post(f"/api/objects/{obj['uuid']}/revise", json={"reason": "r"})
     assert ok.status_code == 200, ok.text
+
+
+# ---- Retry safety (operation id) --------------------------------------------------------
+
+
+@requires_git
+def test_revise_retry_with_same_operation_id_returns_the_original_b1(auth_client, auth_ctx):
+    _product, obj = _released_under_change(auth_client, auth_ctx)
+    op = "11111111-2222-3333-4444-555555555555"
+
+    first = auth_client.post(
+        f"/api/objects/{obj['uuid']}/revise",
+        json={"reason": "Bearing redesign", "operation_id": op},
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["display_version"] == "B.1" and first.json()["replayed"] is False
+
+    # The response was "lost": the client retries. It must get the same B.1, not C.1 or an error.
+    retry = auth_client.post(
+        f"/api/objects/{obj['uuid']}/revise",
+        json={"reason": "Bearing redesign", "operation_id": op},
+    )
+    assert retry.status_code == 200, retry.text
+    again = retry.json()
+    assert again["replayed"] is True
+    assert again["display_version"] == "B.1"
+    assert again["new_version_id"] == first.json()["new_version_id"]
+    assert again["source_version_id"] == first.json()["source_version_id"]
+
+    # Even a retry that lost its reason text gets the stored result.
+    blank = auth_client.post(
+        f"/api/objects/{obj['uuid']}/revise", json={"reason": "", "operation_id": op}
+    )
+    assert blank.status_code == 200 and blank.json()["new_version_id"] == again["new_version_id"]
+
+    # Nothing extra exists: still A.1 and B.1, one audit entry.
+    _oid, versions = _versions(auth_ctx, obj["uuid"])
+    assert [(v["revision"], v["iteration"]) for v in versions] == [("A", 1), ("B", 1)]
+    with auth_ctx.session_factory() as db:
+        events = auth_ctx.activities.list_events(db, q="shaft.prt")
+        assert len([e for e in events if e.action == "REVISION_CREATED"]) == 1
+
+    # A different operation id is a different request: nothing Released is left to revise.
+    other = auth_client.post(
+        f"/api/objects/{obj['uuid']}/revise",
+        json={"reason": "again", "operation_id": "99999999-0000-0000-0000-000000000000"},
+    )
+    assert other.status_code == 409, other.text
+    assert other.json()["error"]["code"] == "REVISE_INVALID_LIFECYCLE"
+
+
+@requires_git
+def test_revise_operation_id_cannot_be_reused_for_another_file(auth_client, auth_ctx):
+    product, obj = _make_two_file_product(auth_client, auth_ctx)
+    op = "aaaaaaaa-0000-0000-0000-000000000001"
+    ok = auth_client.post(
+        f"/api/objects/{obj['uuid']}/revise", json={"reason": "r", "operation_id": op}
+    )
+    assert ok.status_code == 200, ok.text
+    other_file = auth_client.get(f"/api/products/{product['uuid']}/objects").json()
+    other = next(o for o in other_file if o["uuid"] != obj["uuid"])
+    clash = auth_client.post(
+        f"/api/objects/{other['uuid']}/revise", json={"reason": "r", "operation_id": op}
+    )
+    assert clash.status_code == 409, clash.text
+    assert clash.json()["error"]["code"] == "REVISE_OPERATION_ALREADY_COMPLETED"
+    _oid, versions = _versions(auth_ctx, other["uuid"])
+    assert len(versions) == 1
+
+
+def _make_two_file_product(auth_client, auth_ctx):
+    _setup_admin_and_users(auth_client, auth_ctx)
+    _login(auth_client, "admin", "AdminPass1")
+    product, obj = _make_product_with_file(auth_client, "Pair", "one.prt")
+    added = auth_client.post(
+        f"/api/products/{product['uuid']}/objects",
+        files={"file": ("two.prt", b"two-bytes", "application/octet-stream")},
+        data={"comment": "second"},
+    )
+    assert added.status_code == 201, added.text
+    assert _promote(auth_client, product, "RELEASED").status_code == 200
+    assert _promote(auth_client, product, "UNDER_CHANGE").status_code == 200
+    return product, obj
+
+
+@requires_git
+def test_operation_id_is_unique_in_the_database(auth_client, auth_ctx):
+    from sqlalchemy import select
+    from sqlalchemy.exc import IntegrityError
+
+    from creopdm.models.object import EngineeringObject
+    from creopdm.models.revise_operation import ReviseOperation
+
+    _product, obj = _released_under_change(auth_client, auth_ctx)
+    op = "bbbbbbbb-0000-0000-0000-000000000002"
+    done = auth_client.post(
+        f"/api/objects/{obj['uuid']}/revise", json={"reason": "r", "operation_id": op}
+    )
+    assert done.status_code == 200, done.text
+    with auth_ctx.session_factory() as db:
+        row = db.scalar(select(EngineeringObject).where(EngineeringObject.uuid == obj["uuid"]))
+        existing = db.scalar(select(ReviseOperation).where(ReviseOperation.operation_id == op))
+        assert existing is not None and existing.status == "COMPLETED"
+        db.add(
+            ReviseOperation(
+                operation_id=op,
+                object_id=row.id,
+                source_version_id=existing.source_version_id,
+                new_version_id=existing.new_version_id,
+                user_name="x",
+            )
+        )
+        with pytest.raises(IntegrityError):
+            db.commit()
