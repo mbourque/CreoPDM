@@ -533,8 +533,12 @@ window.__creopdmModules.metadata = {
           relations: snapshot.relations && typeof snapshot.relations === "object"
             ? snapshot.relations
             : null,
+          // Creo 2D section (.sec): Toolkit sketch domain. Collect all / Rebuild use this
+          // body (not pushCreoMetadataForItems), so it must carry the sketch too.
+          sketch: snapshot.sketch && typeof snapshot.sketch === "object" ? snapshot.sketch : null,
         };
         if (!body.mass) delete body.mass;
+        if (!body.sketch) delete body.sketch;
         try {
           const response = await fetch(`/api/objects/${encodeURIComponent(target.uuid)}/creo-metadata`, {
             method: "POST",
@@ -605,6 +609,9 @@ window.__creopdmModules.metadata = {
       let captured = Number(state.captured) || 0;
       let failed = Number(state.failed) || 0;
       let expectedSkipped = Number(state.expectedSkipped) || 0;
+      // Tips whose local file is a newer unsaved save: never read onto the checked-in
+      // revision, and never counted as "saved" (was: a silent no-op that looked done).
+      let leftLocal = Number(state.leftLocal) || 0;
       let lastReason = "";
       let shouldRefreshList = false;
       const pendingErase = [];
@@ -615,6 +622,7 @@ window.__creopdmModules.metadata = {
         const bits = [`${captured} saved`];
         if (failed) bits.push(`${failed} skipped`);
         if (expectedSkipped) bits.push(`${expectedSkipped} harness`);
+        if (leftLocal) bits.push(`${leftLocal} with unsaved local changes`);
         if (lastReason) bits.push(`last: ${lastReason}`);
         return bits.join(", ");
       };
@@ -683,6 +691,7 @@ window.__creopdmModules.metadata = {
             captured,
             failed,
             expectedSkipped,
+            leftLocal,
             message,
             lastReason,
             updatedAt: Date.now(),
@@ -692,7 +701,11 @@ window.__creopdmModules.metadata = {
             featureNames: true,
             pendingErase,
           });
-          if (result.ok) {
+          if (result.ok && String(result.reason || "") === "left local modifications") {
+            // A newer local save (for example test-sec.sec.1) exists: Check In first.
+            leftLocal += 1;
+            lastReason = "unsaved local change — check in first";
+          } else if (result.ok) {
             captured += 1;
             // Keep mass/units/feature gap hints on success so we can watch Collect.
             lastReason = String(result.reason || "");
@@ -731,6 +744,7 @@ window.__creopdmModules.metadata = {
             captured,
             failed,
             expectedSkipped,
+            leftLocal,
             lastReason,
             message:
               `Collecting Creo metadata… ${index} of ${targets.length}` +
@@ -750,9 +764,14 @@ window.__creopdmModules.metadata = {
         const doneBits = [`${captured} saved`];
         if (failed) doneBits.push(`${failed} skipped`);
         if (expectedSkipped) doneBits.push(`${expectedSkipped} harness skipped`);
+        if (leftLocal) {
+          doneBits.push(
+            `${leftLocal} not collected: newer unsaved local save — Check In first`
+          );
+        }
         if (metadataCollectJob.cancel) {
           const msg =
-            `Metadata collection cancelled after ${captured + failed + expectedSkipped} of ${targets.length} ` +
+            `Metadata collection cancelled after ${captured + failed + expectedSkipped + leftLocal} of ${targets.length} ` +
             `(${doneBits.join(", ")}).`;
           showOk(msg);
           saveMetadataCollectState(null);
