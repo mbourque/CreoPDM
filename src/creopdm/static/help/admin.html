@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How to administrate CreoPDM — CreoPDM administrator help</title>
+  <style>
+    :root {
+      --ink: #16202c;
+      --ink-soft: #3a4a5c;
+      --muted: #5c6d7e;
+      --line: #c7d2dc;
+      --paper: #f4f7fa;
+      --panel: #ffffff;
+      --steel: #2f6f8f;
+      --steel-deep: #1f4f68;
+      --copper: #b4531e;
+      --ok: #1f6b4a;
+      --warn-bg: #fff6e8;
+      --warn-line: #e0b56a;
+      --shadow: 0 10px 28px rgba(22, 32, 44, 0.08);
+      --radius: 14px;
+      --nav-w: 15.5rem;
+      --max: 54rem;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-height: 100%;
+      color: var(--ink);
+      font-family: "Segoe UI", "Calibri", system-ui, sans-serif;
+      font-size: 1.05rem;
+      line-height: 1.55;
+      background:
+        radial-gradient(1200px 500px at 10% -10%, rgba(47, 111, 143, 0.16), transparent 55%),
+        radial-gradient(900px 420px at 90% 0%, rgba(180, 83, 30, 0.10), transparent 50%),
+        linear-gradient(180deg, #eef3f7 0%, var(--paper) 28%, #e9eef3 100%);
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.35;
+      background-image:
+        linear-gradient(rgba(22, 32, 44, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(22, 32, 44, 0.035) 1px, transparent 1px);
+      background-size: 28px 28px;
+      mask-image: linear-gradient(180deg, #000 0%, transparent 85%);
+    }
+
+    a { color: var(--steel-deep); }
+    a:hover { color: var(--copper); }
+
+    .shell {
+      display: grid;
+      grid-template-columns: var(--nav-w) minmax(0, 1fr);
+      gap: 0;
+      max-width: 78rem;
+      margin: 0 auto;
+      min-height: 100vh;
+      position: relative;
+      z-index: 1;
+    }
+
+    .side {
+      position: sticky;
+      top: 0;
+      align-self: start;
+      height: 100vh;
+      padding: 1.35rem 1rem 1.5rem 1.25rem;
+      border-right: 1px solid rgba(199, 210, 220, 0.85);
+      background: rgba(255, 255, 255, 0.72);
+      backdrop-filter: blur(10px);
+      overflow: auto;
+    }
+    .brand {
+      font-family: "Segoe UI", "Calibri", system-ui, sans-serif;
+      font-weight: 700;
+      font-size: 1.35rem;
+      letter-spacing: -0.03em;
+      color: var(--ink);
+      text-decoration: none;
+      display: block;
+      margin-bottom: 0.15rem;
+    }
+    .brand span {
+      display: block;
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: 0.15rem;
+    }
+    .side nav {
+      margin-top: 1.35rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .side nav a {
+      display: block;
+      padding: 0.42rem 0.55rem;
+      border-radius: 8px;
+      color: var(--ink-soft);
+      text-decoration: none;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border-left: 3px solid transparent;
+    }
+    .side nav a:hover,
+    .side nav a.is-active {
+      background: rgba(47, 111, 143, 0.08);
+      color: var(--steel-deep);
+      border-left-color: var(--steel);
+    }
+    .side .note {
+      margin-top: 1.5rem;
+      padding: 0.85rem 0.9rem;
+      border-radius: 10px;
+      background: var(--warn-bg);
+      border: 1px solid var(--warn-line);
+      color: #6a4a18;
+      font-size: 0.88rem;
+      line-height: 1.4;
+    }
+
+    .main {
+      padding: 1.5rem 1.75rem 4rem;
+    }
+    .hero {
+      max-width: var(--max);
+      padding: 1.6rem 0 1.9rem;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 2rem;
+      animation: rise 0.55s ease both;
+    }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: none; }
+    }
+    .hero h1 {
+      font-family: "Segoe UI", "Calibri", system-ui, sans-serif;
+      font-size: clamp(2rem, 3.6vw, 2.85rem);
+      line-height: 1.1;
+      letter-spacing: -0.035em;
+      margin: 0 0 0.65rem;
+      font-weight: 700;
+    }
+    .hero p {
+      margin: 0;
+      max-width: 40rem;
+      color: var(--ink-soft);
+      font-size: 1.12rem;
+    }
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+      margin-top: 1.15rem;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.35rem 0.7rem;
+      border-radius: 999px;
+      background: rgba(47, 111, 143, 0.1);
+      color: var(--steel-deep);
+      font-size: 0.86rem;
+      font-weight: 700;
+      text-decoration: none;
+      border: 1px solid rgba(47, 111, 143, 0.18);
+    }
+    .chip:hover {
+      background: rgba(180, 83, 30, 0.12);
+      border-color: rgba(180, 83, 30, 0.28);
+      color: var(--copper);
+    }
+
+    section {
+      max-width: var(--max);
+      margin: 0 0 2.4rem;
+      scroll-margin-top: 1.2rem;
+      animation: rise 0.5s ease both;
+    }
+    section:nth-of-type(2) { animation-delay: 0.04s; }
+    section:nth-of-type(3) { animation-delay: 0.08s; }
+    h2 {
+      font-family: "Segoe UI", "Calibri", system-ui, sans-serif;
+      font-size: 1.55rem;
+      letter-spacing: -0.03em;
+      margin: 0 0 0.55rem;
+      font-weight: 700;
+    }
+    h3 {
+      font-family: "Segoe UI", "Calibri", system-ui, sans-serif;
+      font-size: 1.12rem;
+      margin: 1.35rem 0 0.4rem;
+      letter-spacing: -0.02em;
+    }
+    p { margin: 0 0 0.85rem; color: var(--ink-soft); }
+    .lead { font-size: 1.08rem; }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.15rem 1.25rem 1.2rem;
+      margin: 0.9rem 0;
+    }
+    .panel h3:first-child { margin-top: 0; }
+
+    ol.steps, ul.clean {
+      margin: 0.4rem 0 0.2rem;
+      padding-left: 1.2rem;
+      color: var(--ink-soft);
+    }
+    ol.steps li, ul.clean li { margin: 0.35rem 0; }
+    ol.steps strong, ul.clean strong { color: var(--ink); font-weight: 700; }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.85rem;
+      margin: 0.9rem 0;
+    }
+    .tile {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 1rem 1.05rem 1.05rem;
+      box-shadow: var(--shadow);
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    .tile:hover {
+      transform: translateY(-2px);
+      border-color: rgba(47, 111, 143, 0.45);
+    }
+    .tile h3 {
+      margin: 0 0 0.35rem;
+      font-size: 1.05rem;
+    }
+    .tile p { margin: 0; font-size: 0.98rem; }
+
+    .callout {
+      border-left: 4px solid var(--steel);
+      background: rgba(47, 111, 143, 0.07);
+      padding: 0.85rem 1rem;
+      border-radius: 0 10px 10px 0;
+      margin: 0.9rem 0;
+      color: var(--ink-soft);
+    }
+    .callout.warn {
+      border-left-color: var(--copper);
+      background: var(--warn-bg);
+      color: #5d4218;
+    }
+    .callout strong { color: var(--ink); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.98rem;
+      margin: 0.75rem 0 0.2rem;
+    }
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      padding: 0.55rem 0.65rem;
+      border-bottom: 1px solid var(--line);
+    }
+    th {
+      font-family: "Segoe UI", "Calibri", system-ui, sans-serif;
+      font-size: 0.82rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    td strong { color: var(--ink); }
+
+    .kbd {
+      font-family: "Segoe UI", "Calibri", system-ui, sans-serif;
+      font-size: 0.82rem;
+      font-weight: 700;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-bottom-width: 2px;
+      border-radius: 6px;
+      padding: 0.05rem 0.4rem;
+      color: var(--ink);
+    }
+
+    .menu-btn {
+      display: none;
+      position: fixed;
+      top: 0.85rem;
+      right: 0.85rem;
+      z-index: 20;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.92);
+      border-radius: 999px;
+      padding: 0.45rem 0.85rem;
+      font-family: "Segoe UI", "Calibri", system-ui, sans-serif;
+      font-weight: 700;
+      color: var(--ink);
+      box-shadow: var(--shadow);
+      cursor: pointer;
+    }
+
+    @media (max-width: 900px) {
+      .shell { grid-template-columns: 1fr; }
+      .side {
+        position: fixed;
+        inset: 0 auto 0 0;
+        width: min(18rem, 86vw);
+        transform: translateX(-105%);
+        transition: transform 0.2s ease;
+        z-index: 30;
+        box-shadow: var(--shadow);
+      }
+      body.nav-open .side { transform: none; }
+      .menu-btn { display: inline-flex; }
+      .main { padding: 1.1rem 1.1rem 3rem; }
+      .grid-2 { grid-template-columns: 1fr; }
+      .hero { padding-top: 2.6rem; }
+    }
+  </style>
+</head>
+<body>
+  <button class="menu-btn" type="button" id="menuBtn" aria-expanded="false">Contents</button>
+  <div class="shell">
+    <aside class="side" id="sideNav">
+      <a class="brand" href="#top">CreoPDM<span>Administrator help</span></a>
+      <nav aria-label="Help topics">
+        <a href="#start">Quick start</a>
+        <a href="#users">Users</a>
+        <a href="#roles">Roles &amp; permissions</a>
+        <a href="#products">Products</a>
+        <a href="#membership">Product Membership</a>
+        <a href="#lifecycle">Lifecycle states</a>
+        <a href="#promote">Promote Products</a>
+        <a href="#revise">Revise (admin view)</a>
+        <a href="#danger">Delete, compact, rebuild</a>
+        <a href="#settings">System Settings</a>
+        <a href="#utilities">Utilities</a>
+        <a href="#audit">Audit log</a>
+        <a href="#tips">Troubleshooting</a>
+      </nav>
+      <p class="note">Looking for everyday file work (checkout, check-in, Revise as a user)? Open the regular <a href="/help" target="creopdm-help">CreoPDM help</a>. Menus on every page follow the signed-in user’s role: you only see the tiles you have permission for.</p>
+    </aside>
+
+    <main class="main" id="top">
+      <header class="hero">
+        <h1>How to administrate CreoPDM</h1>
+        <p>
+          Administration covers who can sign in, what each person can do, which products they can open,
+          what state each product is in, and the server tools that keep it healthy. Start at
+          <strong>Administration</strong> in the top bar.
+        </p>
+        <div class="hero-meta">
+          <a class="chip" href="#start">Start here</a>
+          <a class="chip" href="#users">Users</a>
+          <a class="chip" href="#roles">Roles</a>
+          <a class="chip" href="#lifecycle">Lifecycle states</a>
+          <a class="chip" href="#revise">Revise</a>
+          <a class="chip" href="#tips">If something fails</a>
+        </div>
+      </header>
+
+      <section id="start">
+        <h2>Quick start</h2>
+        <p>The <strong>Administration</strong> page is a set of tiles. Each tile appears only when your role has the matching permission.</p>
+        <div class="grid-2">
+          <article class="tile">
+            <h3>Users</h3>
+            <p>Add and edit accounts, assign a role, set status, set passwords.</p>
+          </article>
+          <article class="tile">
+            <h3>Roles</h3>
+            <p>Create roles and choose what each one can do — products, files, administration.</p>
+          </article>
+          <article class="tile">
+            <h3>Manage products</h3>
+            <p>Products, Product Membership, Copy, Promote, Lifecycle states, then Delete, Compact and Rebuild.</p>
+          </article>
+          <article class="tile">
+            <h3>Utilities</h3>
+            <p>Email all users, Audit log, Health and Logs.</p>
+          </article>
+          <article class="tile">
+            <h3>System Settings</h3>
+            <p>Server-wide options: Open Creo models, Vault, file types, the local agent, Database, Email, AI, Availability.</p>
+          </article>
+        </div>
+        <div class="callout">
+          <strong>Two layers decide what a person can do.</strong> The <em>role</em> says what the person may do at all; the product’s <em>lifecycle state</em> says what is allowed on that product right now. A button appears only when both agree — “state ∩ role”.
+        </div>
+        <div class="callout warn">
+          Always keep at least one active user with every administration permission. CreoPDM refuses to remove the last one.
+        </div>
+      </section>
+
+      <section id="users">
+        <h2>Users</h2>
+        <p><strong>Administration → Users</strong> lists every account.</p>
+        <ul class="clean">
+          <li><strong>Add a user</strong>: name, username, email, role, status and an initial password. The person must change a temporary password at first sign-in.</li>
+          <li><strong>Status</strong> Active or Disabled. A disabled user cannot sign in; their history and audit entries stay.</li>
+          <li><strong>Passwords</strong> are set or reset with the “Set or reset user passwords” permission. Email on the server lets people use <em>Forgot password</em>.</li>
+          <li><strong>Role</strong> is assigned with the “Assign roles to users” permission.</li>
+          <li><strong>Product access</strong> is set per user here or under <a href="#membership">Product Membership</a> (All products, or a chosen list).</li>
+        </ul>
+      </section>
+
+      <section id="roles">
+        <h2>Roles &amp; permissions</h2>
+        <p><strong>Administration → Roles</strong> creates roles and picks their permissions. Everything a signed-in person sees is checked against these keys on the server, not only by hiding buttons.</p>
+        <div class="panel">
+          <table>
+            <thead><tr><th>Group</th><th>Permissions</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Administration</strong></td><td>Manage users, set passwords, assign roles, manage roles, assign products (membership), manage products, manage lifecycle states, change settings, AI settings, email.</td></tr>
+              <tr><td><strong>Utilities</strong></td><td>Availability, Email all users, Compact, Rebuild, Delete products, Audit log, Health, Logs — each its own key.</td></tr>
+              <tr><td><strong>Products</strong></td><td>View, create, edit, delete or forget, export a whole product.</td></tr>
+              <tr><td><strong>Files</strong></td><td>View, add, check out, check in, force undo checkout, remove, revert (restore an older version), <strong>revise</strong>, update metadata, copy to vault, export selected.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <ul class="clean">
+          <li><strong>Starter roles</strong> are Administrator (everything), PDM Manager, Engineer (everyday authoring, including Revise) and Viewer (browse and open). They are only a starting point; edit or add roles freely.</li>
+          <li><strong>Revise</strong> is its own permission, <code>objects.revise</code>. Give it to the people who may start the next revision of a released file.</li>
+          <li>A role that can <em>see</em> a file but not <em>check it out</em> simply never gets the checkout buttons.</li>
+        </ul>
+      </section>
+
+      <section id="products">
+        <h2>Products</h2>
+        <p><strong>Administration → Manage products</strong> is the hub for everything about a product. <strong>Products</strong> lists every product on the server and lets you add or edit one.</p>
+        <div class="panel">
+          <h3>Add a product</h3>
+          <ol class="steps">
+            <li>Choose <strong>Add product</strong> and enter a <strong>Name</strong> (required, must be unique), an optional <strong>Number</strong> and <strong>Description</strong>.</li>
+            <li>The <strong>Vault/Workspace name</strong> is the folder under the vaults directory. By default <strong>Use hash</strong> is ticked: a unique id is filled in and locked.</li>
+            <li>Untick <strong>Use hash</strong> to type your own folder name (no spaces). It cannot be the same as another product’s vault name.</li>
+            <li>The folder cannot be changed after the product is created.</li>
+          </ol>
+        </div>
+        <ul class="clean">
+          <li><strong>Edit</strong> changes name, number and description. The product list shows the number under the name only when one is set.</li>
+          <li><strong>Copy Products</strong> makes a new product from another product’s current vault files. Each file starts again at A.1, In Work, not checked out, with a fresh history.</li>
+        </ul>
+      </section>
+
+      <section id="membership">
+        <h2>Product Membership</h2>
+        <p>Decide who can open which products, either <strong>by product</strong> (pick the people) or <strong>by user</strong> (pick the products).</p>
+        <ul class="clean">
+          <li>A user with <em>All products</em> sees every product.</li>
+          <li>A user restricted to a list sees only those products, even if their role could otherwise open any.</li>
+          <li>Membership never grants more than the role allows; it only limits which products are visible.</li>
+        </ul>
+      </section>
+
+      <section id="lifecycle">
+        <h2>Lifecycle states</h2>
+        <p><strong>Manage products → Lifecycle states</strong> is the permission matrix. Each row is a product state; each column is an operation that state allows (ticked) or blocks.</p>
+        <div class="panel">
+          <table>
+            <thead><tr><th>Column</th><th>What it controls</th></tr></thead>
+            <tbody>
+              <tr><td>Read / View</td><td>Seeing the product and its files.</td></tr>
+              <tr><td>Download / Export / Open</td><td>Opening files in Creo, downloading and exporting.</td></tr>
+              <tr><td>Check Out / Undo Checkout</td><td>Checking out, and releasing your own or another user’s checkout.</td></tr>
+              <tr><td>Check In / Add / Upload</td><td>Check-in, adding files, uploads.</td></tr>
+              <tr><td>Delete / Remove (vault)</td><td>Removing files from the vault.</td></tr>
+              <tr><td>Edit Metadata</td><td>Collect, rebuild metadata and AI snapshots.</td></tr>
+              <tr><td>Revise (new revision)</td><td>Offering <strong>Revise…</strong> for Released files.</td></tr>
+              <tr><td>Rename product</td><td>Changing the product’s name.</td></tr>
+              <tr><td>View History / Audit</td><td>History tabs and audit views.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <ul class="clean">
+          <li><strong>Defaults</strong>: Pre-Work and In Work are editable, In Review and Approved are frozen, Released is frozen, <strong>Under Change</strong> is editable again, Obsolete, Archived and Locked are frozen.</li>
+          <li><strong>Revise</strong> is allowed in In Work and Under Change by default, and off in Pre-Work and in every frozen state.</li>
+          <li>You can add your own states, reorder them and rename labels. Built-in states cannot be removed.</li>
+          <li>Changes take effect for everyone as soon as you save.</li>
+        </ul>
+      </section>
+
+      <section id="promote">
+        <h2>Promote Products</h2>
+        <p><strong>Manage products → Promote Products</strong> changes one product’s lifecycle state. You confirm with your password.</p>
+        <div class="grid-2">
+          <article class="tile">
+            <h3>Releasing</h3>
+            <p>Moving a product to <strong>Released</strong> also marks its files Released. Files already Obsolete stay Obsolete. This is what makes Revise available later.</p>
+          </article>
+          <article class="tile">
+            <h3>Checked-out files</h3>
+            <p>Promoting to <strong>Released</strong>, <strong>In Review</strong> or <strong>Approved</strong> is refused while any file is checked out; the message names the files and who holds them. Check them in or undo the checkout first.</p>
+          </article>
+          <article class="tile">
+            <h3>Going back</h3>
+            <p>Moving a product back to Under Change or In Work leaves its files Released. Each one needs a <a href="#revise">Revise</a> before it can be edited.</p>
+          </article>
+          <article class="tile">
+            <h3>Undo a release</h3>
+            <p>When promoting to <strong>In Work</strong> or <strong>Pre-Work</strong> a product that has Released files, tick <strong>Also set the N Released files back to In Work (undo the release)</strong> to unlock them without Revise — for example after a release by mistake. Files already In Work are untouched.</p>
+          </article>
+        </div>
+        <div class="callout">
+          The audit shows each promote as <em>Product state changed</em>, with how many files were released or set back to In Work.
+        </div>
+      </section>
+
+      <section id="revise">
+        <h2>Revise (admin view)</h2>
+        <p>Users start the next revision of a Released file with <strong>Revise…</strong> (A.3 → B.1). As administrator you control <em>who</em> and <em>when</em>:</p>
+        <ul class="clean">
+          <li><strong>Who</strong>: the <code>objects.revise</code> permission on the role.</li>
+          <li><strong>When</strong>: the product’s state must allow Revise in the Lifecycle states matrix (In Work and Under Change by default), the file must be Released, and nobody may have it checked out.</li>
+          <li><strong>Reopening a released product for revision</strong>: promote it to <strong>Under Change</strong>. A product that is itself <em>Released</em> is frozen and does not offer Revise.</li>
+        </ul>
+        <div class="callout">
+          <strong>A user says they cannot see Revise?</strong> Check in this order: the file reads Released · it is not checked out · their role has Revise · the product’s state allows Revise · the page was reloaded after a deploy.
+        </div>
+        <p>Each revise is recorded in the <a href="#audit">Audit log</a> as <em>Revision created</em> (A.3 → B.1, with the reason). The new revision keeps its own metadata; the released one is never changed, and baselines and product releases keep pointing at the version they used.</p>
+      </section>
+
+      <section id="danger">
+        <h2>Delete, compact, rebuild</h2>
+        <p>These sit under <strong>Manage products</strong>, in red, and each needs its own Utilities permission and your <strong>password</strong>.</p>
+        <div class="panel">
+          <table>
+            <thead><tr><th>Action</th><th>What it does</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Delete products</strong></td><td>Deletes the product’s vault and unregisters it from the database. History in the Audit log is kept.</td></tr>
+              <tr><td><strong>Compact product vault history</strong></td><td>Squashes one product’s Git history to the tip and frees the bytes of removed files. Older versions are no longer restorable.</td></tr>
+              <tr><td><strong>Rebuild product database</strong></td><td>Rebuilds a product’s database records from its vault, with options for metadata and the Where Used index.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout warn">
+          Take a copy of the vault folder before compacting or deleting anything you may need again. Neither can be undone from CreoPDM.
+        </div>
+      </section>
+
+      <section id="settings">
+        <h2>System Settings</h2>
+        <p><strong>Administration → System Settings</strong> is a hub of tiles, each its own page. Which tiles you see depends on your settings, AI, email and availability permissions.</p>
+        <div class="panel">
+          <table>
+            <thead><tr><th>Tile</th><th>What it sets</th></tr></thead>
+            <tbody>
+              <tr><td>Availability</td><td>Mark CreoPDM available, or show a maintenance message to non-administrators. An <em>Unavailable</em> pill shows in the top bar while it is on.</td></tr>
+              <tr><td>Open Creo models</td><td>Choose OS file association or the Embedded Creo Browser for Open.</td></tr>
+              <tr><td>Vault</td><td>The master repository folder for each product’s Git history and vault copies.</td></tr>
+              <tr><td>Creo Models</td><td>Extensions the Creo Models filter on the Files page counts and shows.</td></tr>
+              <tr><td>Documents</td><td>Extensions counted and filtered by the Documents chip.</td></tr>
+              <tr><td>Creo-openable models</td><td>Types Creo can open from click-to-open.</td></tr>
+              <tr><td>Text files</td><td>CAD-like files that open with a text editor, not Creo.</td></tr>
+              <tr><td>Non openable CAD</td><td>CAD-like files that stay in the product but do not open.</td></tr>
+              <tr><td>Numbered saves</td><td>Extensions that use numbered names like <code>part.prt.3</code> for Add and Purge workspace.</td></tr>
+              <tr><td>File type names</td><td>Optional labels for the Type column by extension or file name.</td></tr>
+              <tr><td>Ignored files</td><td>Patterns that never enter the vault or appear in the file list.</td></tr>
+              <tr><td>Network</td><td>The TCP port for this CreoPDM server on the LAN.</td></tr>
+              <tr><td>Local Creo agent</td><td>The agent base URL and how often the file list refreshes.</td></tr>
+              <tr><td>Database</td><td>Local SQLite by default, or a Postgres URL.</td></tr>
+              <tr><td>Email</td><td>SMTP or local Postfix, the From address and a test email, used for notifications, password reset and Email all users.</td></tr>
+              <tr><td>AI</td><td>Enable AI, the Ollama host URL, the model and the snapshot compare prompt.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout">
+          Changes here apply to the whole server. Tell users before changing file-type or open-mode settings during working hours.
+        </div>
+      </section>
+
+      <section id="utilities">
+        <h2>Utilities</h2>
+        <p><strong>Administration → Utilities</strong> holds day-to-day server tools. Each tile needs its own permission.</p>
+        <ul class="clean">
+          <li><strong>Email all users</strong> sends one message to every active user; addresses stay private.</li>
+          <li><strong>Audit log</strong> — see <a href="#audit">below</a>.</li>
+          <li><strong>Health</strong> shows CPU load, I/O, disk space, the database, Git, product vault checks, counts and server paths. Look here first when something is slow.</li>
+          <li><strong>Logs</strong> lists the server log files and shows the end of the selected one (default <code>creopdm.log</code>).</li>
+        </ul>
+      </section>
+
+      <section id="audit">
+        <h2>Audit log</h2>
+        <p><strong>Utilities → Audit log</strong> records what happened, who did it, from which client and to which product and file. Filter by event, user, product or text.</p>
+        <ul class="clean">
+          <li>Check in / Check out, Object added or removed, Checkout cancelled or overridden.</li>
+          <li><strong>Revision created</strong> (A.3 → B.1, with the reason) and <strong>Version restored</strong> (for example <em>Restored A.1 as D.3</em>).</li>
+          <li><strong>Changes discarded</strong> when someone throws away unsaved vault changes.</li>
+          <li><strong>Product state changed</strong> with “N files released” or “N files set back to In Work”.</li>
+          <li>Sign-in, password, role, membership and system-setting changes.</li>
+        </ul>
+        <div class="callout">
+          Audit entries are append-only. Deleting a product keeps its history rows.
+        </div>
+      </section>
+
+      <section id="tips">
+        <h2>Troubleshooting</h2>
+        <div class="grid-2">
+          <article class="tile">
+            <h3>A delete or rebuild fails with “unexpected error”</h3>
+            <p>Open <strong>Utilities → Logs</strong>, select <code>creopdm.log</code> and read the last lines — the real cause is there. Send the error text when asking for help.</p>
+          </article>
+          <article class="tile">
+            <h3>A user cannot check out or check in</h3>
+            <p>Check the product’s state in the Lifecycle matrix (Check Out and Check In columns) and the role’s permission. A Released file also cannot be checked out until it is revised.</p>
+          </article>
+          <article class="tile">
+            <h3>A checkout is stuck</h3>
+            <p>Use <strong>Force Undo Checkout</strong> (permission required) in a state that allows Check Out. In a frozen state, promote the product to Under Change or In Work first.</p>
+          </article>
+          <article class="tile">
+            <h3>A file keeps reading Modified</h3>
+            <p>Right-click it → <strong>Discard changes…</strong> (also on its row on the Modified tab). It restores the vault copy and, for a Newer local save, removes the local file from that PC. It needs no checkout to be held.</p>
+          </article>
+          <article class="tile">
+            <h3>Menus look old after an update</h3>
+            <p>Reload the page; if a menu item is still missing, hard refresh (Ctrl+F5). The server serves its scripts fresh, but browsers cache some files.</p>
+          </article>
+          <article class="tile">
+            <h3>Creo: Agent offline</h3>
+            <p>The agent tray is not running on that PC. Collect metadata, Rebuild metadata and Open refuse to run without it. See the user help for starting it.</p>
+          </article>
+        </div>
+        <div class="panel">
+          <h3>Before you change something big</h3>
+          <ol class="steps">
+            <li>Mark the site <strong>Unavailable</strong> (System Settings → Availability) and email users from Utilities.</li>
+            <li>Make sure nothing is checked out (Checked out tab on each product).</li>
+            <li>Check <strong>Utilities → Health</strong> for disk space and the database.</li>
+            <li>Make the change, then turn Availability back on.</li>
+          </ol>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      var btn = document.getElementById("menuBtn");
+      var links = document.querySelectorAll(".side nav a");
+      var sections = [];
+      links.forEach(function (a) {
+        var id = (a.getAttribute("href") || "").replace("#", "");
+        var el = document.getElementById(id);
+        if (el) sections.push({ link: a, el: el });
+      });
+
+      function closeNav() {
+        document.body.classList.remove("nav-open");
+        if (btn) btn.setAttribute("aria-expanded", "false");
+      }
+
+      if (btn) {
+        btn.addEventListener("click", function () {
+          var open = document.body.classList.toggle("nav-open");
+          btn.setAttribute("aria-expanded", open ? "true" : "false");
+        });
+      }
+
+      function setActive(link) {
+        links.forEach(function (a) { a.classList.remove("is-active"); });
+        if (link) link.classList.add("is-active");
+      }
+
+      links.forEach(function (a) {
+        a.addEventListener("click", function () {
+          setActive(a);
+          closeNav();
+        });
+      });
+
+      function onScroll() {
+        if (!sections.length) return;
+        var doc = document.documentElement;
+        var nearBottom =
+          window.scrollY + window.innerHeight >= doc.scrollHeight - 48;
+        var current;
+        if (nearBottom) {
+          // Last section is often shorter than the viewport — still highlight it.
+          current = sections[sections.length - 1];
+        } else {
+          var y = window.scrollY + 120;
+          current = sections[0];
+          for (var i = 0; i < sections.length; i++) {
+            if (sections[i].el.offsetTop <= y) current = sections[i];
+          }
+        }
+        setActive(current && current.link);
+      }
+      window.addEventListener("scroll", onScroll, { passive: true });
+      onScroll();
+    })();
+  </script>
+</body>
+</html>

@@ -730,6 +730,21 @@ def user_help_page() -> FileResponse:
     )
 
 
+@router.get("/help/admin")
+def admin_help_page(request: Request) -> FileResponse:
+    """How to administrate CreoPDM — opened from the Help pill on Administration / System Settings."""
+    if not caps_dict(request).get("can_open_administration"):
+        raise HTTPException(status_code=403, detail="Administrator help is for administrators.")
+    path = PACKAGE_DIR / "static" / "help" / "admin.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Administrator help is not available.")
+    return FileResponse(
+        path,
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @router.get("/help/agent-tray", response_class=HTMLResponse)
 def agent_tray_help_page(request: Request) -> HTMLResponse:
     """Start / download / Windows autostart for creopdm-agent-tray (Agent offline pill)."""
