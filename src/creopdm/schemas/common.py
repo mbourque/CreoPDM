@@ -230,6 +230,10 @@ class ObjectVersionResponse(BaseModel):
     created_by: str
     created_at: datetime | None
     comment: str
+    # Lifecycle of this very version ("" = In Work) and Revise provenance.
+    lifecycle_state: str = ""
+    revision_reason: str | None = None
+    created_from_display: str | None = None
 
 
 class WorkspaceContentResponse(BaseModel):
@@ -287,6 +291,24 @@ class ReviseEligibilityResponse(BaseModel):
     iteration: int
     display_version: str
     lifecycle_state: str
+
+
+class ReviseRequest(BaseModel):
+    """Only the reason comes from the client; the server chooses the source and the revision."""
+
+    reason: str = ""
+
+
+class ReviseResponse(BaseModel):
+    object_id: str
+    source_version_id: str
+    new_version_id: str
+    revision: str
+    iteration: int
+    display_version: str
+    source_display_version: str
+    lifecycle_state: str
+    reason: str
 
 
 class RevisePreviewResponse(BaseModel):

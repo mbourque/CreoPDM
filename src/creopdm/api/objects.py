@@ -45,6 +45,8 @@ from creopdm.schemas.common import (
     ObjectVersionResponse,
     ReviseEligibilityResponse,
     RevisePreviewResponse,
+    ReviseRequest,
+    ReviseResponse,
     WhereUsedResponse,
     WorkspaceContentResponse,
 )
@@ -483,6 +485,52 @@ def revise_preview(
             else ""
         ),
         new_lifecycle_state=preview.new_lifecycle_state,
+    )
+
+
+@router.post("/api/objects/{object_id}/revise", response_model=ReviseResponse)
+def revise_object(
+    object_id: str,
+    payload: ReviseRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> ReviseResponse:
+    """Create the next revision (A.x RELEASED -> B.1 IN_WORK) of the same object.
+
+    The source is the object's exact current version and the revision is chosen by the server;
+    only the reason is taken from the request. All-or-nothing.
+    """
+    require_permission(request, ctx, PERMISSION_OBJECTS_REVISE)
+    obj = ctx.objects.get_object(db, object_id)
+    require_product_access(request, ctx, obj.product)
+    from creopdm.api.serializers import revision_display
+
+    result = ctx.revisions.revise(db, object_id, payload.reason)
+    db.commit()
+    db.refresh(result.obj)
+    from creopdm.api.watch_notify import notify_product_watchers
+
+    notify_product_watchers(
+        request,
+        ctx,
+        db,
+        result.obj.product,
+        action="Revision created",
+        filenames=[result.obj.filename],
+        object_uuid=result.obj.uuid,
+        comment=result.version.comment,
+    )
+    return ReviseResponse(
+        object_id=result.obj.uuid,
+        source_version_id=result.source.uuid,
+        new_version_id=result.version.uuid,
+        revision=result.version.revision,
+        iteration=result.version.iteration,
+        display_version=revision_display(result.version.revision, result.version.iteration),
+        source_display_version=revision_display(result.source.revision, result.source.iteration),
+        lifecycle_state=result.obj.lifecycle_state,
+        reason=result.version.revision_reason or "",
     )
 
 

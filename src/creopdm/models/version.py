@@ -34,10 +34,23 @@ class ObjectVersion(Base):
     created_by: Mapped[str] = mapped_column(String(128), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     comment: Mapped[str] = mapped_column(Text, nullable=False)
+    # Lifecycle of THIS version (NULL = In Work). The object row only mirrors the current one,
+    # so A.3 stays RELEASED after Revise makes B.1 current.
+    lifecycle_state: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Revise provenance: the exact version this one was created from, and why.
+    created_from_version_id: Mapped[int | None] = mapped_column(
+        ForeignKey("object_versions.id", use_alter=True, name="fk_versions_created_from"),
+        nullable=True,
+    )
+    revision_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     object: Mapped["EngineeringObject"] = relationship(  # noqa: F821
         back_populates="versions",
         foreign_keys=[object_id],
         overlaps="current_version",
+    )
+    created_from: Mapped["ObjectVersion | None"] = relationship(
+        remote_side="ObjectVersion.id",
+        foreign_keys=[created_from_version_id],
     )
     parameters: Mapped[list["Parameter"]] = relationship(back_populates="version")  # noqa: F821

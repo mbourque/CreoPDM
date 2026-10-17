@@ -218,6 +218,8 @@ def test_revise_ui_is_wired_through_the_shared_menu_and_details():
     assert "/revise-preview" in app and "openReviseDialog" in app
     base = (root / "templates" / "base.html").read_text(encoding="utf-8")
     assert 'id="revise-dialog"' in base and 'id="revise-confirm"' in base
+    assert 'id="revise-reason"' in base and "Revision Reason" in base
+    assert "/revise`" in app and "JSON.stringify({ reason })" in app
     assert "Starting Iteration" in base and "New Lifecycle" in base
     files = (root / "templates" / "app.html").read_text(encoding="utf-8")
     assert "product_ui.show_revise and obj.can_revise" in files
@@ -312,3 +314,267 @@ def test_revise_preview_refuses_when_the_next_revision_already_exists(auth_clien
     data = auth_client.get(f"/api/objects/{obj['uuid']}/revise-preview").json()
     assert (data["allowed"], data["code"]) == (False, "REVISE_NEXT_REVISION_EXISTS")
     assert data["new_revision"] == ""
+
+
+# ---- Revise creates B.1 -----------------------------------------------------------------
+
+
+def _released_under_change(auth_client, auth_ctx, name="Gearbox", filename="shaft.prt"):
+    """Admin signed in; a product with one file, Released then reopened as Under Change."""
+    _setup_admin_and_users(auth_client, auth_ctx, ("view", BuiltinRole.VIEWER.value))
+    _login(auth_client, "admin", "AdminPass1")
+    product, obj = _make_product_with_file(auth_client, name, filename)
+    assert _promote(auth_client, product, "RELEASED").status_code == 200
+    assert _promote(auth_client, product, "UNDER_CHANGE").status_code == 200
+    return product, obj
+
+
+def _vault_dir(auth_ctx, product):
+    from pathlib import Path
+
+    return Path(auth_ctx.config.workspace_root()) / product["vault_folder"]
+
+
+def _versions(auth_ctx, object_uuid):
+    from sqlalchemy import select
+
+    from creopdm.models.object import EngineeringObject
+    from creopdm.models.version import ObjectVersion
+
+    with auth_ctx.session_factory() as db:
+        row = db.scalar(select(EngineeringObject).where(EngineeringObject.uuid == object_uuid))
+        rows = list(
+            db.scalars(
+                select(ObjectVersion)
+                .where(ObjectVersion.object_id == row.id)
+                .order_by(ObjectVersion.id)
+            )
+        )
+        return row.id, [
+            {
+                "uuid": v.uuid,
+                "revision": v.revision,
+                "iteration": v.iteration,
+                "lifecycle": v.lifecycle_state,
+                "content_hash": v.content_hash,
+                "git": v.git_commit_hash,
+                "created_from": v.created_from_version_id,
+                "reason": v.revision_reason,
+                "id": v.id,
+                "identity_json": v.identity_json,
+                "bom_json": v.bom_json,
+                "comment": v.comment,
+            }
+            for v in rows
+        ]
+
+
+@requires_git
+def test_revise_creates_b1_and_keeps_a1_untouched(auth_client, auth_ctx):
+    from sqlalchemy import select
+
+    from creopdm.models.ai_snapshot import ObjectVersionSnapshot
+    from creopdm.models.dependency import Dependency
+    from creopdm.models.object import EngineeringObject
+    from creopdm.models.parameter import Parameter
+
+    product, obj = _released_under_change(auth_client, auth_ctx)
+    vault = _vault_dir(auth_ctx, product)
+    with auth_ctx.session_factory() as db:
+        row = db.scalar(select(EngineeringObject).where(EngineeringObject.uuid == obj["uuid"]))
+        src = row.current_version
+        src.identity_json = '{"material":"4140"}'
+        src.bom_json = '[{"filename":"a.prt"}]'
+        db.add(
+            Parameter(
+                object_id=row.id,
+                version_id=src.id,
+                name="DESCRIPTION",
+                value="Drive Shaft",
+                data_type="STRING",
+            )
+        )
+        db.add(
+            ObjectVersionSnapshot(
+                uuid="snap-a1",
+                object_id=row.id,
+                version_id=src.id,
+                schema_version=1,
+                snapshot_json='{"k":1}',
+            )
+        )
+        db.commit()
+        edges_before = len(list(db.scalars(select(Dependency))))
+    head_before = auth_ctx.git.get_head(vault)
+    object_id, before = _versions(auth_ctx, obj["uuid"])
+    assert len(before) == 1
+
+    done = auth_client.post(
+        f"/api/objects/{obj['uuid']}/revise",
+        json={"reason": "  Bearing   redesign ", "revision": "Z", "iteration": 9},
+    )
+    assert done.status_code == 200, done.text
+    body = done.json()
+    assert body["object_id"] == obj["uuid"]  # same object
+    assert body["display_version"] == "B.1"  # the server chose B; the client's "Z" was ignored
+    assert body["source_display_version"] == "A.1"
+    assert body["lifecycle_state"] == "IN_WORK"
+    assert body["reason"] == "Bearing redesign"
+    assert body["new_version_id"] != body["source_version_id"]
+    assert body["source_version_id"] == before[0]["uuid"]
+
+    _object_id, after = _versions(auth_ctx, obj["uuid"])
+    assert len(after) == 2
+    a1, b1 = after
+    # A.1 is untouched: same row, content, state, metadata.
+    assert a1["uuid"] == before[0]["uuid"] and a1["revision"] == "A" and a1["iteration"] == 1
+    assert a1["lifecycle"] == "RELEASED"
+    assert a1["content_hash"] == before[0]["content_hash"] and a1["git"] == before[0]["git"]
+    assert a1["identity_json"] == '{"material":"4140"}'
+    # B.1: new version of the same object, iteration reset, In Work, provenance + reason.
+    assert (b1["revision"], b1["iteration"], b1["lifecycle"]) == ("B", 1, "IN_WORK")
+    assert b1["created_from"] == a1["id"]
+    assert b1["reason"] == "Bearing redesign"
+    assert b1["content_hash"] == a1["content_hash"]  # same bytes, separate PDM version
+    assert b1["git"] and b1["git"] != a1["git"]  # its own repository state
+    assert b1["identity_json"] == a1["identity_json"] and b1["bom_json"] == a1["bom_json"]
+    assert "Bearing redesign" in b1["comment"]
+
+    with auth_ctx.session_factory() as db:
+        row = db.get(EngineeringObject, object_id)
+        assert (row.revision, row.iteration, row.lifecycle_state) == ("B", 1, "IN_WORK")
+        assert row.current_version.uuid == b1["uuid"]
+        # Metadata rows are copied, not shared.
+        params = list(db.scalars(select(Parameter).where(Parameter.object_id == object_id)))
+        assert [p.name for p in params] == ["DESCRIPTION", "DESCRIPTION"]
+        assert len({p.version_id for p in params}) == 2
+        snaps = list(db.scalars(select(ObjectVersionSnapshot)))
+        assert len(snaps) == 2 and len({s.uuid for s in snaps}) == 2
+        # Usage edges are not rewritten.
+        assert len(list(db.scalars(select(Dependency)))) == edges_before
+        # The audit trail records it.
+        events = auth_ctx.activities.list_events(db, q="shaft.prt")
+        rev = [e for e in events if e.action == "REVISION_CREATED"]
+        assert rev and "A.1 → B.1" in (rev[0].summary or "")
+        assert (rev[0].details or {}).get("reason") == "Bearing redesign"
+    # Git: a new commit exists, the vault bytes are unchanged.
+    assert auth_ctx.git.get_head(vault) != head_before
+    assert (vault / "shaft.prt").read_bytes() == b"bytes"
+
+    # History lists B.1 first and shows provenance.
+    history = auth_client.get(f"/api/objects/{obj['uuid']}/history").json()
+    assert [h["display"] for h in history] == ["B.1", "A.1"]
+    assert history[0]["created_from_display"] == "A.1"
+    assert history[0]["revision_reason"] == "Bearing redesign"
+    assert history[0]["lifecycle_state"] == "IN_WORK"
+    assert history[1]["lifecycle_state"] == "RELEASED"
+
+    # B.1 can be checked out and checked in as B.2 (Check-In does not change the revision).
+    out = auth_client.post(f"/api/objects/{obj['uuid']}/checkout")
+    assert out.status_code == 200, out.text
+    (vault / "shaft.prt").write_bytes(b"edited-after-revise")
+    checked = auth_client.post(
+        f"/api/objects/{obj['uuid']}/checkin", json={"comment": "after revise"}
+    )
+    assert checked.status_code == 200, checked.text
+    assert checked.json()["display_revision"] == "B.2"
+
+    detail = auth_client.get(f"/products/{product['uuid']}/objects/{obj['uuid']}")
+    assert detail.status_code == 200
+    # B.2 is current now; Overview still shows where revision B came from and why.
+    assert 'id="overview-created-from"' in detail.text
+    assert 'id="overview-revision-reason"' in detail.text
+    assert "Bearing redesign" in detail.text
+
+
+@requires_git
+def test_revise_refusals_create_nothing(auth_client, auth_ctx):
+    product, obj = _released_under_change(auth_client, auth_ctx)
+
+    missing = auth_client.post(f"/api/objects/{obj['uuid']}/revise", json={"reason": "  "})
+    assert missing.status_code == 400, missing.text
+    assert "reason" in missing.json()["error"]["message"].lower()
+    long = auth_client.post(f"/api/objects/{obj['uuid']}/revise", json={"reason": "x" * 501})
+    assert long.status_code == 400, long.text
+
+    first = auth_client.post(f"/api/objects/{obj['uuid']}/revise", json={"reason": "first"})
+    assert first.status_code == 200, first.text
+    # B.1 is In Work now: a second Revise has nothing Released to start from.
+    again = auth_client.post(f"/api/objects/{obj['uuid']}/revise", json={"reason": "again"})
+    assert again.status_code == 409, again.text
+    assert again.json()["error"]["code"] == "REVISE_INVALID_LIFECYCLE"
+    _oid, versions = _versions(auth_ctx, obj["uuid"])
+    assert [(v["revision"], v["iteration"]) for v in versions] == [("A", 1), ("B", 1)]
+
+
+def _released_with_active_checkout(auth_client, auth_ctx):
+    """A Released file that someone still has checked out (a legacy state)."""
+    from sqlalchemy import select
+
+    from creopdm.models.checkout import Checkout
+    from creopdm.models.object import EngineeringObject
+
+    product, obj = _released_under_change(auth_client, auth_ctx)
+    with auth_ctx.session_factory() as db:
+        row = db.scalar(select(EngineeringObject).where(EngineeringObject.uuid == obj["uuid"]))
+        db.add(
+            Checkout(
+                object_id=row.id,
+                user_name="Bob",
+                machine_name="PC-1",
+                workspace_path="C:/ws",
+                status="ACTIVE",
+            )
+        )
+        db.commit()
+    return product, obj
+
+
+@requires_git
+def test_revise_is_refused_while_checked_out_and_without_permission(auth_client, auth_ctx):
+    _product, obj = _released_with_active_checkout(auth_client, auth_ctx)
+    blocked = auth_client.post(f"/api/objects/{obj['uuid']}/revise", json={"reason": "r"})
+    assert blocked.status_code == 409, blocked.text
+    assert blocked.json()["error"]["code"] == "REVISE_ACTIVE_CHECKOUT"
+    assert "Bob" in blocked.json()["error"]["message"]
+    _oid, versions = _versions(auth_ctx, obj["uuid"])
+    assert len(versions) == 1
+
+    _login(auth_client, "view", "ViewPass1")
+    denied = auth_client.post(f"/api/objects/{obj['uuid']}/revise", json={"reason": "r"})
+    assert denied.status_code == 403, denied.text
+
+
+@requires_git
+def test_failed_revise_leaves_everything_as_it_was(auth_client, auth_ctx, monkeypatch):
+    product, obj = _released_under_change(auth_client, auth_ctx)
+    vault = _vault_dir(auth_ctx, product)
+    head = auth_ctx.git.get_head(vault)
+    service = auth_ctx.revisions
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("simulated failure")
+
+    # Git step fails: nothing recorded.
+    monkeypatch.setattr(service._store, "store_version", boom)
+    failed = auth_client.post(f"/api/objects/{obj['uuid']}/revise", json={"reason": "r"})
+    assert failed.status_code >= 400
+    monkeypatch.undo()
+    _oid, versions = _versions(auth_ctx, obj["uuid"])
+    assert len(versions) == 1
+    assert auth_ctx.git.get_head(vault) == head
+
+    # Database step fails after Git committed: the Git state is rolled back too.
+    monkeypatch.setattr(type(service), "_copy_metadata", staticmethod(boom))
+    failed = auth_client.post(f"/api/objects/{obj['uuid']}/revise", json={"reason": "r"})
+    assert failed.status_code >= 400
+    monkeypatch.undo()
+    _oid, versions = _versions(auth_ctx, obj["uuid"])
+    assert len(versions) == 1 and versions[0]["lifecycle"] == "RELEASED"
+    assert auth_ctx.git.get_head(vault) == head
+    after = auth_client.get(f"/api/objects/{obj['uuid']}").json()
+    assert (after["revision"], after["iteration"], after["lifecycle_state"]) == ("A", 1, "RELEASED")
+
+    # And the retry works afterwards.
+    ok = auth_client.post(f"/api/objects/{obj['uuid']}/revise", json={"reason": "r"})
+    assert ok.status_code == 200, ok.text

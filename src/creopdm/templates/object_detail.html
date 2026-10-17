@@ -215,6 +215,14 @@
           </tr>
           {% endif %}
           <tr><td>Size</td><td>{% if object.current_version %}{{ object.current_version.file_size | byte_size }}{% else %}—{% endif %}</td></tr>
+          {# The version that started this revision (B.1) carries Created From / reason; B.2, B.3 … keep showing it. #}
+          {% set revision_origin = (history | selectattr('revision', 'equalto', object.revision) | selectattr('created_from_version_id') | list | last) if history else none %}
+          {% if revision_origin and revision_origin.created_from %}
+          <tr id="overview-created-from"><td>Created From</td><td>{{ revision_origin.created_from.revision }}.{{ revision_origin.created_from.iteration }}</td></tr>
+          {% endif %}
+          {% if revision_origin and revision_origin.revision_reason %}
+          <tr id="overview-revision-reason"><td>Revision Reason</td><td>{{ revision_origin.revision_reason }}</td></tr>
+          {% endif %}
           {% if sketch_error and not sketch_view %}
           <tr id="overview-sketch-error"><td>Sketch data</td><td class="muted">Not available — Toolkit: {{ sketch_error }}</td></tr>
           {% endif %}

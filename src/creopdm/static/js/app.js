@@ -4203,7 +4203,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         `${body.new_display_version} starts from its content.`
     );
     const confirm = $("#revise-confirm");
-    if (confirm) confirm.textContent = `Create Revision ${body.new_revision}`;
+    if (confirm) {
+      confirm.textContent = `Create Revision ${body.new_revision}`;
+      confirm.disabled = false;
+    }
+    const reason = $("#revise-reason");
+    if (reason) reason.value = "";
     showError($("#revise-error"), "");
   }
 
@@ -4236,33 +4241,70 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return;
     }
     fillReviseDialog(body);
+    let created = null;
     await new Promise((resolve) => {
       const form = $("#revise-form");
       const cancel = $("#revise-cancel");
-      const done = (confirmed) => {
+      const confirm = $("#revise-confirm");
+      const finish = () => {
         form?.removeEventListener("submit", onSubmit);
         cancel?.removeEventListener("click", onCancel);
         dialog.removeEventListener("close", onClose);
         if (dialog.open) dialog.close();
-        if (confirmed) {
-          showOk(
-            `Revise ${body.filename} ${body.source_display_version} → ${body.new_display_version}: ` +
-              "creating the new revision is not available yet."
-          );
-        }
         resolve();
       };
-      const onSubmit = (event) => {
+      const onSubmit = async (event) => {
         event.preventDefault();
-        done(true);
+        const reason = String($("#revise-reason")?.value || "").trim();
+        if (!reason) {
+          showError($("#revise-error"), "Enter a reason for the new revision.");
+          $("#revise-reason")?.focus();
+          return;
+        }
+        showError($("#revise-error"), "");
+        if (confirm) confirm.disabled = true;
+        let response;
+        try {
+          // Only the reason is sent: the server picks the source version and the revision.
+          response = await fetch(`/api/objects/${encodeURIComponent(uuid)}/revise`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reason }),
+          });
+        } catch {
+          showError($("#revise-error"), "Could not reach the server. Nothing was created.");
+          if (confirm) confirm.disabled = false;
+          return;
+        }
+        if (!response.ok) {
+          showError($("#revise-error"), await readError(response));
+          if (confirm) confirm.disabled = false;
+          return;
+        }
+        created = await response.json();
+        finish();
       };
-      const onCancel = () => done(false);
-      const onClose = () => done(false);
+      const onCancel = () => finish();
+      const onClose = () => finish();
       form?.addEventListener("submit", onSubmit);
       cancel?.addEventListener("click", onCancel);
       dialog.addEventListener("close", onClose);
       dialog.showModal();
     });
+    if (created) {
+      // Shown by the refreshed page (same hand-off Add uses).
+      try {
+        sessionStorage.setItem(
+          "creopdmNotice",
+          `Revision created: ${body.filename} ${created.source_display_version} → ` +
+            `${created.display_version}. ${created.display_version} is now the current version ` +
+            "(In Work) — check it out to edit."
+        );
+      } catch {
+        /* storage blocked: the refreshed list still shows the new revision */
+      }
+      await reloadPage({ force: true, keepBusy: true, busyMessage: "Refreshing…" });
+    }
   }
 
   async function reviseSelected() {

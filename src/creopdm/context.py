@@ -23,6 +23,7 @@ from creopdm.services.object_service import ObjectService
 from creopdm.services.password_reset_service import PasswordResetService
 from creopdm.services.product_service import ProductService
 from creopdm.services.product_watch_service import ProductWatchService
+from creopdm.services.revise_service import ReviseService
 from creopdm.services.user_service import UserService
 from creopdm.services.thumbnail_service import ThumbnailService
 from creopdm.services.where_used_index_jobs import WhereUsedIndexJobs
@@ -49,6 +50,7 @@ class AppContext:
     workspaces: WorkspaceService
     checkouts: CheckoutService
     checkins: CheckinService
+    revisions: ReviseService
     creo_service: CreoService
     metadata: MetadataService
     ai_snapshots: AiSnapshotService

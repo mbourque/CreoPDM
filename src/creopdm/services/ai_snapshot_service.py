@@ -169,7 +169,7 @@ class AiSnapshotService:
         return session.scalar(
             select(ObjectVersion)
             .where(ObjectVersion.object_id == obj.id)
-            .order_by(ObjectVersion.iteration.desc())
+            .order_by(ObjectVersion.id.desc())
             .limit(1)
         )
 
@@ -342,7 +342,7 @@ class AiSnapshotService:
         versions = session.scalars(
             select(ObjectVersion)
             .where(ObjectVersion.object_id == obj.id)
-            .order_by(ObjectVersion.iteration.desc())
+            .order_by(ObjectVersion.id.desc())
         ).all()
         snap_by_version = {
             row.version_id: row

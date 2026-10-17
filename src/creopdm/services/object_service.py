@@ -1219,7 +1219,8 @@ class ObjectService:
         stmt = (
             select(ObjectVersion)
             .where(ObjectVersion.object_id == obj.id)
-            .order_by(ObjectVersion.iteration.desc(), ObjectVersion.id.desc())
+            # id = true creation order. Iteration alone mis-sorts once a revision restarts it (B.1 after A.3).
+            .order_by(ObjectVersion.id.desc())
         )
         return list(session.scalars(stmt))
 

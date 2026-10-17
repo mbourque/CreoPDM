@@ -616,6 +616,17 @@ class ProductService:
         Moving the product to an editable state later does not flip them back: a released
         file only becomes editable again through Revise.
         """
+        in_work = select(EngineeringObject.current_version_id).where(
+            EngineeringObject.product_id == product.id,
+            EngineeringObject.lifecycle_state == LifecycleState.IN_WORK.value,
+            EngineeringObject.current_version_id.is_not(None),
+        )
+        # The released tip is the Released version (A.3 stays RELEASED after Revise).
+        session.execute(
+            update(ObjectVersion)
+            .where(ObjectVersion.id.in_(in_work))
+            .values(lifecycle_state=LifecycleState.RELEASED.value)
+        )
         result = session.execute(
             update(EngineeringObject)
             .where(

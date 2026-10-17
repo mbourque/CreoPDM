@@ -75,6 +75,13 @@ def version_to_response(
         created_by=version.created_by,
         created_at=as_utc(version.created_at),
         comment=version.comment,
+        lifecycle_state=version.lifecycle_state or "",
+        revision_reason=version.revision_reason,
+        created_from_display=(
+            revision_display(version.created_from.revision, version.created_from.iteration)
+            if version.created_from_version_id is not None and version.created_from is not None
+            else None
+        ),
     )
 
 

@@ -50,6 +50,7 @@ ACTION_LABELS: dict[str, str] = {
     ActivityAction.CHECKOUT_OVERRIDE.value: "Checkout override",
     ActivityAction.CHECKED_IN.value: "Checked in",
     ActivityAction.VERSION_RESTORED.value: "Version restored",
+    ActivityAction.REVISION_CREATED.value: "Revision created",
     ActivityAction.VAULT_HISTORY_COMPACTED.value: "Vault history compacted",
     ActivityAction.PRODUCT_DB_REBUILT.value: "Product DB rebuilt",
     ActivityAction.USER_CREATED.value: "User created",
@@ -87,6 +88,7 @@ AUDIT_ACTION_FILTER_CHOICES: list[tuple[str, str]] = [
     (ActivityAction.CHECKOUT_OVERRIDE.value, "Checkout override"),
     (ActivityAction.WORKSPACE_CLEARED.value, "Workspace cleared"),
     (ActivityAction.VERSION_RESTORED.value, "Version restored"),
+    (ActivityAction.REVISION_CREATED.value, "Revision created"),
     (ActivityAction.USER_CREATED.value, "User created"),
     (ActivityAction.ROLE_CHANGED.value, "Role changed"),
     (ActivityAction.MEMBERSHIP_CHANGED.value, "Membership changed"),
@@ -720,6 +722,11 @@ def _event_summary(
         name = details.get("name") or details.get("product_name")
         if name:
             parts.append(str(name))
+    if action in {ActivityAction.REVISION_CREATED.value, "REVISION_CREATED"}:
+        old_v = details.get("source_version")
+        new_v = details.get("new_version")
+        if old_v and new_v:
+            parts.append(f"{old_v} → {new_v}")
     if action in {ActivityAction.STATE_CHANGED.value, "STATE_CHANGED"}:
         old_s = details.get("old_state") or details.get("state_before")
         new_s = (

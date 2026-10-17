@@ -44,6 +44,7 @@ from creopdm.permissions import apply_caps, empty_caps, caps_for_user, test_auth
 from creopdm.services.activity_service import ActivityService
 from creopdm.services.checkin_service import CheckinService
 from creopdm.services.checkout_service import CheckoutService
+from creopdm.services.revise_service import ReviseService
 from creopdm.services.creo_service import CreoService
 from creopdm.services.email_service import EmailService
 from creopdm.services.git_service import GitService
@@ -109,6 +110,9 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
         identity,
         creo_connector,
     )
+    revisions = ReviseService(
+        objects, checkouts, workspaces, version_store, locks, activities, identity
+    )
     metadata = MetadataService(objects, workspaces)
     thumbnails = ThumbnailService(workspaces)
     ai_snapshots = AiSnapshotService(objects)
@@ -136,6 +140,7 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
         workspaces=workspaces,
         checkouts=checkouts,
         checkins=checkins,
+        revisions=revisions,
         creo_service=CreoService(
             creo_connector, objects, checkouts, workspaces, metadata=metadata
         ),

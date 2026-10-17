@@ -6,23 +6,31 @@ the API can never disagree. Creating the revision itself is a later step.
 
 from __future__ import annotations
 
+import uuid as uuidlib
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from creopdm.constants import INITIAL_ITERATION, LifecycleState
+from creopdm.constants import INITIAL_ITERATION, ActivityAction, LifecycleState
 from creopdm.exceptions import (
+    RepositoryError,
     ReviseActiveCheckoutError,
     ReviseInvalidLifecycleError,
     ReviseNextRevisionExistsError,
     ReviseNotAllowedError,
     ReviseRevisionSchemeError,
     ReviseSourceNotFoundError,
+    ValidationAppError,
 )
+from creopdm.logging_setup import get_logger
+from creopdm.models.ai_snapshot import ObjectVersionSnapshot
 from creopdm.models.checkout import Checkout
 from creopdm.models.object import EngineeringObject
+from creopdm.models.parameter import Parameter
 from creopdm.models.version import ObjectVersion
 from creopdm.product_state import (
     product_allows_op,
@@ -30,6 +38,19 @@ from creopdm.product_state import (
     product_state_label,
     product_state_value,
 )
+from creopdm.services.activity_service import ActivityService
+from creopdm.services.checkout_service import CheckoutService
+from creopdm.services.lock_manager import ProductLockManager
+from creopdm.services.object_service import ObjectService
+from creopdm.services.workspace_service import WorkspaceService
+from creopdm.storage.base import VersionStore
+from creopdm.utils.identity import CurrentUserProvider
+
+logger = get_logger("revise")
+
+# Server policy: a revision always carries a reason (a later setting can relax this).
+REVISE_REASON_REQUIRED = True
+REVISE_REASON_MAX_LENGTH = 500
 
 
 @dataclass(frozen=True)
@@ -155,13 +176,247 @@ def object_can_revise(obj: EngineeringObject, checkout: Checkout | None) -> bool
     return evaluate_revise(obj, checkout, check_product=False).allowed
 
 
-def ensure_can_revise(obj: EngineeringObject, checkout: Checkout | None) -> None:
-    """Raise the matching REVISE_* error when Revise is not allowed (for the create step)."""
-    result = evaluate_revise(obj, checkout)
+def raise_for(result: ReviseEligibility) -> None:
+    """Raise the REVISE_* error that matches a refused eligibility result."""
     if result.allowed:
         return
     error = {
         ReviseActiveCheckoutError.code: ReviseActiveCheckoutError,
         ReviseInvalidLifecycleError.code: ReviseInvalidLifecycleError,
+        ReviseNextRevisionExistsError.code: ReviseNextRevisionExistsError,
+        ReviseRevisionSchemeError.code: ReviseRevisionSchemeError,
+        ReviseSourceNotFoundError.code: ReviseSourceNotFoundError,
     }.get(result.code, ReviseNotAllowedError)
     raise error(result.message, result.details)
+
+
+def ensure_can_revise(obj: EngineeringObject, checkout: Checkout | None) -> None:
+    """Raise the matching REVISE_* error when Revise is not allowed."""
+    raise_for(evaluate_revise(obj, checkout))
+
+
+def clean_reason(reason: str | None) -> str:
+    """Validate the revision reason against the server policy."""
+    text = " ".join((reason or "").split())
+    if REVISE_REASON_REQUIRED and not text:
+        raise ValidationAppError("A revision reason is required.")
+    if len(text) > REVISE_REASON_MAX_LENGTH:
+        raise ValidationAppError(
+            f"The revision reason is too long (max {REVISE_REASON_MAX_LENGTH} characters)."
+        )
+    return text
+
+
+@dataclass(frozen=True)
+class RevisedVersion:
+    obj: EngineeringObject
+    source: ObjectVersion
+    version: ObjectVersion
+
+
+class ReviseService:
+    """Create the next revision (A.3 RELEASED -> B.1 IN_WORK) of the same object."""
+
+    def __init__(
+        self,
+        objects: ObjectService,
+        checkouts: CheckoutService,
+        workspaces: WorkspaceService,
+        store: VersionStore,
+        locks: ProductLockManager,
+        activities: ActivityService,
+        users: CurrentUserProvider,
+    ) -> None:
+        self._objects = objects
+        self._checkouts = checkouts
+        self._workspaces = workspaces
+        self._store = store
+        self._locks = locks
+        self._activities = activities
+        self._users = users
+
+    def revise(self, session: Session, object_uuid: str, reason: str | None) -> RevisedVersion:
+        """All-or-nothing: either B.1 exists and is current, or A.x is untouched.
+
+        The server picks the revision. Nothing the client sends other than the reason matters.
+        """
+        note = clean_reason(reason)
+        obj = self._objects.get_object(session, object_uuid)
+        product = obj.product
+        if product is not None:
+            session.refresh(product)
+        # Cheap refusal before taking the lock; the real check repeats inside it.
+        early = preview_revise(session, obj, self._checkouts.active_for(session, obj.id))
+        raise_for(early.eligibility)
+        user = self._users.get_current_user()
+        self._workspaces.ensure_vault(product)
+        repo = self._workspaces.vault_for(product)
+
+        with self._locks.acquire(product.uuid):
+            # Lock the object row (Postgres) and re-read: state may have changed while waiting.
+            session.execute(
+                select(EngineeringObject.id)
+                .where(EngineeringObject.id == obj.id)
+                .with_for_update()
+            )
+            session.refresh(obj)
+            session.refresh(product)
+            preview = preview_revise(session, obj, self._checkouts.active_for(session, obj.id))
+            raise_for(preview.eligibility)
+            source = obj.current_version
+            if source is None:
+                raise ReviseSourceNotFoundError(f"{obj.filename} has no version to revise from.")
+            new_revision = preview.new_revision
+            old_display = f"{source.revision}.{source.iteration}"
+            new_display = f"{new_revision}.{INITIAL_ITERATION}"
+
+            checkpoint = self._store.capture_checkpoint(repo)
+            message = (
+                "CreoPDM Revise\n\n"
+                f"Object: {obj.filename}\n"
+                f"Object UUID: {obj.uuid}\n"
+                f"From: {old_display}\n"
+                f"To: {new_display}\n"
+                "Operation: REVISE\n"
+                f"Reason: {note}"
+            )
+            # Content is unchanged: an empty commit gives B.1 its own repository state while
+            # A.x's commit and blob stay exactly as they were. Informational message only.
+            try:
+                git_hash = self._store.store_version(repo, [], message, user, allow_empty=True)
+            except Exception as exc:
+                logger.exception("Git store failed during revise of %s", obj.filename)
+                self._rollback_git(repo, checkpoint)
+                raise RepositoryError(
+                    "The new revision could not be stored in the vault, so nothing was changed.",
+                    details={"file": obj.filename},
+                ) from exc
+            now = datetime.now(timezone.utc)
+            try:
+                if source.lifecycle_state != LifecycleState.RELEASED.value:
+                    # Make the source's own state explicit before the object row moves on.
+                    source.lifecycle_state = LifecycleState.RELEASED.value
+                version = ObjectVersion(
+                    uuid=str(uuidlib.uuid4()),
+                    object_id=obj.id,
+                    revision=new_revision,
+                    iteration=INITIAL_ITERATION,
+                    filename=source.filename,
+                    relative_path=source.relative_path,
+                    creo_release=source.creo_release,
+                    identity_json=source.identity_json,
+                    materials_json=source.materials_json,
+                    bom_json=source.bom_json,
+                    units_json=source.units_json,
+                    mass_json=source.mass_json,
+                    family_table_json=source.family_table_json,
+                    features_json=source.features_json,
+                    git_commit_hash=git_hash or source.git_commit_hash,
+                    content_hash=source.content_hash,
+                    file_size=source.file_size,
+                    created_by=user.user_name,
+                    created_at=now,
+                    comment=f"Revision {new_revision} created from {old_display}: {note}",
+                    lifecycle_state=LifecycleState.IN_WORK.value,
+                    created_from_version_id=source.id,
+                    revision_reason=note,
+                )
+                session.add(version)
+                session.flush()
+                self._copy_metadata(session, obj, source, version)
+                obj.revision = new_revision
+                obj.iteration = INITIAL_ITERATION
+                obj.lifecycle_state = LifecycleState.IN_WORK.value
+                obj.current_version_id = version.id
+                obj.updated_at = now
+                session.flush()
+                self._activities.record(
+                    session,
+                    ActivityAction.REVISION_CREATED,
+                    user,
+                    product_id=product.id,
+                    object_id=obj.id,
+                    details={
+                        "filename": obj.filename,
+                        "object_uuid": obj.uuid,
+                        "source_version": old_display,
+                        "source_version_id": source.uuid,
+                        "new_version": new_display,
+                        "new_version_id": version.uuid,
+                        "from_revision": source.revision,
+                        "from_iteration": source.iteration,
+                        "to_revision": new_revision,
+                        "to_iteration": INITIAL_ITERATION,
+                        "reason": note,
+                        "git_commit": (git_hash or "")[:40] or None,
+                    },
+                    comment=note,
+                )
+            except IntegrityError as exc:
+                self._rollback_git(repo, checkpoint)
+                raise ReviseNextRevisionExistsError(
+                    f"{obj.filename} already has a revision {new_revision}.",
+                    details={"revision": new_revision},
+                ) from exc
+            except Exception as exc:
+                logger.exception("Revise failed after storing the Git state for %s", obj.filename)
+                self._rollback_git(repo, checkpoint)
+                raise RepositoryError(
+                    "The revision could not be saved, so nothing was changed.",
+                    details={"file": obj.filename},
+                ) from exc
+            logger.info("Revised %s %s -> %s", obj.filename, old_display, new_display)
+            session.refresh(obj)
+            return RevisedVersion(obj=obj, source=source, version=version)
+
+    def _rollback_git(self, repo, checkpoint: str | None) -> None:
+        if not checkpoint:
+            return
+        try:
+            self._store.restore_checkpoint(repo, checkpoint)
+        except Exception:
+            logger.exception("Could not restore the vault after a failed revise")
+
+    @staticmethod
+    def _copy_metadata(
+        session: Session,
+        obj: EngineeringObject,
+        source: ObjectVersion,
+        version: ObjectVersion,
+    ) -> None:
+        """B.1 gets its own metadata rows, never a pointer to the source's.
+
+        Version JSON columns (identity, materials, BOM/structure, units, mass, features) are copied
+        by value on the row; parameters and the AI snapshot are separate rows copied here. System
+        fields (lifecycle, created_*, revision, iteration, ids) are fresh, not inherited.
+        """
+        for param in session.scalars(select(Parameter).where(Parameter.version_id == source.id)):
+            session.add(
+                Parameter(
+                    object_id=obj.id,
+                    version_id=version.id,
+                    name=param.name,
+                    value=param.value,
+                    data_type=param.data_type,
+                    units=param.units,
+                    description=param.description,
+                    is_designated=param.is_designated,
+                )
+            )
+        snap = session.scalar(
+            select(ObjectVersionSnapshot).where(ObjectVersionSnapshot.version_id == source.id)
+        )
+        if snap is not None:
+            session.add(
+                ObjectVersionSnapshot(
+                    uuid=str(uuidlib.uuid4()),
+                    object_id=obj.id,
+                    version_id=version.id,
+                    schema_version=snap.schema_version,
+                    content_hash=snap.content_hash,
+                    capture_status=snap.capture_status,
+                    capture_errors=snap.capture_errors,
+                    snapshot_json=snap.snapshot_json,
+                )
+            )
+        session.flush()
