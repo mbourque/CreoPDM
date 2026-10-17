@@ -497,6 +497,41 @@ class WorkspaceService:
             return destination
         return self.materialize(product, obj, writable=False, overwrite_modified=True)
 
+    def discard_vault_saves(self, product: Product, obj: EngineeringObject) -> bool:
+        """Drop saves that reached the vault after the tip: back to the checked-in version.
+
+        That is a modified tip file (restored from Git) and any higher ``.N`` save of the same
+        model staged beside it. Files on the user's own PC are never touched. Returns True when
+        something was discarded.
+        """
+        status = self._git_status(product)
+        if not status.dirty:
+            return False
+        extras, vault, dirty_paths, untracked_by_logical = self._status_lookups(product, status)
+        rel = obj.relative_path.replace("\\", "/")
+        logical = CreoFileManager.logical_repo_path(rel, extras)
+        recorded_number = CreoFileManager.save_number(obj.filename, extras)
+        changed = False
+        for path in untracked_by_logical.get(logical, ()):
+            if not path.is_file():
+                continue
+            if CreoFileManager.save_number(path.name, extras) <= recorded_number:
+                continue
+            try:
+                set_file_writable(path)
+                remove_file(path)
+                changed = True
+            except Exception:
+                logger.warning("Could not remove staged save %s", path)
+        tip = vault / rel
+        if rel in dirty_paths and tip.is_file() and self._file_modified(tip, obj):
+            self._restore_tracked(product, rel)
+            changed = True
+        if changed:
+            self._try_set_mode(tip, False)
+            logger.info("Discarded unsaved vault changes for %s", obj.filename)
+        return changed
+
     def locate_content(self, product_or_folder: Product | str, obj: EngineeringObject) -> Path:
         extras = self._cad_extensions()
         for directory in self._workspace_search_dirs(product_or_folder, obj):

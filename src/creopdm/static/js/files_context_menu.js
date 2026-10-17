@@ -47,6 +47,14 @@
       needsEmbedded: true,
     },
     {
+      action: "discard-changes",
+      label: "Discard changes…",
+      title:
+        "Throw away the unsaved changes saved in the vault for this file and go back to the checked-in version. Your own PC files are not touched.",
+      needsEmbedded: true,
+      danger: true,
+    },
+    {
       action: "revise",
       label: "Revise…",
       title:
@@ -92,7 +100,7 @@
    * @param {object} state
    * @param {Array<object>} state.rows normalized selection rows:
    *   uuid, relativePath, canCheckout, owned, canCheckin, localCache,
-   *   isNewFile, hasDetails, hasCheckinWork, isFolder, canRevise
+   *   isNewFile, hasDetails, hasCheckinWork, isFolder, canRevise, canDiscardChanges
    * @param {boolean} [state.hasOpenSpec] when set, overrides row-derived Open tip
    * @param {boolean} state.showOpen product_ui / Open control present
    * @param {boolean} state.showCheckout role ∩ lifecycle Checkout
@@ -167,6 +175,10 @@
     // Released lifecycle and "not checked out".
     var canRevise = Boolean(one && one.canRevise) && !busy;
 
+    // Discard changes: one Modified file that nobody has checked out (row flag folds in role,
+    // product state and the checkout). Undo Checkout keeps a save; this is the way to drop it.
+    var canDiscardChanges = Boolean(one && one.canDiscardChanges) && !busy;
+
     var alreadyLocal =
       rows.length > 0 &&
       rows.every(function (row) {
@@ -203,6 +215,7 @@
       canAddSelected: canAddSelected,
       canCheckin: canCheckin,
       canRevise: canRevise,
+      canDiscardChanges: canDiscardChanges,
       canDownload: canDownload,
       canExport: canExport,
       canDiscardLocal: canDiscardLocal,
@@ -219,6 +232,7 @@
         caps.canAddSelected ||
         caps.canCheckin ||
         caps.canRevise ||
+        caps.canDiscardChanges ||
         caps.canDownload ||
         caps.canExport ||
         caps.canDiscardLocal
@@ -261,6 +275,7 @@
       "add-selected": caps.canAddSelected,
       checkin: caps.canCheckin,
       revise: caps.canRevise,
+      "discard-changes": caps.canDiscardChanges,
       download: caps.canDownload,
       export: caps.canExport,
       "discard-local": caps.canDiscardLocal,

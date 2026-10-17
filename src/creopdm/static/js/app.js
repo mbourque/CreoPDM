@@ -2366,6 +2366,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
                   ? "1"
                   : "0"
               }"
+              data-can-discard="${
+                document.querySelector("#metric-filters")?.dataset.showUndo === "1" &&
+                obj.modified_locally &&
+                !obj.checkout_user &&
+                !obj.owned_by_me
+                  ? "1"
+                  : "0"
+              }"
               data-owned="${obj.owned_by_me ? "1" : "0"}"
               data-checked-out="${obj.owned_by_me || obj.checkout_user ? "1" : "0"}"
               data-modified-locally="${modifiedLocally ? "1" : "0"}"
@@ -4009,6 +4017,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       hasCheckinWork: rowHasCheckinWork(row),
       isFolder: row.classList.contains("folder-row"),
       canRevise: row.dataset.canRevise === "1",
+      canDiscardChanges: row.dataset.canDiscard === "1",
     }));
     // Folder selection contributes export paths (not row uuids alone).
     if (selectedFolderPaths().length && !rows.some((row) => row.isFolder)) {
@@ -4164,6 +4173,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       void reviseSelected();
       return;
     }
+    if (action === "discard-changes") {
+      const rows = selectedRows();
+      void discardVaultChanges(rows.length === 1 ? rows[0].dataset.uuid : "");
+      return;
+    }
     if (action === "export") {
       exportSelectedBtn?.click();
       return;
@@ -4172,6 +4186,48 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       discardLocalBtn?.click();
     }
   }
+
+  /**
+   * Discard changes…: drop the unsaved save that sits in the vault for an unlocked file and go
+   * back to the checked-in version. Undo Checkout deliberately keeps such a save, so this is the
+   * explicit way out of a file that keeps reading "Modified". Local PC files are not touched.
+   */
+  async function discardVaultChanges(objectUuid) {
+    const uuid = String(objectUuid || "").trim();
+    if (!uuid) {
+      showError($("#toolbar-error"), "Select one file to discard changes for.");
+      return;
+    }
+    const ok = window.confirm(
+      "Discard changes for this file?\n\nThe unsaved changes saved in the vault are thrown away " +
+        "and the file goes back to its checked-in version. Files on your own PC are not touched."
+    );
+    if (!ok) return;
+    showError($("#toolbar-error"), "");
+    let response;
+    try {
+      response = await withBusy("Discarding changes…", () =>
+        fetch(`/api/objects/${encodeURIComponent(uuid)}/discard-changes`, { method: "POST" })
+      );
+    } catch {
+      showError($("#toolbar-error"), "Could not reach the server. Nothing was changed.");
+      return;
+    }
+    if (!response.ok) {
+      showError($("#toolbar-error"), await readError(response));
+      return;
+    }
+    try {
+      sessionStorage.setItem("creopdmNotice", "Changes discarded: the file is back to its checked-in version.");
+    } catch {
+      /* storage blocked: the refreshed list still shows the file as unchanged */
+    }
+    await reloadPage({ force: true, keepBusy: true, busyMessage: "Refreshing…" });
+  }
+
+  document.querySelector("#discard-changes-btn")?.addEventListener("click", () => {
+    void discardVaultChanges(document.querySelector("#discard-changes-btn")?.dataset.uuid || "");
+  });
 
   /**
    * Revise: ask the server for the source version and the revision it WOULD create, and show

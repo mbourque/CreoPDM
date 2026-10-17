@@ -405,6 +405,23 @@ def undo_checkout(
     return present_object(ctx, db, obj)
 
 
+@router.post("/api/objects/{object_id}/discard-changes", response_model=ObjectResponse)
+def discard_changes(
+    object_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> ObjectResponse:
+    """Discard unsaved vault changes of an unlocked file (back to the checked-in version)."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_CHECKOUT)
+    obj = ctx.objects.get_object(db, object_id)
+    require_product_access(request, ctx, obj.product)
+    obj = ctx.checkouts.discard_changes(db, object_id)
+    db.commit()
+    db.refresh(obj)
+    return present_object(ctx, db, obj)
+
+
 @router.post("/api/objects/{object_id}/force-undo-checkout", response_model=ObjectResponse)
 def force_undo_checkout(
     object_id: str,

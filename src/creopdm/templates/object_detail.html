@@ -846,6 +846,10 @@
       </div>
     </div>
     {% endif %}
+    {% if product_ui.show_undo_checkout and object.modified_locally and not object.checkout_user and not object.owned_by_me %}
+    <button type="button" class="btn btn-danger" id="discard-changes-btn" data-uuid="{{ object.uuid }}"
+            title="Throw away the unsaved changes saved in the vault for this file and go back to the checked-in version.">Discard changes…</button>
+    {% endif %}
     {% if product_ui.show_revise and object.can_revise %}
     <button type="button" class="btn" id="revise-btn" data-uuid="{{ object.uuid }}"
             title="Create the next revision of this released file (A.3 → B.1).">Revise…</button>

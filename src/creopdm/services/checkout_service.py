@@ -18,6 +18,7 @@ from creopdm.exceptions import (
     ObjectAlreadyCheckedOutError,
     ObjectNotFoundError,
     ReleasedObjectError,
+    ValidationAppError,
     batch_failure,
 )
 from creopdm.logging_setup import get_logger
@@ -447,6 +448,42 @@ class CheckoutService:
                 },
             )
             logger.info("Cancelled checkout of %s", obj.filename)
+
+    def discard_changes(self, session: Session, object_uuid: str) -> EngineeringObject:
+        """Throw away unsaved vault changes of a file nobody has checked out.
+
+        Undo Checkout keeps a save on purpose (it can still be checked in); this is the explicit
+        way to drop it, back to the checked-in version. A held checkout must be undone first.
+        """
+        obj = self._objects.get_object(session, object_uuid)
+        product = obj.product
+        if product is not None:
+            session.refresh(product)
+        ensure_product_allows(product, "checkout", action="discard changes")
+        user = self._users.get_current_user()
+        with self._locks.acquire(product.uuid):
+            existing = self.active_for(session, obj.id)
+            if existing is not None:
+                raise ObjectAlreadyCheckedOutError(
+                    f"{obj.filename} is checked out by {existing.user_name}. "
+                    "Undo the checkout first, then discard the changes.",
+                    details={"user": existing.user_name},
+                )
+            if not self._workspaces.discard_vault_saves(product, obj):
+                raise ValidationAppError(
+                    f"{obj.filename} has no unsaved changes in the vault to discard.",
+                    details={"filename": obj.filename},
+                )
+            self._activities.record(
+                session,
+                ActivityAction.CHANGES_DISCARDED,
+                user,
+                product_id=product.id,
+                object_id=obj.id,
+                details={"filename": obj.filename, "object_uuid": obj.uuid},
+            )
+            logger.info("Discarded vault changes of %s", obj.filename)
+        return obj
 
     def force_undo_checkout(self, session: Session, object_uuid: str) -> str:
         """Release any user's checkout without committing a new version.

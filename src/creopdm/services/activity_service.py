@@ -51,6 +51,7 @@ ACTION_LABELS: dict[str, str] = {
     ActivityAction.CHECKED_IN.value: "Checked in",
     ActivityAction.VERSION_RESTORED.value: "Version restored",
     ActivityAction.REVISION_CREATED.value: "Revision created",
+    ActivityAction.CHANGES_DISCARDED.value: "Changes discarded",
     ActivityAction.VAULT_HISTORY_COMPACTED.value: "Vault history compacted",
     ActivityAction.PRODUCT_DB_REBUILT.value: "Product DB rebuilt",
     ActivityAction.USER_CREATED.value: "User created",
