@@ -497,6 +497,18 @@ class WorkspaceService:
             return destination
         return self.materialize(product, obj, writable=False, overwrite_modified=True)
 
+    def locate_content(self, product_or_folder: Product | str, obj: EngineeringObject) -> Path:
+        extras = self._cad_extensions()
+        for directory in self._workspace_search_dirs(product_or_folder, obj):
+            latest = CreoFileManager.latest_in_directory(directory, obj.filename, extras)
+            if latest is not None and latest.is_file():
+                return latest
+        destination = self.workspace_file_path(product_or_folder, obj)
+        raise PathValidationError(
+            f"Vault file not found for {obj.filename}.",
+            details={"workspace": str(destination)},
+        )
+
     def discard_vault_saves(self, product: Product, obj: EngineeringObject) -> bool:
         """Drop saves that reached the vault after the tip: back to the checked-in version.
 
@@ -531,18 +543,6 @@ class WorkspaceService:
             self._try_set_mode(tip, False)
             logger.info("Discarded unsaved vault changes for %s", obj.filename)
         return changed
-
-    def locate_content(self, product_or_folder: Product | str, obj: EngineeringObject) -> Path:
-        extras = self._cad_extensions()
-        for directory in self._workspace_search_dirs(product_or_folder, obj):
-            latest = CreoFileManager.latest_in_directory(directory, obj.filename, extras)
-            if latest is not None and latest.is_file():
-                return latest
-        destination = self.workspace_file_path(product_or_folder, obj)
-        raise PathValidationError(
-            f"Vault file not found for {obj.filename}.",
-            details={"workspace": str(destination)},
-        )
 
     def stage_workspace_upload(
         self,
