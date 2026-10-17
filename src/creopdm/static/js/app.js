@@ -2366,14 +2366,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
                   ? "1"
                   : "0"
               }"
-              data-can-discard="${
-                document.querySelector("#metric-filters")?.dataset.showUndo === "1" &&
-                obj.modified_locally &&
-                !obj.checkout_user &&
-                !obj.owned_by_me
-                  ? "1"
-                  : "0"
-              }"
               data-owned="${obj.owned_by_me ? "1" : "0"}"
               data-checked-out="${obj.owned_by_me || obj.checkout_user ? "1" : "0"}"
               data-modified-locally="${modifiedLocally ? "1" : "0"}"
@@ -2804,6 +2796,25 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     );
   }
 
+  /**
+   * A "Newer local save" row on the Modified tab (for example shaft.prt.2 on this PC beside the
+   * checked-in shaft.prt). Remove from Workspace… moves that local file to the Recycle Bin, which
+   * is how you get rid of a save you do not want to check in. The vault version is untouched.
+   */
+  function isLocalSaveQueueRow(row) {
+    return (
+      row.classList.contains("queue-row")
+      && row.dataset.localCache === "1"
+      && Boolean(row.dataset.relativePath)
+      && Boolean(row.dataset.uuid)
+      && Boolean(row.closest("#modified-table"))
+    );
+  }
+
+  function isRemovableLocalRow(row) {
+    return row.dataset.localCache === "1" && (isNewFileQueueRow(row) || isLocalSaveQueueRow(row));
+  }
+
   function selectionIsAddOnly(rows) {
     return rows.length > 0 && rows.every(isNewFileQueueRow);
   }
@@ -3136,9 +3147,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         ? "Download the selected vault files or folders as a zip."
         : "Download the selected vault files or folders as a zip. Greyed out until something is selected.";
     }
-    const localNewSelected = selected.filter(
-      (row) => isNewFileQueueRow(row) && row.dataset.localCache === "1"
-    );
+    const localNewSelected = selected.filter((row) => isRemovableLocalRow(row));
     const vaultNewSelected = selected.filter(
       (row) => isNewFileQueueRow(row) && row.dataset.localCache !== "1"
     );
@@ -4000,6 +4009,20 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return api;
   }
 
+  function rowOffersDiscardChanges(row) {
+    if (isLocalSaveQueueRow(row)) return true;
+    if (document.querySelector("#metric-filters")?.dataset.showUndo !== "1") return false;
+    const vaultSave =
+      Boolean(row.closest("#modified-table")) &&
+      Boolean(row.dataset.uuid) &&
+      row.dataset.localCache !== "1";
+    const modifiedUnlocked =
+      row.dataset.modifiedLocally === "1" &&
+      row.dataset.owned !== "1" &&
+      row.dataset.checkedOut !== "1";
+    return vaultSave || modifiedUnlocked;
+  }
+
   function filesContextMenuCapabilities() {
     // Shared with Creo navigator embed — do not fork hide rules here.
     const selected = selectedRows();
@@ -4013,11 +4036,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       canCheckin: row.dataset.canCheckin === "1",
       localCache: row.dataset.localCache === "1",
       isNewFile: isNewFileQueueRow(row),
+      isLocalSave: isLocalSaveQueueRow(row),
       hasDetails: Boolean(historyBtn) && Boolean(rowHistoryHref(row)),
       hasCheckinWork: rowHasCheckinWork(row),
       isFolder: row.classList.contains("folder-row"),
       canRevise: row.dataset.canRevise === "1",
-      canDiscardChanges: row.dataset.canDiscard === "1",
+      // Live row state (not a render-time flag): Undo Checkout repaints the row in place, so a
+      // flag fixed at render time stayed off until a reload. Role/product gate: data-show-undo.
+      // Modified-tab rows: a save staged in the vault (server Discard) or a Newer local save on
+      // this PC (moved to the Recycle Bin) both offer Discard changes… right where they are listed.
+      canDiscardChanges: rowOffersDiscardChanges(row),
     }));
     // Folder selection contributes export paths (not row uuids alone).
     if (selectedFolderPaths().length && !rows.some((row) => row.isFolder)) {
@@ -4175,6 +4203,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     if (action === "discard-changes") {
       const rows = selectedRows();
+      if (rows.length === 1 && isLocalSaveQueueRow(rows[0])) {
+        // A Newer local save lives on this PC: same confirm + Recycle Bin move as Remove from Workspace.
+        discardLocalBtn?.click();
+        return;
+      }
       void discardVaultChanges(rows.length === 1 ? rows[0].dataset.uuid : "");
       return;
     }
@@ -6916,9 +6949,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   });
 
   discardLocalBtn?.addEventListener("click", async () => {
-    const selected = selectedRows().filter(
-      (row) => isNewFileQueueRow(row) && row.dataset.localCache === "1"
-    );
+    const selected = selectedRows().filter((row) => isRemovableLocalRow(row));
     const paths = [
       ...new Set(selected.map((row) => row.dataset.relativePath).filter(Boolean)),
     ];
@@ -6929,8 +6960,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       title: paths.length === 1 ? "Remove from workspace" : `Remove ${paths.length} files from workspace`,
       lead:
         paths.length === 1
-          ? "This moves the file from the local workspace on this PC to the Recycle Bin. The vault and product list are unchanged."
-          : "These files move from the local workspace on this PC to the Recycle Bin. The vault and product list are unchanged.",
+          ? "This moves the file from the local workspace on this PC to the Recycle Bin. The vault version and product list are unchanged."
+          : "These files move from the local workspace on this PC to the Recycle Bin. The vault versions and product list are unchanged.",
       note: "This cannot be undone from CreoPDM. Restore from the Recycle Bin on this PC if needed.",
       submitLabel: "Remove from Workspace",
     });

@@ -50,7 +50,7 @@
       action: "discard-changes",
       label: "Discard changes…",
       title:
-        "Throw away the unsaved changes saved in the vault for this file and go back to the checked-in version. Your own PC files are not touched.",
+        "Throw away the unsaved changes for this file and go back to the checked-in version: a save staged in the vault is discarded; a Newer local save on this PC moves to the Recycle Bin.",
       needsEmbedded: true,
       danger: true,
     },
@@ -100,7 +100,7 @@
    * @param {object} state
    * @param {Array<object>} state.rows normalized selection rows:
    *   uuid, relativePath, canCheckout, owned, canCheckin, localCache,
-   *   isNewFile, hasDetails, hasCheckinWork, isFolder, canRevise, canDiscardChanges
+   *   isNewFile, hasDetails, hasCheckinWork, isFolder, canRevise, canDiscardChanges, isLocalSave
    * @param {boolean} [state.hasOpenSpec] when set, overrides row-derived Open tip
    * @param {boolean} state.showOpen product_ui / Open control present
    * @param {boolean} state.showCheckout role ∩ lifecycle Checkout
@@ -200,10 +200,11 @@
     });
     var canExport = Boolean(state.showExportObjects) && exportHasSelection && !busy;
 
+    // Remove from Workspace: a new local file, or a "Newer local save" (shaft.prt.2) on this PC.
     var canDiscardLocal =
       Boolean(state.canDiscardLocalControl) &&
       rows.some(function (row) {
-        return Boolean(row && row.isNewFile && row.localCache);
+        return Boolean(row && row.localCache && (row.isNewFile || row.isLocalSave));
       }) &&
       !busy;
 

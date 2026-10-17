@@ -72,6 +72,12 @@ def test_discard_changes_ui_is_wired(client):
     script = app_js_with_modules(client.get("/static/js/app.js")).text
     assert "/discard-changes" in script and "discardVaultChanges" in script
     assert 'action === "discard-changes"' in script
-    assert "canDiscardChanges: row.dataset.canDiscard" in script
+    # Live row state, not a render-time flag (Undo Checkout repaints rows in place).
+    assert "canDiscardChanges:" in script and 'row.dataset.modifiedLocally === "1"' in script
+    assert "data-can-discard" not in script
+    # A "Newer local save" row on the Modified tab can be removed from the local workspace.
+    assert "function rowOffersDiscardChanges" in script
+    assert "function isLocalSaveQueueRow" in script and "isLocalSave: isLocalSaveQueueRow(row)" in script
     menu = client.get("/static/js/files_context_menu.js").text
     assert 'action: "discard-changes"' in menu and "canDiscardChanges" in menu
+    assert "row.isNewFile || row.isLocalSave" in menu

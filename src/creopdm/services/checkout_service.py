@@ -471,7 +471,8 @@ class CheckoutService:
                 )
             if not self._workspaces.discard_vault_saves(product, obj):
                 raise ValidationAppError(
-                    f"{obj.filename} has no unsaved changes in the vault to discard.",
+                    f"{obj.filename} has no unsaved changes in the vault to discard. "
+                    "If it still reads Modified, the changed copy is in your local workspace on this PC.",
                     details={"filename": obj.filename},
                 )
             self._activities.record(
