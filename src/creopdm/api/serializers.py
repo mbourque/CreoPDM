@@ -15,6 +15,7 @@ from creopdm.product_state import (
 )
 from creopdm.schemas.common import ObjectResponse, ObjectVersionResponse, ProductResponse
 from creopdm.services.checkout_service import CheckoutView
+from creopdm.services.revise_service import object_can_revise
 from creopdm.utils.classify import display_type_label, resolve_type_icon
 from creopdm.utils.creo_model_class import version_has_creo_metadata
 from creopdm.utils.identity import UserIdentity
@@ -127,6 +128,7 @@ def object_to_response(
         modified_locally=modified_locally,
         can_checkout=view.can_checkout if view else obj.lifecycle_state == "IN_WORK",
         can_checkin=can_checkin if can_checkin is not None else (view.can_checkin if view else False),
+        can_revise=object_can_revise(obj, checkout),
         in_workspace=in_workspace,
         creo_metadata_captured=captured,
         created_at=as_utc(obj.created_at),

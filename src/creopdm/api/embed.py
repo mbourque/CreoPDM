@@ -65,6 +65,7 @@ def _explorer_context_payload(
         can_delete_product=bool(caps.get("can_delete_product")),
         can_update_metadata=bool(caps.get("can_update_metadata")),
         can_revert_objects=bool(caps.get("can_revert_objects")),
+        can_revise_objects=bool(caps.get("can_revise_objects")),
     )
     top_level: list[str] = []
     if product is not None and ctx is not None and db is not None:
@@ -85,6 +86,7 @@ def _explorer_context_payload(
         show_undo_checkout=bool(ui.show_undo_checkout),
         show_checkin=bool(ui.show_checkin),
         show_export_objects=bool(ui.show_export_objects),
+        show_revise=bool(ui.show_revise),
         top_level_assembly_uuids=top_level,
     )
 

@@ -17,6 +17,7 @@ from creopdm.auth_constants import (
     PERMISSION_OBJECTS_METADATA,
     PERMISSION_OBJECTS_REMOVE,
     PERMISSION_OBJECTS_REVERT,
+    PERMISSION_OBJECTS_REVISE,
     PERMISSION_OBJECTS_VIEW,
 )
 from creopdm.context import AppContext
@@ -42,6 +43,7 @@ from creopdm.schemas.common import (
     CreoMetadataResponse,
     ObjectResponse,
     ObjectVersionResponse,
+    ReviseEligibilityResponse,
     WhereUsedResponse,
     WorkspaceContentResponse,
 )
@@ -413,6 +415,34 @@ def object_history(
     require_product_access(request, ctx, obj.product)
     versions = ctx.objects.object_history(db, object_id)
     return [item for item in (version_to_response(v) for v in versions) if item is not None]
+
+
+@router.get("/api/objects/{object_id}/revise-eligibility", response_model=ReviseEligibilityResponse)
+def revise_eligibility(
+    object_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> ReviseEligibilityResponse:
+    """May this file get a new revision? Enforced here, not by the button: creates nothing."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_REVISE)
+    obj = ctx.objects.get_object(db, object_id)
+    require_product_access(request, ctx, obj.product)
+    from creopdm.api.serializers import revision_display
+    from creopdm.services.revise_service import evaluate_revise
+
+    result = evaluate_revise(obj, ctx.checkouts.active_for(db, obj.id))
+    return ReviseEligibilityResponse(
+        object_id=obj.uuid,
+        filename=obj.filename,
+        allowed=result.allowed,
+        code=result.code,
+        message=result.message,
+        revision=obj.revision,
+        iteration=obj.iteration,
+        display_version=revision_display(obj.revision, obj.iteration),
+        lifecycle_state=obj.lifecycle_state,
+    )
 
 
 @router.post("/api/objects/{object_id}/versions/{version_id}/revert", response_model=ObjectResponse)

@@ -68,6 +68,27 @@ class ReleasedObjectError(CreoPDMError):
     http_status = 409
 
 
+class ReviseNotAllowedError(CreoPDMError):
+    """Revise blocked by product state or policy."""
+
+    code = "REVISE_NOT_ALLOWED"
+    http_status = 409
+
+
+class ReviseInvalidLifecycleError(CreoPDMError):
+    """Only a Released file can be revised."""
+
+    code = "REVISE_INVALID_LIFECYCLE"
+    http_status = 409
+
+
+class ReviseActiveCheckoutError(CreoPDMError):
+    """A checkout would make the revise source ambiguous."""
+
+    code = "REVISE_ACTIVE_CHECKOUT"
+    http_status = 409
+
+
 class WorkspaceConflictError(CreoPDMError):
     code = "WORKSPACE_CONFLICT"
     http_status = 409

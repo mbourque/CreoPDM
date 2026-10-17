@@ -221,6 +221,7 @@
               data-relative-path="{{ obj.relative_path }}"
               data-can-checkout="{{ '1' if obj.can_checkout else '0' }}"
               data-can-checkin="{{ '1' if obj.can_checkin else '0' }}"
+              data-can-revise="{{ '1' if product_ui.show_revise and obj.can_revise else '0' }}"
               data-owned="{{ '1' if obj.owned_by_me else '0' }}"
               data-checked-out="{{ '1' if obj.owned_by_me or obj.checkout_user else '0' }}"
               data-modified-locally="{{ '1' if obj.modified_locally else '0' }}"

@@ -832,6 +832,10 @@
       </div>
     </div>
     {% endif %}
+    {% if product_ui.show_revise and object.can_revise %}
+    <button type="button" class="btn" id="revise-btn" data-uuid="{{ object.uuid }}"
+            title="Create the next revision of this released file (A.3 → B.1).">Revise…</button>
+    {% endif %}
     {% if product_ui.show_revert and history|length > 1 %}
     <span class="toolbar-tip" id="revert-version-tip" title="Select an older History row, then restore that version’s content and filename to the vault and local workspace as a new check-in.">
       <button type="button" class="btn btn-danger" id="revert-version-btn" disabled hidden

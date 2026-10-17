@@ -51,6 +51,7 @@ PERMISSION_OBJECTS_CHECKIN = "objects.checkin"
 PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT = "objects.force_undo_checkout"
 PERMISSION_OBJECTS_REMOVE = "objects.remove"
 PERMISSION_OBJECTS_REVERT = "objects.revert"
+PERMISSION_OBJECTS_REVISE = "objects.revise"
 PERMISSION_OBJECTS_METADATA = "objects.metadata"
 PERMISSION_OBJECTS_COPY_TO_VAULT = "objects.copy_to_vault"
 PERMISSION_PRODUCTS_EXPORT = "products.export"
@@ -102,6 +103,7 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     ),
     (PERMISSION_OBJECTS_REMOVE, "Remove objects from products"),
     (PERMISSION_OBJECTS_REVERT, "Restore an older version as the working version"),
+    (PERMISSION_OBJECTS_REVISE, "Create the next revision of a released file (Revise)"),
     (PERMISSION_OBJECTS_METADATA, "Update Creo metadata on objects"),
     (PERMISSION_OBJECTS_COPY_TO_VAULT, "Copy selected files into the vault (Copy to Vault)"),
     (PERMISSION_PRODUCTS_EXPORT, "Export an entire product as a zip download"),
@@ -191,6 +193,7 @@ PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT,
             PERMISSION_OBJECTS_REMOVE,
             PERMISSION_OBJECTS_REVERT,
+            PERMISSION_OBJECTS_REVISE,
             PERMISSION_OBJECTS_METADATA,
             PERMISSION_OBJECTS_COPY_TO_VAULT,
             PERMISSION_OBJECTS_EXPORT,
@@ -206,6 +209,7 @@ _AUTHORING = (
     PERMISSION_OBJECTS_CHECKIN,
     PERMISSION_OBJECTS_REMOVE,
     PERMISSION_OBJECTS_REVERT,
+    PERMISSION_OBJECTS_REVISE,
     PERMISSION_OBJECTS_METADATA,
     PERMISSION_PRODUCTS_EXPORT,
     PERMISSION_OBJECTS_EXPORT,

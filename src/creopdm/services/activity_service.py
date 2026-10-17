@@ -729,6 +729,9 @@ def _event_summary(
         )
         if old_s and new_s and old_s != new_s:
             parts.append(f"state {old_s} → {new_s}")
+        released = details.get("objects_released")
+        if isinstance(released, int) and released > 0:
+            parts.append(f"{released} file{'s' if released != 1 else ''} released")
     if action in {ActivityAction.PRODUCT_UPDATED.value, "PRODUCT_UPDATED"}:
         old_name = details.get("old_name")
         new_name = details.get("name")

@@ -174,7 +174,9 @@ def test_admin_copy_product_is_a_fresh_add(auth_client, auth_ctx):
         "/admin/products/promote",
         data={
             "product_id": source["uuid"],
-            "state": "RELEASED",
+            # Frozen source with files still checked out. (Releasing would be refused while a
+            # file is checked out; APPROVED freezes the same way without that rule.)
+            "state": "APPROVED",
             "confirm_password": "AdminPass1",
         },
     )

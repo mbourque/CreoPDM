@@ -17,6 +17,7 @@ from creopdm.auth_constants import (
     PERMISSION_OBJECTS_METADATA,
     PERMISSION_OBJECTS_REMOVE,
     PERMISSION_OBJECTS_REVERT,
+    PERMISSION_OBJECTS_REVISE,
     PERMISSION_OBJECTS_VIEW,
     PERMISSION_PRODUCTS_ASSIGN,
     PERMISSION_PRODUCTS_CREATE,
@@ -80,6 +81,7 @@ class CapabilityFlags:
     can_force_undo_checkout: bool
     can_remove_objects: bool
     can_revert_objects: bool
+    can_revise_objects: bool
     can_update_metadata: bool
     can_copy_to_vault: bool
     can_export_product: bool
@@ -119,6 +121,7 @@ def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
         can_force_undo_checkout=PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT in keys,
         can_remove_objects=PERMISSION_OBJECTS_REMOVE in keys,
         can_revert_objects=PERMISSION_OBJECTS_REVERT in keys,
+        can_revise_objects=PERMISSION_OBJECTS_REVISE in keys,
         can_update_metadata=PERMISSION_OBJECTS_METADATA in keys,
         can_copy_to_vault=PERMISSION_OBJECTS_COPY_TO_VAULT in keys,
         can_export_product=PERMISSION_PRODUCTS_EXPORT in keys,
@@ -170,6 +173,7 @@ def apply_caps(request: Request, caps: CapabilityFlags) -> None:
     request.state.can_force_undo_checkout = caps.can_force_undo_checkout
     request.state.can_remove_objects = caps.can_remove_objects
     request.state.can_revert_objects = caps.can_revert_objects
+    request.state.can_revise_objects = caps.can_revise_objects
     request.state.can_update_metadata = caps.can_update_metadata
     request.state.can_copy_to_vault = caps.can_copy_to_vault
     request.state.can_export_product = caps.can_export_product
@@ -220,6 +224,7 @@ def caps_dict(request: Request) -> dict:
         "can_force_undo_checkout": bool(getattr(request.state, "can_force_undo_checkout", False)),
         "can_remove_objects": bool(getattr(request.state, "can_remove_objects", False)),
         "can_revert_objects": bool(getattr(request.state, "can_revert_objects", False)),
+        "can_revise_objects": bool(getattr(request.state, "can_revise_objects", False)),
         "can_update_metadata": bool(getattr(request.state, "can_update_metadata", False)),
         "can_copy_to_vault": bool(getattr(request.state, "can_copy_to_vault", False)),
         "can_export_product": bool(getattr(request.state, "can_export_product", False)),

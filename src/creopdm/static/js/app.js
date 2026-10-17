@@ -4003,6 +4003,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       hasDetails: Boolean(historyBtn) && Boolean(rowHistoryHref(row)),
       hasCheckinWork: rowHasCheckinWork(row),
       isFolder: row.classList.contains("folder-row"),
+      canRevise: row.dataset.canRevise === "1",
     }));
     // Folder selection contributes export paths (not row uuids alone).
     if (selectedFolderPaths().length && !rows.some((row) => row.isFolder)) {
@@ -4154,6 +4155,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       checkinBtn?.click();
       return;
     }
+    if (action === "revise") {
+      void reviseSelected();
+      return;
+    }
     if (action === "export") {
       exportSelectedBtn?.click();
       return;
@@ -4162,6 +4167,49 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       discardLocalBtn?.click();
     }
   }
+
+  /**
+   * Revise (Story 1): ask the server whether this file may get a new revision and say so.
+   * The server enforces permission, product state, Released lifecycle and checkouts; the
+   * button/menu only hide what it would refuse. Creating the revision is a later step.
+   */
+  async function checkReviseEligibility(objectUuid) {
+    const uuid = String(objectUuid || "").trim();
+    if (!uuid) {
+      showError($("#toolbar-error"), "Select one file to revise.");
+      return;
+    }
+    showError($("#toolbar-error"), "");
+    let response;
+    try {
+      response = await fetch(`/api/objects/${encodeURIComponent(uuid)}/revise-eligibility`);
+    } catch {
+      showError($("#toolbar-error"), "Could not reach the server to check Revise.");
+      return;
+    }
+    if (!response.ok) {
+      showError($("#toolbar-error"), await readError(response));
+      return;
+    }
+    const body = await response.json();
+    if (body.allowed) {
+      showOk(
+        `Revise is allowed for ${body.filename} ${body.display_version}. ` +
+          "Creating the new revision is not available yet."
+      );
+    } else {
+      showError($("#toolbar-error"), body.message || "Revise is not allowed for this file.");
+    }
+  }
+
+  async function reviseSelected() {
+    const rows = selectedRows();
+    await checkReviseEligibility(rows.length === 1 ? rows[0].dataset.uuid : "");
+  }
+
+  document.querySelector("#revise-btn")?.addEventListener("click", () => {
+    void checkReviseEligibility(document.querySelector("#revise-btn")?.dataset.uuid || "");
+  });
 
   function onFileTableContextMenu(event) {
     const target = eventEl(event);
@@ -8209,6 +8257,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     if (action === "download") {
       void downloadSelectedToWorkspace();
+      return;
+    }
+    if (action === "revise") {
+      await checkReviseEligibility(String(row.dataset.uuid || "").trim());
       return;
     }
     if (action === "export") {

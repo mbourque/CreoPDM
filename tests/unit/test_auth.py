@@ -3178,6 +3178,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         PERMISSION_OBJECTS_METADATA,
         PERMISSION_OBJECTS_REMOVE,
         PERMISSION_OBJECTS_REVERT,
+        PERMISSION_OBJECTS_REVISE,
         PERMISSION_OBJECTS_VIEW,
         PERMISSION_PRODUCTS_CREATE,
         PERMISSION_PRODUCTS_DELETE,
@@ -3445,6 +3446,9 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             ),
             PERMISSION_OBJECTS_REVERT: auth_client.post(
                 f"/api/objects/{object_id}/versions/{uuid4()}/revert"
+            ),
+            PERMISSION_OBJECTS_REVISE: auth_client.get(
+                f"/api/objects/{object_id}/revise-eligibility"
             ),
             PERMISSION_OBJECTS_METADATA: auth_client.post(
                 f"/api/objects/{object_id}/creo-metadata",

@@ -23,6 +23,7 @@ from creopdm.auth_constants import (
     PERMISSION_OBJECTS_METADATA,
     PERMISSION_OBJECTS_REMOVE,
     PERMISSION_OBJECTS_REVERT,
+    PERMISSION_OBJECTS_REVISE,
     PERMISSION_OBJECTS_VIEW,
     PERMISSION_PRODUCTS_CREATE,
     PERMISSION_PRODUCTS_DELETE,
@@ -415,6 +416,9 @@ class UserService:
 
     def can_revert_objects(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_OBJECTS_REVERT)
+
+    def can_revise_objects(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_OBJECTS_REVISE)
 
     def can_update_metadata(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_OBJECTS_METADATA)

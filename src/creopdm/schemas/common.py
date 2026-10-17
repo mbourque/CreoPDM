@@ -205,6 +205,7 @@ class EmbedExplorerContextResponse(BaseModel):
     show_undo_checkout: bool = False
     show_checkin: bool = False
     show_export_objects: bool = False
+    show_revise: bool = False
     # Where Used roots — navigator Top Level toggle (same set as Files metric).
     top_level_assembly_uuids: list[str] = Field(default_factory=list)
 
@@ -263,12 +264,29 @@ class ObjectResponse(BaseModel):
     modified_locally: bool = False
     can_checkout: bool = True
     can_checkin: bool = False
+    # Object state allows Revise (Released, not checked out). Permission and the product
+    # matrix are applied separately (product_ui.show_revise) and by the server on use.
+    can_revise: bool = False
     in_workspace: bool = False
     # Tip already has Collect identity/materials — Collect all can skip Toolkit.
     creo_metadata_captured: bool = False
     created_at: datetime | None
     updated_at: datetime | None
     current_version: ObjectVersionResponse | None = None
+
+
+class ReviseEligibilityResponse(BaseModel):
+    """Server answer to "may this file be revised?" — creates nothing."""
+
+    object_id: str
+    filename: str
+    allowed: bool
+    code: str = ""
+    message: str = ""
+    revision: str
+    iteration: int
+    display_version: str
+    lifecycle_state: str
 
 
 class CheckinRequest(BaseModel):

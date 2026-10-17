@@ -485,6 +485,10 @@ class ProductService:
         )
         old_name = product.name
         state_changed = new_state is not None and new_state != old_state
+        releasing = state_changed and new_state == ProductState.RELEASED.value
+        if releasing:
+            # Releasing freezes every file: do not silently pull a checkout out from under someone.
+            self._require_no_active_checkouts(session, product)
         # Lifecycle state on Promote Products is not matrix-gated (no Change Lifecycle
         # State column) — admins with products.edit can leave Locked / any state.
 
@@ -540,6 +544,7 @@ class ProductService:
                         },
                     )
                     if state_changed:
+                        released = self._release_objects(session, product) if releasing else 0
                         self._activities.record(
                             session,
                             ActivityAction.STATE_CHANGED,
@@ -548,6 +553,7 @@ class ProductService:
                             details={
                                 "old_state": old_state,
                                 "new_state": product.state,
+                                **({"objects_released": released} if releasing else {}),
                             },
                         )
                 except Exception as exc:
@@ -566,6 +572,7 @@ class ProductService:
                 product.state = new_state
             product.updated_at = datetime.now(timezone.utc)
             session.flush()
+            released = self._release_objects(session, product) if releasing else 0
             self._activities.record(
                 session,
                 ActivityAction.STATE_CHANGED,
@@ -574,12 +581,51 @@ class ProductService:
                 details={
                     "old_state": old_state,
                     "new_state": product.state,
+                    **({"objects_released": released} if releasing else {}),
                 },
             )
 
         logger.info("Updated product %s (%s)", product.uuid, new_name)
         session.commit()
         return product
+
+    def _require_no_active_checkouts(self, session: Session, product: Product) -> None:
+        """Refuse to release a product while any of its files is checked out."""
+        rows = session.execute(
+            select(EngineeringObject.filename, Checkout.user_name)
+            .join(Checkout, Checkout.object_id == EngineeringObject.id)
+            .where(
+                EngineeringObject.product_id == product.id,
+                Checkout.status == CheckoutStatus.ACTIVE.value,
+            )
+            .order_by(EngineeringObject.filename.asc())
+        ).all()
+        if not rows:
+            return
+        shown = "; ".join(f"{name} ({owner})" for name, owner in rows[:5])
+        more = f" and {len(rows) - 5} more" if len(rows) > 5 else ""
+        raise ValidationAppError(
+            f"Cannot release {product.name}: {len(rows)} file(s) are checked out — {shown}{more}. "
+            "Check them in or undo the checkout first.",
+            details={"product": product.uuid, "checked_out": len(rows)},
+        )
+
+    def _release_objects(self, session: Session, product: Product) -> int:
+        """Releasing a product releases its in-work files (obsolete files stay obsolete).
+
+        Moving the product to an editable state later does not flip them back: a released
+        file only becomes editable again through Revise.
+        """
+        result = session.execute(
+            update(EngineeringObject)
+            .where(
+                EngineeringObject.product_id == product.id,
+                EngineeringObject.lifecycle_state == LifecycleState.IN_WORK.value,
+            )
+            .values(lifecycle_state=LifecycleState.RELEASED.value)
+        )
+        session.flush()
+        return int(result.rowcount or 0)
 
     def delete_product(self, session: Session, product_uuid: str) -> None:
         """Unregister the product and delete its CreoPDM vault folder.

@@ -48,6 +48,7 @@
   var showCheckout = root.getAttribute("data-show-checkout") === "1";
   var showUndo = root.getAttribute("data-show-undo") === "1";
   var showCheckin = root.getAttribute("data-show-checkin") === "1";
+  var showRevise = root.getAttribute("data-show-revise") === "1";
   var showExport =
     root.getAttribute("data-show-export") === "1" ||
     root.getAttribute("data-can-export") === "1";
@@ -423,6 +424,8 @@
       hasDetails: Boolean(obj.uuid && productId),
       hasCheckinWork: tipHasCheckinWork(obj),
       isFolder: false,
+      // Role and product state (show_revise), Released and not checked out (obj.can_revise).
+      canRevise: showRevise && Boolean(obj.can_revise),
     };
   }
 
@@ -929,6 +932,9 @@
       if (body && typeof body.show_checkin === "boolean") {
         showCheckin = body.show_checkin;
       }
+      if (body && typeof body.show_revise === "boolean") {
+        showRevise = body.show_revise;
+      }
       if (body && typeof body.show_export_objects === "boolean") {
         showExport = body.show_export_objects;
       }
@@ -937,6 +943,7 @@
       root.setAttribute("data-show-checkout", showCheckout ? "1" : "0");
       root.setAttribute("data-show-undo", showUndo ? "1" : "0");
       root.setAttribute("data-show-checkin", showCheckin ? "1" : "0");
+      root.setAttribute("data-show-revise", showRevise ? "1" : "0");
       root.setAttribute("data-show-export", showExport ? "1" : "0");
       setTopLevelAssemblyIds(
         body && Array.isArray(body.top_level_assembly_uuids)

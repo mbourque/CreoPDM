@@ -89,6 +89,7 @@ class ProductUiCapabilities:
     show_delete_product: bool
     show_metadata_tools: bool
     show_revert: bool
+    show_revise: bool
 
 
 def product_ui_capabilities(
@@ -107,6 +108,7 @@ def product_ui_capabilities(
     can_delete_product: bool = False,
     can_update_metadata: bool = False,
     can_revert_objects: bool = False,
+    can_revise_objects: bool = False,
 ) -> ProductUiCapabilities:
     """Combine signed-in role permissions with lifecycle matrix."""
     mutable = product_allows_mutation(product)
@@ -142,6 +144,7 @@ def product_ui_capabilities(
         show_delete_product=has_product and can_delete_product,
         show_metadata_tools=has_product and can_update_metadata and can_meta_state,
         show_revert=can_revert_objects and can_checkin_state,
+        show_revise=can_revise_objects and product_allows_op(product, "revise"),
     )
 
 
@@ -156,6 +159,7 @@ def ensure_product_allows(
         "edit_metadata": "update metadata",
         "rename": "rename this product",
         "download": "open or download files from this product",
+        "revise": "create a new revision",
     }.get(op, "modify this product")
     if product_allows_op(product, op):
         return

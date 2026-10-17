@@ -23,6 +23,7 @@ LIFECYCLE_OPS: tuple[tuple[str, str], ...] = (
     ("checkin", "Check In / Add / Upload"),
     ("remove", "Delete / Remove (vault)"),
     ("edit_metadata", "Edit Metadata"),
+    ("revise", "Revise (new revision)"),
     ("rename", "Rename product"),
     ("history", "View History / Audit"),
 )
@@ -59,6 +60,9 @@ def _editable(**extra: bool) -> dict[str, bool]:
         remove=True,
         edit_metadata=True,
         rename=True,
+        # Revise a released file: allowed where the product is editable (a released product
+        # is reopened, e.g. Under change, first).
+        revise=True,
         **extra,
     )
 

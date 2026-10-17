@@ -47,6 +47,13 @@
       needsEmbedded: true,
     },
     {
+      action: "revise",
+      label: "Revise…",
+      title:
+        "Create the next revision of the selected released file (A.3 → B.1). Needs the Revise permission and a Released file that is not checked out.",
+      needsEmbedded: true,
+    },
+    {
       action: "download",
       label: "Download selected to workspace",
       title: "Download the selected files into this product’s local workspace on this PC.",
@@ -85,7 +92,7 @@
    * @param {object} state
    * @param {Array<object>} state.rows normalized selection rows:
    *   uuid, relativePath, canCheckout, owned, canCheckin, localCache,
-   *   isNewFile, hasDetails, hasCheckinWork, isFolder
+   *   isNewFile, hasDetails, hasCheckinWork, isFolder, canRevise
    * @param {boolean} [state.hasOpenSpec] when set, overrides row-derived Open tip
    * @param {boolean} state.showOpen product_ui / Open control present
    * @param {boolean} state.showCheckout role ∩ lifecycle Checkout
@@ -156,6 +163,10 @@
       someCheckinWork &&
       !busy;
 
+    // Revise acts on exactly one file; the row flag already folds in role, product state,
+    // Released lifecycle and "not checked out".
+    var canRevise = Boolean(one && one.canRevise) && !busy;
+
     var alreadyLocal =
       rows.length > 0 &&
       rows.every(function (row) {
@@ -191,6 +202,7 @@
       canUndo: canUndo,
       canAddSelected: canAddSelected,
       canCheckin: canCheckin,
+      canRevise: canRevise,
       canDownload: canDownload,
       canExport: canExport,
       canDiscardLocal: canDiscardLocal,
@@ -206,6 +218,7 @@
         caps.canUndo ||
         caps.canAddSelected ||
         caps.canCheckin ||
+        caps.canRevise ||
         caps.canDownload ||
         caps.canExport ||
         caps.canDiscardLocal
@@ -247,6 +260,7 @@
       undo: caps.canUndo,
       "add-selected": caps.canAddSelected,
       checkin: caps.canCheckin,
+      revise: caps.canRevise,
       download: caps.canDownload,
       export: caps.canExport,
       "discard-local": caps.canDiscardLocal,

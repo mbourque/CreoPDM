@@ -252,6 +252,7 @@ def render(request: Request, name: str, context: dict) -> HTMLResponse:
             can_delete_product=bool(payload.get("can_delete_product")),
             can_update_metadata=bool(payload.get("can_update_metadata")),
             can_revert_objects=bool(payload.get("can_revert_objects")),
+            can_revise_objects=bool(payload.get("can_revise_objects")),
         )
     if "product_state_description" not in payload:
         from creopdm.product_state import (

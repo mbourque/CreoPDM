@@ -212,5 +212,6 @@ def test_product_ui_capability_fields_stay_wired():
             "show_delete_product",
             "show_metadata_tools",
             "show_revert",
+            "show_revise",
         }
     assert fields == expected
