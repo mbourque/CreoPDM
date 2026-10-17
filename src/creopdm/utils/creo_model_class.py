@@ -58,6 +58,28 @@ _MODEL_ROLE_ALIASES: dict[str, str] = {
 }
 
 
+# Toolkit identity.subtype → model role, used when the Toolkit sent no recognised role.
+_SUBTYPE_ROLE_ALIASES: dict[str, str] = {
+    "ASM_PROCPLAN": "PROCESS",
+}
+
+
+def creo_model_role_from_subtype(subtype: Any) -> str:
+    """Model role implied by a Toolkit subtype, or '' (``MFG_NCASM`` → ``MFG``).
+
+    Any ``MFG_*`` subtype is a manufacturing model: the Overview row and the Files Type
+    column read MFG, never the raw subtype.
+    """
+    raw = str(subtype or "").strip().upper().replace(" ", "_")
+    if not raw:
+        return ""
+    if raw in _SUBTYPE_ROLE_ALIASES:
+        return _SUBTYPE_ROLE_ALIASES[raw]
+    if raw == "MFG" or raw.startswith("MFG_"):
+        return "MFG"
+    return ""
+
+
 def normalize_creo_model_type(value: Any) -> str:
     """Return PART/ASSEMBLY/… or '' when unknown / unspecified."""
     if value is None:
@@ -109,6 +131,12 @@ def normalize_creo_identity(identity: dict[str, Any] | None) -> dict[str, Any] |
         return identity
     identity["model_type"] = normalize_creo_model_type(identity.get("model_type"))
     identity["model_role"] = normalize_creo_model_role(identity.get("model_role"))
+    if not identity["model_role"]:
+        # No recognised role from the Toolkit: derive it from identity.subtype
+        # (MFG_NCASM → MFG). Runs on every read too, so old collected rows are fixed.
+        identity["model_role"] = creo_model_role_from_subtype(
+            identity.get("subtype") or identity.get("subType")
+        )
     # Skeleton subtype is parts only — never keep it on assemblies.
     if identity.get("model_role") == "SKELETON":
         mtype = str(identity.get("model_type") or "")

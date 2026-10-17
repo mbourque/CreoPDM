@@ -773,3 +773,33 @@ def test_overview_without_toolkit_subtype_keeps_what_it_showed_before(client, re
     assert 'id="overview-subtype-row"' not in text
     assert "<td>Subtype</td><td>SHEETMETAL</td>" in text
     assert "<td>System</td><td>Millimeter Newton Second</td>" in text
+
+
+@requires_git
+def test_mfg_assembly_subtype_reads_mfg_on_overview_and_in_files_type(client, repo_parent, tmp_path):
+    """MFG_NCASM with no recognised role: Overview Subtype and Files Type both read MFG."""
+    product = _create_product(client, repo_parent)
+    nc = _add_part(client, product["uuid"], tmp_path, "basic-milling1.asm.1")
+    posted = client.post(
+        f"/api/objects/{nc['uuid']}/creo-metadata",
+        json={
+            "identity": {
+                "file_name": "basic-milling1.asm",
+                "model_type": "ASSEMBLY",
+                "subtype": "MFG_NCASM",
+            },
+            "units": {"system_name": "Millimeter Newton Second", "length": "mm"},
+        },
+    )
+    assert posted.status_code == 200, posted.text
+    assert posted.json()["identity"]["model_role"] == "MFG"
+    assert posted.json()["identity"]["subtype"] == "MFG_NCASM"  # raw value kept
+
+    detail = client.get(f"/products/{product['uuid']}/objects/{nc['uuid']}")
+    assert detail.status_code == 200
+    assert 'title="MFG_NCASM · MFG">MFG</td>' in detail.text  # the row reads MFG
+    assert "<td>MFG_NCASM</td>" not in detail.text
+
+    listed = client.get(f"/api/products/{product['uuid']}/objects")
+    assert listed.status_code == 200, listed.text
+    assert {item["uuid"]: item["type_label"] for item in listed.json()}[nc["uuid"]] == "MFG"
