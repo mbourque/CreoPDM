@@ -53,6 +53,15 @@ def test_packing_progress_posts_start_then_throttled_ticks_then_final(caplog):
     assert posts[-1][1]["files_done"] == 300
 
 
+def test_agent_log_and_overlay_use_the_same_megabytes():
+    from creopdm.services.zip_import_jobs import _format_bytes
+    from creopdm_agent.server import _format_megabytes
+
+    # 534 MB in the overlay must also read 534 MB in the agent log.
+    assert _format_bytes(559_600_000) == "534 MB"
+    assert _format_megabytes(559_600_000) == "534 MB"
+
+
 def test_packing_progress_without_a_job_only_logs(caplog):
     posts: list = []
     progress = _PackingProgress(
@@ -150,7 +159,8 @@ def test_job_set_packing_message_and_never_overrides_a_later_phase():
     assert jobs.get(job.job_id).message == "Packing files on this PC… 0 of 936"
     jobs.set_packing(job.job_id, files_done=655, files_total=936, bytes_done=559_600_000)
     packed = jobs.get(job.job_id)
-    assert packed.message == "Packing files on this PC… 655 of 936 (560 MB)"
+    # Same binary units as the upload text (1 MB = 1024 * 1024 bytes).
+    assert packed.message == "Packing files on this PC… 655 of 936 (534 MB)"
     assert (packed.phase, packed.state, packed.done) == ("packing", "packing", False)
     assert (packed.files_done, packed.files_total) == (655, 936)
     jobs.set_uploading(job.job_id, bytes_done=1, bytes_total=10)
@@ -171,7 +181,7 @@ def test_progress_endpoint_updates_the_job_the_overlay_polls(client):
     assert posted.status_code == 200, posted.text
     polled = client.get(f"/api/products/{product['uuid']}/zip-import/jobs/{job['job_id']}")
     body = polled.json()
-    assert body["message"] == "Packing files on this PC… 12 of 936 (5 MB)"
+    assert body["message"] == "Packing files on this PC… 12 of 936 (4.8 MB)"
     assert body["phase"] == "packing"
     assert body["done"] is False
 

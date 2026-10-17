@@ -39,7 +39,8 @@ ADD_PATHS_ZIP_MIN_FILES = 50
 
 
 def _format_megabytes(value: int) -> str:
-    return f"{max(0, int(value)) / 1_000_000:,.0f} MB"
+    # Same units as the busy overlay (zip_import_jobs._format_bytes: 1 MB = 1024 * 1024).
+    return f"{max(0, int(value)) / (1024 * 1024):,.0f} MB"
 
 
 class _PackingProgress:
