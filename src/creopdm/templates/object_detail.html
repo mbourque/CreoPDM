@@ -187,7 +187,13 @@
           {% elif is_top_level_assembly %}
           <tr><td>Model type</td><td>ASSEMBLY (Top Level)</td></tr>
           {% endif %}
-          {% if identity.model_role %}
+          {% if subtype_display %}
+          {# Toolkit identity: reads the model role (PROCESS); raw subtype kept (muted text + title). #}
+          <tr id="overview-subtype-row" data-subtype="{{ subtype_display.subtype }}" data-model-role="{{ subtype_display.model_role }}">
+            <td>Subtype</td>
+            <td title="{{ subtype_display.raw }}">{{ subtype_display.label }}{% if subtype_display.detail %} <span class="muted small">{{ subtype_display.detail }}</span>{% endif %}</td>
+          </tr>
+          {% elif identity.model_role %}
           <tr><td>Subtype</td><td>{{ identity.model_role }}</td></tr>
           {% endif %}
           {% if object.creo_release %}
@@ -216,7 +222,8 @@
           </tr>
           {% endif %}
           {% endif %}
-          {% if units.system_name %}<tr><td>System</td><td>{{ units.system_name }}</td></tr>{% endif %}
+          {# The Subtype row above replaces System when the Toolkit reported a subtype. #}
+          {% if units.system_name and not subtype_display %}<tr><td>System</td><td>{{ units.system_name }}</td></tr>{% endif %}
           {% if units.length %}<tr><td>Length</td><td>{{ units.length }}</td></tr>{% endif %}
           {% if units.mass %}<tr><td>Mass unit</td><td>{{ units.mass }}</td></tr>{% endif %}
           {% if units.time %}<tr><td>Time</td><td>{{ units.time }}</td></tr>{% endif %}

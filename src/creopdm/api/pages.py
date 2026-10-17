@@ -37,6 +37,7 @@ from creopdm.utils.classify import (
     resolve_type_icon,
     type_icon_client_payload,
 )
+from creopdm.utils.creo_model_class import creo_subtype_display
 from creopdm.utils.files import format_byte_size
 from creopdm.utils.folders import folder_crumbs, folder_of, folder_view_counts, normalize_folder_query
 from creopdm.utils.native_dialog import native_picker_available
@@ -678,6 +679,8 @@ def object_detail(
             "is_creo": is_creo,
             "metadata": metadata,
             "identity": identity,
+            # Toolkit identity.subtype + model_role (None → show what Overview showed before).
+            "subtype_display": creo_subtype_display(identity),
             "materials": materials,
             "units": units,
             "mass": mass,

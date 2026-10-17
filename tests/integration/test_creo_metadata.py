@@ -703,3 +703,65 @@ def test_model_relations_roundtrip_on_creo_metadata(client, repo_parent, tmp_pat
     assert fetched.status_code == 200, fetched.text
     assert fetched.json()["relations"]["normal"][0] == "od = id + 2"
     assert fetched.json()["relations"]["features"][0]["feature_name"] == "EXTRUDE_1"
+
+
+@requires_git
+def test_overview_subtype_row_from_toolkit_identity_replaces_system(client, repo_parent, tmp_path):
+    """Toolkit identity.subtype + model_role → "PROCESS"; the System row is replaced."""
+    product = _create_product(client, repo_parent)
+    plan = _add_part(client, product["uuid"], tmp_path, "gorilla-cart-plan.asm.1")
+    posted = client.post(
+        f"/api/objects/{plan['uuid']}/creo-metadata",
+        json={
+            "identity": {
+                "file_name": "gorilla-cart-plan.asm",
+                "model_type": "ASSEMBLY",
+                "model_role": "PROCESS",
+                "subtype": "ASM_PROCPLAN",
+            },
+            "units": {"system_name": "Asm Proc", "length": "mm"},
+        },
+    )
+    assert posted.status_code == 200, posted.text
+    stored = posted.json()["identity"]
+    # The raw Toolkit values stay available (PROCESS used to be normalized away).
+    assert stored["model_role"] == "PROCESS"
+    assert stored["subtype"] == "ASM_PROCPLAN"
+
+    detail = client.get(f"/products/{product['uuid']}/objects/{plan['uuid']}")
+    assert detail.status_code == 200
+    text = detail.text
+    assert 'id="overview-subtype-row"' in text
+    assert 'data-subtype="ASM_PROCPLAN"' in text
+    assert 'data-model-role="PROCESS"' in text
+    assert 'title="ASM_PROCPLAN · PROCESS">PROCESS' in text  # the row reads PROCESS
+    assert '<span class="muted small">ASM_PROCPLAN</span>' in text  # raw subtype kept
+    assert "Process assembly" not in text
+    assert "<td>System</td>" not in text
+    assert "Asm Proc" not in text
+    assert "<td>Length</td>" in text  # the other unit rows are untouched
+
+
+@requires_git
+def test_overview_without_toolkit_subtype_keeps_what_it_showed_before(client, repo_parent, tmp_path):
+    """No identity.subtype (model not collected / older Collect): System and role rows as before."""
+    product = _create_product(client, repo_parent)
+    shaft = _add_part(client, product["uuid"], tmp_path, "shaft.prt.1")
+    posted = client.post(
+        f"/api/objects/{shaft['uuid']}/creo-metadata",
+        json={
+            "identity": {
+                "file_name": "shaft.prt",
+                "model_type": "PART",
+                "model_role": "SHEETMETAL",
+            },
+            "units": {"system_name": "Millimeter Newton Second", "length": "mm"},
+        },
+    )
+    assert posted.status_code == 200, posted.text
+    detail = client.get(f"/products/{product['uuid']}/objects/{shaft['uuid']}")
+    assert detail.status_code == 200
+    text = detail.text
+    assert 'id="overview-subtype-row"' not in text
+    assert "<td>Subtype</td><td>SHEETMETAL</td>" in text
+    assert "<td>System</td><td>Millimeter Newton Second</td>" in text
