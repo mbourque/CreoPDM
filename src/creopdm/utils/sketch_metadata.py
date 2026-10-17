@@ -87,13 +87,6 @@ def _partial_text(raw: Any) -> str:
     return "; ".join(part for part in parts if part)
 
 
-def _notes(raw: Any) -> list[str]:
-    """Clean informational notes from the Toolkit ("how the data was obtained")."""
-    if not isinstance(raw, list):
-        return []
-    return [text for text in (_text(item) for item in raw) if text][:10]
-
-
 def sketch_error(sketch: Any) -> str:
     """The Toolkit's reason when it could not read the sketch ("" when there is none)."""
     if isinstance(sketch, dict) and sketch.get("ok") is False:
@@ -192,9 +185,8 @@ def sketch_overview(sketch: Any) -> dict[str, Any] | None:
         # Parts the Toolkit could not read ("entities (ProSectionEntityIdsGet=-2)" …).
         # Only partial_missing means "something could not be read" — never notes.
         "partial": _partial_text(sketch.get("partial_missing")),
-        # Informational only (for example Creo 13 entity geometry rebuilt from sampled
-        # points). Shown collapsed under "How this was read"; never a warning.
-        "notes": _notes(sketch.get("notes")),
+        # sketch["notes"] (how the Toolkit obtained the data) is informational only and is
+        # deliberately never shown — it is not a warning and there is nothing to act on.
         # True only when the Toolkit regenerated the section in Creo to read it.
         "regenerated": status.get("regenerated") is True,
     }

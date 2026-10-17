@@ -198,28 +198,21 @@ def test_a_complete_sketch_has_no_partial_note_and_regenerated_only_when_true():
     assert view["regenerated"] is False  # null / absent is not "regenerated"
 
 
-def test_notes_are_informational_only_and_never_a_partial_data_warning():
-    """Companion 0.6.1: notes explain how data was read; partial_missing means a real gap."""
-    notes_only = dict(
-        SKETCH,
-        notes=["Creo 13: entity geometry rebuilt from sampled points; types are inferred."],
-    )
-    view = sketch_overview(notes_only)
+def test_notes_are_never_shown_and_never_a_partial_data_warning():
+    """Companion 0.6.1: notes only explain how data was read (nothing to act on); only a
+    real gap (partial_missing) shows "Partial data"."""
+    note = "ids found by probing ProSectionEntityEval; geometry rebuilt from Eval samples"
+    view = sketch_overview(dict(SKETCH, notes=[note]))
     assert view["partial"] == ""  # no banner
-    assert view["notes"] == ["Creo 13: entity geometry rebuilt from sampled points; types are inferred."]
+    assert "notes" not in view  # not carried to the page at all
+    assert note not in repr(view)
 
-    empty_partial = dict(SKETCH, partial_missing=[])
-    assert sketch_overview(empty_partial)["partial"] == ""
+    assert sketch_overview(dict(SKETCH, partial_missing=[]))["partial"] == ""
 
-    real_gap = dict(SKETCH, partial_missing=["constraints (ProSectionConstraintIdsGet=-2)"], notes=["x"])
+    real_gap = dict(SKETCH, partial_missing=["constraints (ProSectionConstraintIdsGet=-2)"], notes=[note])
     gap_view = sketch_overview(real_gap)
     assert gap_view["partial"] == "constraints (ProSectionConstraintIdsGet=-2)"
-    assert "x" not in gap_view["partial"]  # notes never leak into the warning text
-
-    messy = dict(SKETCH, notes=["  keep me  ", "", None, 3, "also"])
-    assert sketch_overview(messy)["notes"] == ["keep me", "3", "also"]
-    assert sketch_overview(dict(SKETCH, notes="not a list"))["notes"] == []
-    assert sketch_overview(SKETCH)["notes"] == []
+    assert note not in repr(gap_view)  # notes never leak into the warning
 
 
 def test_the_toolkit_snapshot_keeps_notes_and_partial_missing_apart():

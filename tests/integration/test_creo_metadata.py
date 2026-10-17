@@ -957,32 +957,35 @@ def test_partial_sketch_shows_data_and_names_what_is_missing(client, repo_parent
 
 
 @requires_git
-def test_sketch_notes_show_no_partial_banner_but_a_real_gap_does(client, repo_parent, tmp_path):
+
+
+def test_sketch_notes_are_never_shown_but_a_real_gap_is(client, repo_parent, tmp_path):
     product = _create_product(client, repo_parent)
     noted = _add_part(client, product["uuid"], tmp_path, "noted-sec.sec")
     gap = _add_part(client, product["uuid"], tmp_path, "gap-sec.sec")
-    identity = {"model_type": "SECTION"}
-    notes_sketch = dict(_SKETCH_PAYLOAD, notes=["Creo 13: entity geometry rebuilt from sampled points."])
+    note = "ids found by probing ProSectionEntityEval; geometry rebuilt from Eval samples"
+    notes_sketch = dict(_SKETCH_PAYLOAD, notes=[note])
     gap_sketch = dict(
         _SKETCH_PAYLOAD,
         partial_missing=["constraints (ProSectionConstraintIdsGet=-2)"],
-        notes=["informational note"],
+        notes=[note],
     )
     for obj, sketch in ((noted, notes_sketch), (gap, gap_sketch)):
         posted = client.post(
             f"/api/objects/{obj['uuid']}/creo-metadata",
-            json={"identity": dict(identity, file_name=obj["filename"]), "sketch": sketch},
+            json={"identity": {"model_type": "SECTION", "file_name": obj["filename"]}, "sketch": sketch},
         )
         assert posted.status_code == 200, posted.text
 
     noted_page = client.get(f"/products/{product['uuid']}/objects/{noted['uuid']}").text
-    assert 'id="sketch-notes"' in noted_page  # collapsed "How this was read"
-    assert "How this was read" in noted_page
-    assert 'id="sketch-partial-note"' not in noted_page  # notes are not a warning
+    assert "How this was read" not in noted_page
+    assert "ProSectionEntityEval" not in noted_page  # notes are not displayed
+    assert 'id="sketch-partial-note"' not in noted_page
     assert 'id="overview-sketch-partial"' not in noted_page
 
     gap_page = client.get(f"/products/{product['uuid']}/objects/{gap['uuid']}").text
     assert 'id="sketch-partial-note"' in gap_page
     assert 'id="overview-sketch-partial"' in gap_page
     assert "ProSectionConstraintIdsGet=-2" in gap_page
-    assert "informational note" in gap_page  # still available under "How this was read"
+    assert "How this was read" not in gap_page
+    assert "ProSectionEntityEval" not in gap_page
