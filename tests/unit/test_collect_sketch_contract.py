@@ -30,3 +30,24 @@ def test_a_tip_left_for_local_changes_is_not_counted_as_saved():
     # Reported to the user with the way out, in progress and in the final message.
     assert "unsaved local changes" in loop
     assert "Check In first" in loop
+
+
+APP_JS = ROOT / "src" / "creopdm" / "static" / "js" / "app.js"
+
+
+def test_a_numbered_local_copy_with_the_vault_bytes_is_collected_not_skipped():
+    # Regression: right after Add the agent workspace keeps test-sec.sec.1 while the vault
+    # tip is test-sec.sec (same bytes). "Higher .N = unsaved" skipped it silently and there
+    # was nothing to Check In, so a sketch could never be collected.
+    js = META_JS.read_text(encoding="utf-8")
+    push = _between(js, "async function pushOneCreoMetadataTarget(", "async function flushPendingMetadataErase(")
+    assert "collectPathIsUnsavedTip(filePath, target.filename)" in push
+    assert "await localTipMatchesVault(filePath, target)" in push
+    helper = _between(js, "async function localTipMatchesVault(", "async function pushOneCreoMetadataTarget(")
+    assert "hashAgentCachePaths(productId, [localRel])" in helper
+    assert "target?.contentHash" in helper
+    # A missing hash keeps the old behaviour (treated as a real local edit).
+    assert "return false;" in helper
+    assert "contentHash: String(row.current_version?.content_hash" in js
+    assert "const hashAgentCachePaths = shell.hashAgentCachePaths;" in js
+    assert "    hashAgentCachePaths," in APP_JS.read_text(encoding="utf-8")

@@ -31,6 +31,7 @@ window.__creopdmModules.metadata = {
     const PathBasename = shell.PathBasename;
     const logicalUploadName = shell.logicalUploadName;
     const creoSaveNumber = shell.creoSaveNumber;
+    const hashAgentCachePaths = shell.hashAgentCachePaths;
     const attachCollectLocalPaths = shell.attachCollectLocalPaths;
     const materializeCheckedOutToAgentCache = shell.materializeCheckedOutToAgentCache;
     const gatherCreoMetadataForFilename = shell.gatherCreoMetadataForFilename;
@@ -469,6 +470,27 @@ window.__creopdmModules.metadata = {
       return creoSaveNumber(base) > creoSaveNumber(vault);
     }
 
+    /**
+     * True when the numbered local file (test-sec.sec.1) has exactly the vault tip's bytes.
+     * That happens right after Add: the vault keeps the logical name (test-sec.sec) while the
+     * agent workspace keeps the numbered one. It is not an unsaved edit — there is nothing to
+     * Check In — so Collect must read it. Unknown hash → treat as modified (old behaviour).
+     */
+    async function localTipMatchesVault(filePath, target) {
+      const vaultHash = String(target?.contentHash || "").trim().toLowerCase();
+      const productId = String(currentProductId() || "").trim();
+      if (!vaultHash || !productId || typeof hashAgentCachePaths !== "function") return false;
+      try {
+        const rel = String(target.relativePath || "").replace(/\\/g, "/").replace(/^\/+/, "");
+        const dir = rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/") + 1) : "";
+        const localRel = `${dir}${PathBasename(filePath)}`;
+        const hashes = await hashAgentCachePaths(productId, [localRel]);
+        return hashes.get(localRel.toLowerCase()) === vaultHash;
+      } catch {
+        return false;
+      }
+    }
+
     async function pushOneCreoMetadataTarget(target, options) {
       // No per-file JS timeout — large assemblies (e.g. 844j.asm) can take many
       // minutes in Creo. Skipping them loses the metadata we care about most.
@@ -486,7 +508,10 @@ window.__creopdmModules.metadata = {
         }
         // A higher local .N is the unsaved Modified tip. Do not read it onto the
         // checked-in revision, and do not treat that skip as a failed collect.
-        if (collectPathIsUnsavedTip(filePath, target.filename)) {
+        if (
+          collectPathIsUnsavedTip(filePath, target.filename)
+          && !(await localTipMatchesVault(filePath, target))
+        ) {
           return { ok: true, reason: "left local modifications" };
         }
         let snapshot = await gatherCreoMetadataForFilename(target.filename, filePath, {
@@ -845,6 +870,8 @@ window.__creopdmModules.metadata = {
           path: "",
           relativePath: String(row.relative_path || "").trim(),
           versionId: String(row.current_version?.uuid || row.version_id || "").trim(),
+          // Lets Collect tell a numbered copy of the vault tip from a real local edit.
+          contentHash: String(row.current_version?.content_hash || "").trim().toLowerCase(),
         }))
       );
       if (!targets.length) {

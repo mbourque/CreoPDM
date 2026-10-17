@@ -7982,6 +7982,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     isImportVersionedExtension,
     setImportExtensions,
     creoSaveNumber,
+    // Collect: tell a numbered local copy of the vault tip (same bytes) from a real edit.
+    hashAgentCachePaths,
     looksLikeLocalWindowsPath,
     joinLocalWorkspacePath,
     rememberPendingCheckinIds,
