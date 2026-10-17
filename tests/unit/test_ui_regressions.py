@@ -3059,3 +3059,14 @@ def test_collect_all_and_rebuild_refuse_when_agent_or_toolkit_is_down():
     ws = CREO_WORKSPACE_JS.read_text(encoding="utf-8")
     assert "options.force) _toolkitHealthOkUntil = 0" in ws
     assert "ensureToolkitAgentReady" in APP_JS.read_text(encoding="utf-8")
+
+
+def test_product_list_never_shows_local_placeholder_for_empty_number():
+    """A product without a number shows no second line (it used to say "Local")."""
+    root = Path(__file__).resolve().parents[2] / "src" / "creopdm" / "templates"
+    for name in ("app.html", "object_detail.html"):
+        text = (root / name).read_text(encoding="utf-8")
+        assert 'or "Local"' not in text, name
+        assert "{% else %}Local{% endif %}" not in text, name
+    app = (root / "app.html").read_text(encoding="utf-8")
+    assert "{% if product.number %}<span class=\"product-number\">" in app

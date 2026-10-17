@@ -7,7 +7,7 @@
       <div class="sidebar-head-start">
         <button type="button" class="sidebar-menu-btn" id="product-menu-btn"
                 aria-expanded="false" aria-controls="product-list" aria-label="Products"
-                {% if selected %}title="{% if selected.number %}{{ selected.number }}{% else %}Local{% endif %}{% if selected.description %} — {{ selected.description }}{% endif %}"{% endif %}>
+                {% if selected %}{% set tip = [selected.number, selected.description]|select|join(" — ") %}{% if tip %}title="{{ tip }}"{% endif %}{% endif %}>
           <span class="hamburger" aria-hidden="true"><span></span><span></span><span></span></span>
           <span class="sidebar-current">{{ selected.name if selected else "Products" }}</span>
         </button>
@@ -28,9 +28,9 @@
       <li>
         <a class="product-item {% if selected and product.uuid == selected.uuid %}is-active{% endif %}"
            href="/?product={{ product.uuid }}"
-           title="{% if product.number %}{{ product.number }}{% else %}Local{% endif %}{% if product.description %} — {{ product.description }}{% endif %}">
+           {% set tip = [product.number, product.description]|select|join(" — ") %}{% if tip %}title="{{ tip }}"{% endif %}>
           <span class="product-name">{{ product.name }}</span>
-          <span class="product-number">{{ product.number or "Local" }}</span>
+          {% if product.number %}<span class="product-number">{{ product.number }}</span>{% endif %}
         </a>
       </li>
       {% else %}

@@ -72,7 +72,7 @@
 <article class="detail">
   <nav class="crumb">
     <a href="/?product={{ product.uuid }}"
-       title="{% if product.number %}{{ product.number }}{% else %}Local{% endif %}{% if product.description %} — {{ product.description }}{% endif %}">{{ product.name }}</a>
+       {% set tip = [product.number, product.description]|select|join(" — ") %}{% if tip %}title="{{ tip }}"{% endif %}>{{ product.name }}</a>
     <span>/</span>
     <span>{{ object.filename }}</span>
   </nav>
