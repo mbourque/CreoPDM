@@ -53,16 +53,16 @@ def _perms(**overrides: bool) -> dict[str, bool]:
     return base
 
 
-def _editable(**extra: bool) -> dict[str, bool]:
+def _editable(*, revise: bool = True, **extra: bool) -> dict[str, bool]:
     return _perms(
         checkout=True,
         checkin=True,
         remove=True,
         edit_metadata=True,
         rename=True,
-        # Revise a released file: allowed where the product is editable (a released product
-        # is reopened, e.g. Under change, first).
-        revise=True,
+        # Revise a released file: allowed in In Work and Under Change (a released product is
+        # reopened, e.g. Under Change, first). Pre-Work turns it off: nothing there should need it.
+        revise=revise,
         **extra,
     )
 
@@ -74,7 +74,7 @@ def _frozen(**extra: bool) -> dict[str, bool]:
 def default_lifecycle_state_dicts() -> list[dict[str, Any]]:
     """Built-in matrix (order = Administration dropdown default)."""
     rows: list[tuple[str, dict[str, bool]]] = [
-        (ProductState.PRE_WORK.value, _editable()),
+        (ProductState.PRE_WORK.value, _editable(revise=False)),
         (ProductState.IN_WORK.value, _editable()),
         (ProductState.IN_REVIEW.value, _frozen()),
         (ProductState.APPROVED.value, _frozen()),

@@ -170,17 +170,22 @@ def test_admin_copy_product_is_a_fresh_add(auth_client, auth_ctx):
         db.commit()
     (_vault(auth_ctx, source["vault_folder"]) / "trail.txt").write_text("session junk", encoding="utf-8")
 
-    released = auth_client.post(
+    # Promote refuses to freeze a product while files are checked out, so the "frozen source with
+    # files still checked out" this test needs is set directly on the row.
+    refused = auth_client.post(
         "/admin/products/promote",
         data={
             "product_id": source["uuid"],
-            # Frozen source with files still checked out. (Releasing would be refused while a
-            # file is checked out; APPROVED freezes the same way without that rule.)
             "state": "APPROVED",
             "confirm_password": "AdminPass1",
         },
     )
-    assert released.status_code == 200, released.text
+    assert refused.status_code == 400, refused.text
+    assert "checked out" in refused.text
+    with auth_ctx.session_factory() as db:
+        frozen = db.scalar(select(Product).where(Product.uuid == source["uuid"]))
+        frozen.state = "APPROVED"
+        db.commit()
 
     hub = auth_client.get("/admin")
     assert "Product Membership, then edit, copy, promote, lifecycle states, delete, compact, or rebuild." in hub.text

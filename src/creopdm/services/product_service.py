@@ -29,6 +29,7 @@ from creopdm.exceptions import (
     RepositoryError,
     ValidationAppError,
 )
+from creopdm.lifecycle_policy import get_lifecycle_policy
 from creopdm.product_state import (
     ensure_product_deletable,
     parse_product_state,
@@ -53,6 +54,15 @@ from creopdm.utils.classify import matches_cad_models, matches_document
 from creopdm.utils.native_dialog import default_product_location_start
 
 logger = get_logger("products")
+
+# Promote refuses these while any file is checked out.
+_CHECKOUT_GUARDED_STATES = frozenset(
+    {
+        ProductState.IN_REVIEW.value,
+        ProductState.APPROVED.value,
+        ProductState.RELEASED.value,
+    }
+)
 
 
 class ProductService:
@@ -497,9 +507,11 @@ class ProductService:
             and state_changed
             and new_state in {ProductState.IN_WORK.value, ProductState.PRE_WORK.value}
         )
-        if releasing:
-            # Releasing freezes every file: do not silently pull a checkout out from under someone.
-            self._require_no_active_checkouts(session, product)
+        if state_changed and new_state in _CHECKOUT_GUARDED_STATES:
+            # In Review / Approved / Released block Check Out, and Undo/Force Undo follow the same
+            # matrix column, so an open checkout would be stranded. Do not pull it out from under
+            # someone either: refuse and say who holds what.
+            self._require_no_active_checkouts(session, product, new_state)
         # Lifecycle state on Promote Products is not matrix-gated (no Change Lifecycle
         # State column) — admins with products.edit can leave Locked / any state.
 
@@ -604,8 +616,10 @@ class ProductService:
         session.commit()
         return product
 
-    def _require_no_active_checkouts(self, session: Session, product: Product) -> None:
-        """Refuse to release a product while any of its files is checked out."""
+    def _require_no_active_checkouts(
+        self, session: Session, product: Product, new_state: str
+    ) -> None:
+        """Refuse to move a product into In Review / Approved / Released while files are checked out."""
         rows = session.execute(
             select(EngineeringObject.filename, Checkout.user_name)
             .join(Checkout, Checkout.object_id == EngineeringObject.id)
@@ -619,22 +633,33 @@ class ProductService:
             return
         shown = "; ".join(f"{name} ({owner})" for name, owner in rows[:5])
         more = f" and {len(rows) - 5} more" if len(rows) > 5 else ""
+        label = get_lifecycle_policy().label(new_state)
         raise ValidationAppError(
-            f"Cannot release {product.name}: {len(rows)} file(s) are checked out — {shown}{more}. "
-            "Check them in or undo the checkout first.",
-            details={"product": product.uuid, "checked_out": len(rows)},
+            f"Cannot move {product.name} to {label}: {len(rows)} file(s) are checked out — "
+            f"{shown}{more}. Check them in or undo the checkout first.",
+            details={
+                "product": product.uuid,
+                "checked_out": len(rows),
+                "state": new_state,
+            },
         )
 
     def _release_objects(self, session: Session, product: Product) -> int:
         """Releasing a product releases its in-work files (obsolete files stay obsolete).
+        Files that are checked out stay In Work.
 
         Moving the product to an editable state later does not flip them back: a released
         file only becomes editable again through Revise.
         """
+        # Files somebody has checked out stay In Work: releasing must not strand their checkout.
+        checked_out = select(Checkout.object_id).where(
+            Checkout.status == CheckoutStatus.ACTIVE.value
+        )
         in_work = select(EngineeringObject.current_version_id).where(
             EngineeringObject.product_id == product.id,
             EngineeringObject.lifecycle_state == LifecycleState.IN_WORK.value,
             EngineeringObject.current_version_id.is_not(None),
+            EngineeringObject.id.not_in(checked_out),
         )
         # The released tip is the Released version (A.3 stays RELEASED after Revise).
         session.execute(
@@ -647,6 +672,7 @@ class ProductService:
             .where(
                 EngineeringObject.product_id == product.id,
                 EngineeringObject.lifecycle_state == LifecycleState.IN_WORK.value,
+                EngineeringObject.id.not_in(checked_out),
             )
             .values(lifecycle_state=LifecycleState.RELEASED.value)
         )

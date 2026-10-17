@@ -35,8 +35,10 @@ def test_revise_permission_is_seeded_for_authoring_roles_only():
 
 def test_matrix_revise_defaults_follow_editable_states_and_survive_old_settings():
     policy = default_lifecycle_policy()
-    for editable in ("PRE_WORK", "IN_WORK", "UNDER_CHANGE"):
+    for editable in ("IN_WORK", "UNDER_CHANGE"):
         assert policy.allows(editable, "revise"), editable
+    # Pre-Work is editable but nothing there should need a new revision: off by default.
+    assert policy.allows("PRE_WORK", "checkout") and not policy.allows("PRE_WORK", "revise")
     for frozen in ("IN_REVIEW", "APPROVED", "RELEASED", "OBSOLETE", "ARCHIVED", "LOCKED"):
         assert not policy.allows(frozen, "revise"), frozen
     # Settings saved before the column existed carry no "revise" key: defaults still apply.
@@ -153,7 +155,8 @@ def test_release_releases_files_and_revise_follows_the_object(auth_client, auth_
     body = _eligibility(auth_client, obj)
     assert (body["allowed"], body["code"]) == (False, "REVISE_INVALID_LIFECYCLE")
 
-    # A checked-out file blocks both Revise and Release, naming the owner.
+    # A checked-out file blocks Revise, and Release is refused until the checkout is gone
+    # (a Released product blocks check-in and undo, so it would be stranded).
     out = auth_client.post(f"/api/objects/{obj['uuid']}/checkout")
     assert out.status_code == 200, out.text
     held = _eligibility(auth_client, obj)
@@ -162,7 +165,7 @@ def test_release_releases_files_and_revise_follows_the_object(auth_client, auth_
     assert blocked.status_code == 400, blocked.text
     assert "shaft.prt" in blocked.text and "checked out" in blocked.text
     still = auth_client.get(f"/api/objects/{obj['uuid']}").json()
-    assert still["lifecycle_state"] == "IN_WORK"
+    assert still["lifecycle_state"] == "IN_WORK" and still["owned_by_me"] is True
     undone = auth_client.post(f"/api/objects/{obj['uuid']}/undo-checkout")
     assert undone.status_code == 200, undone.text
 
@@ -824,3 +827,36 @@ def test_revise_dialog_shows_the_unchanged_note():
     assert 'id="revise-unchanged"' in base
     app = (root / "static" / "js" / "app.js").read_text(encoding="utf-8")
     assert "body.unchanged_since" in app and "has not changed since" in app
+
+
+# ---- Promote refuses states that block Check Out while files are checked out -------------
+
+
+@requires_git
+def test_promote_into_a_state_that_blocks_checkout_is_refused_while_files_are_checked_out(
+    auth_client, auth_ctx
+):
+    _setup_admin_and_users(auth_client, auth_ctx)
+    _login(auth_client, "admin", "AdminPass1")
+    product, obj = _make_product_with_file(auth_client)
+    out = auth_client.post(f"/api/objects/{obj['uuid']}/checkout")
+    assert out.status_code == 200, out.text
+
+    # In Review, Approved and Released would strand the checkout (Undo follows the same matrix
+    # column), so Promote refuses them and names the file and its owner.
+    for state in ("IN_REVIEW", "APPROVED", "RELEASED"):
+        refused = _promote(auth_client, product, state)
+        assert refused.status_code == 400, (state, refused.text)
+        assert "shaft.prt" in refused.text and "checked out" in refused.text, state
+        assert "Alice" in refused.text or "(" in refused.text, state
+    assert auth_client.get(f"/api/products/{product['uuid']}").json()["state"] == "IN_WORK"
+
+    # States that still allow Check Out are not refused for this reason.
+    assert _promote(auth_client, product, "UNDER_CHANGE").status_code == 200
+    assert _promote(auth_client, product, "IN_WORK").status_code == 200
+
+    # Once nothing is checked out the same promote works.
+    undone = auth_client.post(f"/api/objects/{obj['uuid']}/undo-checkout")
+    assert undone.status_code == 200, undone.text
+    assert _promote(auth_client, product, "IN_REVIEW").status_code == 200
+    assert auth_client.get(f"/api/products/{product['uuid']}").json()["state"] == "IN_REVIEW"
