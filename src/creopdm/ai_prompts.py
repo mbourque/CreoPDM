@@ -184,7 +184,77 @@ def _inventory_outline_line(row: dict[str, Any]) -> str:
         short = detail if len(detail) <= 80 else detail[:77] + "…"
         extras.append(short)
     suffix = f" ({', '.join(extras)})" if extras else ""
+    value_text = _drawing_dimension_value_text(row) if typ.upper() == "DIMENSION" else ""
+    if value_text:
+        suffix += f" = {value_text}"
     return _append_creo_feature_id(f"{indent}- {nest}{name}{suffix}", row)
+
+
+def _drawing_dimension_value_text(row: dict[str, Any]) -> str:
+    """``30 deg (limits 29.5–30.5) [shows 30.0]`` — exact value; displayed text is display only."""
+    value = row.get("value")
+    if value is None or value == "":
+        return ""
+    piece = _format_dim_value(value)
+    unit = str(row.get("units") or "").strip()
+    if unit:
+        piece += f" {unit}"
+    limits = row.get("tolerance_limits")
+    if isinstance(limits, dict) and limits:
+        lo = limits.get("lower", limits.get("min"))
+        hi = limits.get("upper", limits.get("max"))
+        if lo is not None and hi is not None:
+            piece += f" (limits {_format_dim_value(lo)}–{_format_dim_value(hi)})"
+    shown = str(row.get("value_displayed") or "").strip()
+    if shown and shown != _format_dim_value(value):
+        piece += f" [shows {shown}]"
+    return piece
+
+
+def _drawing_dimension_rows(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    """Drawing DIMENSION inventory rows as dimension dicts for the OLD→NEW diff.
+
+    Keyed by the Creo id (``dim:wedge.prt:2``) so the same name on two models cannot merge.
+    Value is the exact number; ``value_displayed`` is never compared.
+    """
+    features = snapshot.get("features") if isinstance(snapshot.get("features"), list) else []
+    rows = [
+        f
+        for f in features
+        if isinstance(f, dict) and _feature_type_label(f) in _DRAWING_DIM_TYPES
+    ]
+    names = [str(f.get("name") or "").strip() for f in rows]
+    out: list[dict[str, Any]] = []
+    for feat, name in zip(rows, names):
+        if not name:
+            continue
+        creo_id = str(feat.get("id") or "").strip()
+        symbol = f"{name} [{creo_id}]" if names.count(name) > 1 and creo_id else name
+        dim: dict[str, Any] = {
+            "symbol": symbol,
+            "dim_type": str(feat.get("subtype") or feat.get("subType") or "").strip(),
+        }
+        has_value = feat.get("value") is not None and feat.get("value") != ""
+        # "—" = not collected yet (older revision): equal on both sides, so no false change.
+        dim["value"] = feat["value"] if has_value else "—"
+        unit = str(feat.get("units") or "").strip()
+        if unit:
+            dim["units"] = unit
+        if isinstance(feat.get("tolerance_limits"), dict):
+            dim["tolerance_limits"] = feat["tolerance_limits"]
+        out.append(dim)
+    return out
+
+
+def _compare_dimension_rows(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    """The real dimensions list, or (drawings) the DIMENSION inventory rows."""
+    dims = snapshot.get("dimensions")
+    if isinstance(dims, list) and _iter_compare_dimensions(dims):
+        return _iter_compare_dimensions(dims)
+    identity = snapshot.get("identity") if isinstance(snapshot.get("identity"), dict) else {}
+    if _is_drawing_snapshot(snapshot, identity):
+        return _iter_compare_dimensions(_drawing_dimension_rows(snapshot))
+    return []
 
 
 def _structure_nodes(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
@@ -720,9 +790,9 @@ def _feature_outline_labels(snapshot: dict[str, Any]) -> list[str]:
     features = _iter_compare_features(features_raw)
     labels: list[str] = []
     if drawing:
-        dims_listed = _snapshot_has_dimension_list(snapshot)
         for feat in features:
-            if not _is_drawing_inventory_compare_feature(feat, dims_listed=dims_listed):
+            # Drawing dimensions are compared by value in the Dimensions diff, not as labels.
+            if not _is_drawing_inventory_compare_feature(feat):
                 continue
             if _is_view_feature(feat):
                 labels.append(_view_display_line(feat).lstrip("- ").strip())
@@ -1643,16 +1713,12 @@ def format_snapshot_compare_diff_text(
     newer_feat_labels = _feature_id_label_map(newer)
     older_dims = {
         str(d.get("symbol") or "").strip(): d
-        for d in _iter_compare_dimensions(
-            older.get("dimensions") if isinstance(older.get("dimensions"), list) else []
-        )
+        for d in _compare_dimension_rows(older)
         if str(d.get("symbol") or "").strip()
     }
     newer_dims = {
         str(d.get("symbol") or "").strip(): d
-        for d in _iter_compare_dimensions(
-            newer.get("dimensions") if isinstance(newer.get("dimensions"), list) else []
-        )
+        for d in _compare_dimension_rows(newer)
         if str(d.get("symbol") or "").strip()
     }
     dim_removed: list[str] = []

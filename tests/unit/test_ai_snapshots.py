@@ -1523,6 +1523,49 @@ def test_drawing_outline_lists_dimension_inventory_rows():
     assert "Dimensions:\n- (none)" not in outline
 
 
+def _dim_row(name: str, kind: str, value=None, **extra) -> dict:
+    row = {"name": name, "type": "DIMENSION", "subtype": kind, "id": f"dim:wedge.prt:{name}", "level": 2, "sheet": 1}
+    if value is not None:
+        row["value"] = value
+    row.update(extra)
+    return row
+
+
+def test_drawing_outline_shows_dimension_value_units_limits_and_displayed():
+    snap = _wedge_drawing_snapshot(
+        [
+            _dim_row("d2", "LINEAR", 25.0004, units="mm", value_displayed="25.00"),
+            _dim_row("add2", "ANGLE", 30, units="deg", tolerance_limits={"lower": 29.5, "upper": 30.5}),
+        ]
+    )
+    outline = format_snapshot_compare_text(snap)
+    assert "d2 (LINEAR, sheet 1) = 25.0004 mm [shows 25.00]" in outline
+    assert "add2 (ANGLE, sheet 1) = 30 deg (limits 29.5–30.5)" in outline
+
+
+def test_drawing_dimension_diff_compares_exact_value_not_displayed():
+    old = _wedge_drawing_snapshot([_dim_row("d2", "LINEAR", 25.0004, units="mm", value_displayed="25.00")])
+    same_shown = _wedge_drawing_snapshot([_dim_row("d2", "LINEAR", 25.0004, units="mm", value_displayed="25.0")])
+    tiny = _wedge_drawing_snapshot([_dim_row("d2", "LINEAR", 25.0009, units="mm", value_displayed="25.00")])
+    assert "Dimensions changed (same symbol): (none)" in format_snapshot_compare_diff_text(old, same_shown)
+    diff = format_snapshot_compare_diff_text(old, tiny)
+    assert "d2: 25.0004 mm" in diff and "→ 25.0009 mm" in diff
+
+
+def test_drawing_dimension_diff_added_removed_and_uncollected_values():
+    old = _wedge_drawing_snapshot([_dim_row("d2", "LINEAR"), _dim_row("d5", "LINEAR")])
+    new = _wedge_drawing_snapshot([_dim_row("d2", "LINEAR"), _dim_row("d9", "LINEAR", 4, units="mm")])
+    diff = format_snapshot_compare_diff_text(old, new)
+    removed = diff.split("Dimensions removed:", 1)[1].split("Dimensions changed", 1)[0]
+    added = diff.split("Dimensions added:", 1)[1]
+    assert "d5" in removed
+    assert "d9 [LINEAR] = 4 mm" in added or "d9 = 4 mm" in added
+    # d2 has no value on either side (not re-collected yet): not a change.
+    assert "d2:" not in diff
+    # Dimension rows are not also reported as feature add/remove.
+    assert "Features added:\n- d9" not in diff
+
+
 def test_drawing_outline_without_dimensions_still_says_none():
     outline = format_snapshot_compare_text(_wedge_drawing_snapshot([]))
     assert "Dimensions:" in outline
