@@ -387,8 +387,11 @@ window.__creopdmModules.creo_workspace = {
           relations: snapshot.relations && typeof snapshot.relations === "object"
             ? snapshot.relations
             : null,
+          // Creo 2D section (.sec): Toolkit sketch domain (outline, entities, dimensions…).
+          sketch: snapshot.sketch && typeof snapshot.sketch === "object" ? snapshot.sketch : null,
         };
         if (!body.mass) delete body.mass;
+        if (!body.sketch) delete body.sketch;
         try {
           const response = await fetch(
             `/api/objects/${encodeURIComponent(target.uuid)}/creo-metadata`,

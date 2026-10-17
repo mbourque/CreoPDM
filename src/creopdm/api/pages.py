@@ -37,7 +37,8 @@ from creopdm.utils.classify import (
     resolve_type_icon,
     type_icon_client_payload,
 )
-from creopdm.utils.creo_model_class import creo_subtype_display
+from creopdm.utils.creo_model_class import creo_subtype_display, model_type_display
+from creopdm.utils.sketch_metadata import sketch_overview
 from creopdm.utils.files import format_byte_size
 from creopdm.utils.folders import folder_crumbs, folder_of, folder_view_counts, normalize_folder_query
 from creopdm.utils.native_dialog import native_picker_available
@@ -617,6 +618,8 @@ def object_detail(
             ctx.metadata.top_level_assembly_uuids(db, product.id)
         )
     identity = metadata.identity or {}
+    # Creo 2D section (.sec): Toolkit sketch domain → Overview rows + Sketch tab.
+    sketch_view = sketch_overview(metadata.sketch if isinstance(metadata.sketch, dict) else None)
     materials = metadata.materials or {}
     units = metadata.units or {}
     mass = metadata.mass if isinstance(metadata.mass, dict) else None
@@ -681,6 +684,10 @@ def object_detail(
             "identity": identity,
             # Toolkit identity.subtype + model_role (None → show what Overview showed before).
             "subtype_display": creo_subtype_display(identity),
+            # Overview "Model type": a 2D section reads SKETCH.
+            "model_type_label": model_type_display(identity.get("model_type")),
+            "sketch_view": sketch_view,
+            "show_sketch_tab": bool(sketch_view),
             "materials": materials,
             "units": units,
             "mass": mass,

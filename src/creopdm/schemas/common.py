@@ -875,6 +875,8 @@ class CreoMetadataRequest(BaseModel):
     constraints: dict[str, object] | None = None
     # Model Relations / PostRegenerationRelations + feature Relations.
     relations: dict[str, object] | None = None
+    # Creo 2D section (.sec): Toolkit domains.sketch (outline, entities, dimensions, …).
+    sketch: dict[str, object] | None = None
 
 
 class CreoMetadataResponse(BaseModel):
@@ -893,6 +895,7 @@ class CreoMetadataResponse(BaseModel):
     simp_reps: dict[str, object] | None = None
     constraints: dict[str, object] | None = None
     relations: dict[str, object] | None = None
+    sketch: dict[str, object] | None = None
     captured: bool = False
 
 

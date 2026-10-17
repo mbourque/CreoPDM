@@ -803,3 +803,90 @@ def test_mfg_assembly_subtype_reads_mfg_on_overview_and_in_files_type(client, re
     listed = client.get(f"/api/products/{product['uuid']}/objects")
     assert listed.status_code == 200, listed.text
     assert {item["uuid"]: item["type_label"] for item in listed.json()}[nc["uuid"]] == "MFG"
+
+
+_SKETCH_PAYLOAD = {
+    "ok": True,
+    "units": {"length": "inch", "angle": "deg"},
+    "outline": {"min": [0, 0], "max": [4.98, 2.25], "width": 4.98, "height": 2.25},
+    "entities": {
+        "total": 6,
+        "counts": {"line": 4, "arc": 2, "circle": 0, "spline": 0, "point": 0,
+                   "centerline": 0, "text": 0, "other": 0},
+        "construction_count": 1,
+        "items": [],
+        "truncated": False,
+    },
+    "dimensions": [
+        {"id": "sd0", "type": "linear", "value": 4.98, "display": "4.980",
+         "entity_ids": [1], "reference": None, "tolerance": None},
+    ],
+    "constraints": [{"type": "horizontal", "entity_ids": [1]}],
+    "loops": {"closed": 1, "open": 0},
+    "status": {"fully_dimensioned": None},
+}
+
+
+@requires_git
+def test_sketch_metadata_is_stored_and_shown_on_overview_and_sketch_tab(client, repo_parent, tmp_path):
+    """.sec 2D section: Toolkit sketch domain → Overview rows, Sketch tab, SKETCH type."""
+    product = _create_product(client, repo_parent)
+    sketch = _add_part(client, product["uuid"], tmp_path, "test-sec.sec")
+    posted = client.post(
+        f"/api/objects/{sketch['uuid']}/creo-metadata",
+        json={
+            "identity": {
+                "file_name": "test-sec.sec",
+                "common_name": "TEST-SEC",
+                "model_type": "SECTION",
+                "creo_release": "Creo 10.0.10.0",
+                "saved_release": "13.4.1.0",
+                "subtype": None,
+            },
+            "sketch": _SKETCH_PAYLOAD,
+        },
+    )
+    assert posted.status_code == 200, posted.text
+    body = posted.json()
+    assert body["sketch"]["outline"]["width"] == 4.98
+    assert body["captured"] is True
+
+    fetched = client.get(f"/api/objects/{sketch['uuid']}/creo-metadata")
+    assert fetched.status_code == 200, fetched.text
+    assert fetched.json()["sketch"]["entities"]["counts"]["arc"] == 2
+
+    # A later save that carries other fields must not wipe the stored sketch.
+    again = client.post(
+        f"/api/objects/{sketch['uuid']}/creo-metadata",
+        json={"relations": {"normal": []}},
+    )
+    assert again.status_code == 200, again.text
+    assert again.json()["sketch"]["dimensions"][0]["display"] == "4.980"
+
+    detail = client.get(f"/products/{product['uuid']}/objects/{sketch['uuid']}")
+    assert detail.status_code == 200
+    text = detail.text
+    assert 'data-tab="sketch"' in text
+    assert 'id="panel-sketch"' in text
+    assert "<td>Model type</td><td>SKETCH</td>" in text  # not SECTION
+    assert "<td>Creo</td><td>13.4.1.0</td>" in text  # saved_release, from the file header
+    assert 'id="overview-sketch-size"' in text and "4.98 × 2.25 inch" in text
+    assert "4 line, 2 arc" in text
+    assert 'id="overview-sketch-dimensions"' in text
+    assert 'id="overview-sketch-profiles"' in text
+    assert 'id="overview-sketch-dimensioned"' not in text  # null → not shown
+    assert 'id="sketch-dimensions-table"' in text and "4.980" in text
+
+    listed = client.get(f"/api/products/{product['uuid']}/objects")
+    assert listed.status_code == 200, listed.text
+    assert {item["uuid"]: item["type_label"] for item in listed.json()}[sketch["uuid"]] == "SKETCH"
+
+
+@requires_git
+def test_section_without_sketch_data_shows_no_sketch_tab(client, repo_parent, tmp_path):
+    product = _create_product(client, repo_parent)
+    plain = _add_part(client, product["uuid"], tmp_path, "plain-sec.sec")
+    detail = client.get(f"/products/{product['uuid']}/objects/{plain['uuid']}")
+    assert detail.status_code == 200
+    assert 'data-tab="sketch"' not in detail.text
+    assert 'id="overview-sketch-size"' not in detail.text

@@ -25,6 +25,9 @@ def domains_for_filename(filename: str) -> str:
     parts = name.rsplit(".", 2)
     if len(parts) == 3 and parts[2].isdigit():
         name = f"{parts[0]}.{parts[1]}"
+    if name.endswith(".sec"):
+        # 2D sketch: any other domain answers "does not apply to a SECTION".
+        return "identity,sketch"
     if name.endswith(".mfg"):
         return "identity,parameters,mfg,units"
     if name.endswith(".drw"):
@@ -686,6 +689,19 @@ def map_toolkit_collect_to_snapshot(
                 if k not in {"ok", "fileName", "error", "partial", "partial_missing"}
             } or None
 
+    # 2D section (.sec): Toolkit 0.5.0 domains.sketch. Other domains answer ok:false
+    # ("does not apply to a SECTION"), which _ok_domain already treats as absent.
+    sketch = None
+    sketch_block = _ok_domain(payload, "sketch")
+    if sketch_block:
+        nested = sketch_block.get("sketch")
+        source = nested if isinstance(nested, dict) else sketch_block
+        sketch = {
+            k: v
+            for k, v in source.items()
+            if k not in {"ok", "fileName", "error", "partial", "partial_missing", "timings_ms"}
+        } or None
+
     # Nested ai_snapshot so Ask AI / postAiSnapshotFromGather work without Creo.JS.
     identity_ai = dict(identity)
     tip = str(identity_ai.get("file_name") or identity_ai.get("full_name") or "").strip()
@@ -723,6 +739,7 @@ def map_toolkit_collect_to_snapshot(
         "simp_reps": simp_reps,
         "constraints": constraints,
         "relations": None,
+        "sketch": sketch,
         "ai_snapshot": ai_snapshot,
         "_pdm_source": "toolkit",
     }

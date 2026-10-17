@@ -4491,11 +4491,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function isCreoMetadataCandidate(filename) {
-    // Toolkit /collect only accepts .prt/.asm/.drw/.mfg (optionally .N). Do not
-    // queue .sec/.frm/.lay/… — that surfaces toolkit_collect_failed mid-Rebuild.
+    // Toolkit /collect accepts .prt/.asm/.drw/.mfg and (Companion 0.5.0+) .sec 2D
+    // sketches, optionally with .N. Do not queue .frm/.lay/… — that surfaces
+    // toolkit_collect_failed mid-Rebuild.
     const base = String(filename || "");
     const logical = base.replace(/\.(\d+)$/i, "");
-    return /\.(prt|asm|drw|mfg)$/i.test(logical);
+    return /\.(prt|asm|drw|mfg|sec)$/i.test(logical);
   }
 
   function metadataCollectLogicalName(filename) {

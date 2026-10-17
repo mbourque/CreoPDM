@@ -94,6 +94,12 @@ def normalize_creo_model_type(value: Any) -> str:
     return ""
 
 
+def model_type_display(value: Any) -> str:
+    """Label for a stored model_type code: Creo's 2D section reads SKETCH."""
+    code = str(value or "").strip()
+    return "SKETCH" if code.upper() == "SECTION" else code
+
+
 def normalize_creo_model_role(value: Any) -> str:
     """Return SOLID/SHEETMETAL/… or '' when unknown."""
     if value is None:
@@ -249,4 +255,4 @@ def files_list_type_from_identity_json(raw: str | None) -> str:
     role = normalize_creo_model_role(data.get("model_role"))
     if role in _FILES_LIST_ROLE_LABELS:
         return role
-    return normalize_creo_model_type(data.get("model_type"))
+    return model_type_display(normalize_creo_model_type(data.get("model_type")))

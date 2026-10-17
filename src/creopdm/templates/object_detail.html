@@ -115,6 +115,9 @@
 
   <div class="tabs" role="tablist">
     <button type="button" class="tab is-active" data-tab="overview">Overview</button>
+    {% if show_sketch_tab %}
+    <button type="button" class="tab" data-tab="sketch">Sketch</button>
+    {% endif %}
     {% if is_creo %}
     <button type="button" class="tab" data-tab="parameters">Parameters</button>
     {% endif %}
@@ -183,7 +186,7 @@
           <tr><td>Generic</td><td>{{ id_generic }}</td></tr>
           {% endif %}
           {% if identity.model_type %}
-          <tr><td>Model type</td><td>{{ identity.model_type }}{% if is_top_level_assembly %} (Top Level){% endif %}</td></tr>
+          <tr><td>Model type</td><td>{{ model_type_label or identity.model_type }}{% if is_top_level_assembly %} (Top Level){% endif %}</td></tr>
           {% elif is_top_level_assembly %}
           <tr><td>Model type</td><td>ASSEMBLY (Top Level)</td></tr>
           {% endif %}
@@ -196,8 +199,10 @@
           {% elif identity.model_role %}
           <tr><td>Subtype</td><td>{{ identity.model_role }}</td></tr>
           {% endif %}
-          {% if object.creo_release %}
-          <tr><td>Creo</td><td>{{ object.creo_release }}</td></tr>
+          {# saved_release (Toolkit, from the file header) is the release the file was saved with. #}
+          {% set creo_release_text = identity.saved_release or object.creo_release %}
+          {% if creo_release_text %}
+          <tr><td>Creo</td><td>{{ creo_release_text }}</td></tr>
           {% endif %}
           <tr>
             <td>Date created</td>
@@ -210,6 +215,17 @@
           </tr>
           {% endif %}
           <tr><td>Size</td><td>{% if object.current_version %}{{ object.current_version.file_size | byte_size }}{% else %}—{% endif %}</td></tr>
+          {% if sketch_view %}
+          {# 2D section (.sec) from the Toolkit sketch domain; a null field reads "—", never 0/No. #}
+          <tr id="overview-sketch-size"><td>Sketch size</td><td>{{ sketch_view.size or "—" }}</td></tr>
+          <tr id="overview-sketch-entities"><td>Entities</td><td>{% if sketch_view.entity_total is not none %}{{ sketch_view.entity_total }}{% if sketch_view.entity_text %} <span class="muted small">({{ sketch_view.entity_text }})</span>{% endif %}{% else %}—{% endif %}</td></tr>
+          <tr id="overview-sketch-dimensions"><td>Dimensions</td><td>{{ sketch_view.dimension_count if sketch_view.dimension_count is not none else "—" }}</td></tr>
+          <tr id="overview-sketch-constraints"><td>Constraints</td><td>{% if sketch_view.constraint_total is not none %}{{ sketch_view.constraint_total }}{% if sketch_view.constraint_text %} <span class="muted small">({{ sketch_view.constraint_text }})</span>{% endif %}{% else %}—{% endif %}</td></tr>
+          <tr id="overview-sketch-profiles"><td>Closed profiles</td><td>{% if sketch_view.closed_loops is not none %}{{ sketch_view.closed_loops }}{% else %}—{% endif %}</td></tr>
+          {% if sketch_view.fully_dimensioned %}
+          <tr id="overview-sketch-dimensioned"><td>Fully dimensioned</td><td>{{ sketch_view.fully_dimensioned }}</td></tr>
+          {% endif %}
+          {% endif %}
           {% if object.checkout_user %}
           <tr>
             <td>Checked out by</td>
@@ -245,6 +261,71 @@
       </div>
     </div>
   </section>
+
+  {% if show_sketch_tab %}
+  <section class="tab-panel" id="panel-sketch" hidden>
+    <h3>Entities</h3>
+    {% if sketch_view.entity_counts %}
+    <div class="table-wrap">
+    <table class="grid inventory-table">
+      <thead><tr><th>Type</th><th>Count</th></tr></thead>
+      <tbody>
+        {% for item in sketch_view.entity_counts %}
+        <tr><td>{{ item.label }}</td><td>{{ item.count }}</td></tr>
+        {% endfor %}
+        {% if sketch_view.construction_count is not none %}
+        <tr><td>Construction (of the above)</td><td>{{ sketch_view.construction_count }}</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+    </div>
+    {% if sketch_view.entities_truncated %}
+    <p class="muted small">Entity detail was capped by the Toolkit; the counts above are complete.</p>
+    {% endif %}
+    {% else %}
+    <p class="muted">No entity breakdown from the Toolkit.</p>
+    {% endif %}
+
+    <h3>Dimensions</h3>
+    {% if sketch_view.dimensions %}
+    <div class="table-wrap">
+    <table class="grid inventory-table" id="sketch-dimensions-table">
+      <thead><tr><th>ID</th><th>Type</th><th>Value</th><th>Reference</th><th>Tolerance</th><th>Entities</th></tr></thead>
+      <tbody>
+        {% for dim in sketch_view.dimensions %}
+        <tr>
+          <td>{{ dim.id }}</td>
+          <td>{{ dim.type }}</td>
+          <td>{{ dim.value }}{% if sketch_view.length_unit and dim.type in ("Linear", "Radius", "Diameter") and dim.value != "—" %} <span class="muted small">{{ sketch_view.length_unit }}</span>{% endif %}</td>
+          <td>{{ dim.reference }}</td>
+          <td>{{ dim.tolerance }}</td>
+          <td>{{ dim.entities or "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% elif sketch_view.dimension_count is none %}
+    <p class="muted">The Toolkit did not report dimensions for this sketch.</p>
+    {% else %}
+    <p class="muted">This sketch has no dimensions.</p>
+    {% endif %}
+
+    {% if sketch_view.constraint_types %}
+    <h3>Constraints</h3>
+    <div class="table-wrap">
+    <table class="grid inventory-table">
+      <thead><tr><th>Type</th><th>Count</th></tr></thead>
+      <tbody>
+        {% for kind, count in sketch_view.constraint_types.items() %}
+        <tr><td>{{ kind|capitalize }}</td><td>{{ count }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
 
   {% if is_creo %}
   <section class="tab-panel" id="panel-parameters" hidden>

@@ -581,17 +581,33 @@ def _type_label_fingerprint(values: object) -> tuple[tuple[str, str], ...]:
     return tuple((item["extension"], item["label"]) for item in unique_type_labels(values))
 
 
+# Default labels that were renamed. Installs still on the old default set migrate to the
+# new one; a customised set is left alone.
+_LEGACY_TYPE_LABELS = {".sec": "Section"}  # now SKETCH
+
+
+def _with_legacy_labels(items: object) -> list[dict[str, str]]:
+    return [
+        {**item, "label": _LEGACY_TYPE_LABELS.get(item["extension"], item["label"])}
+        for item in unique_type_labels(items)
+    ]
+
+
 def _previous_type_label_fingerprints() -> set[tuple[tuple[str, str], ...]]:
     found: set[tuple[tuple[str, str], ...]] = set(PREVIOUS_DEFAULT_TYPE_LABEL_SETS)
-    found.add(_type_label_fingerprint(_pre_companion_type_labels()))
+
+    def add(items: object) -> None:
+        found.add(_type_label_fingerprint(items))
+        found.add(_type_label_fingerprint(_with_legacy_labels(items)))
+
+    add(_pre_companion_type_labels())
+    # The previous release's full defaults (old labels). Only the legacy variant: the
+    # current defaults must not count as "previous" or every load would rewrite them.
+    found.add(_type_label_fingerprint(_with_legacy_labels(DEFAULT_TYPE_LABELS)))
     skip: set[str] = set()
     for key in reversed(_ADDED_DEFAULT_TYPE_LABELS):
         skip.add(key)
-        found.add(
-            _type_label_fingerprint(
-                item for item in DEFAULT_TYPE_LABELS if item["extension"] not in skip
-            )
-        )
+        add([item for item in DEFAULT_TYPE_LABELS if item["extension"] not in skip])
     return found
 
 

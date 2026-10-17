@@ -118,14 +118,16 @@ def pack_features_json(
     simp_reps: dict[str, Any] | None = None,
     constraints: dict[str, Any] | None = None,
     relations: dict[str, Any] | None = None,
+    sketch: dict[str, Any] | None = None,
 ) -> Any:
-    """Store features list, or v1 envelope when structure / simp_reps / constraints / relations present."""
+    """Store features list, or v1 envelope when structure / simp_reps / constraints / relations / sketch present."""
     if (
         features is None
         and structure is None
         and simp_reps is None
         and constraints is None
         and relations is None
+        and sketch is None
     ):
         return None
     feat_list = normalize_feature_rows(features or [])
@@ -137,6 +139,7 @@ def pack_features_json(
         or simp_reps is not None
         or constraints is not None
         or relations is not None
+        or sketch is not None
     ):
         envelope: dict[str, Any] = {
             "v": _FEATURES_JSON_ENVELOPE_VERSION,
@@ -149,8 +152,20 @@ def pack_features_json(
             envelope["constraints"] = dict(constraints)
         if relations is not None and isinstance(relations, dict):
             envelope["relations"] = dict(relations)
+        if sketch is not None and isinstance(sketch, dict):
+            # 2D section (.sec) Toolkit "sketch" domain — kept in the envelope so no
+            # new column / migration is needed.
+            envelope["sketch"] = dict(sketch)
         return envelope
     return feat_list
+
+
+def unpack_sketch_from_features_json(raw: Any) -> dict[str, Any] | None:
+    """The stored Toolkit sketch dict from a features_json envelope, or None."""
+    if isinstance(raw, dict) and raw.get("v") == _FEATURES_JSON_ENVELOPE_VERSION:
+        sketch = raw.get("sketch")
+        return dict(sketch) if isinstance(sketch, dict) else None
+    return None
 
 
 def unpack_features_json(
@@ -281,14 +296,18 @@ class MetadataService:
             or payload.simp_reps is not None
             or payload.constraints is not None
             or payload.relations is not None
+            or payload.sketch is not None
         ):
+            existing_raw = _loads(version.features_json)
             (
                 existing_features,
                 existing_structure,
                 existing_simp,
                 existing_constraints,
                 existing_relations,
-            ) = unpack_features_json(_loads(version.features_json))
+            ) = unpack_features_json(existing_raw)
+            existing_sketch = unpack_sketch_from_features_json(existing_raw)
+            sketch = payload.sketch if payload.sketch is not None else existing_sketch
             feats = payload.features if payload.features is not None else existing_features
             struct = payload.structure if payload.structure is not None else existing_structure
             simp = payload.simp_reps if payload.simp_reps is not None else existing_simp
@@ -301,7 +320,7 @@ class MetadataService:
                 payload.relations if payload.relations is not None else existing_relations
             )
             version.features_json = _dumps(
-                pack_features_json(feats, struct, simp, cons, rels)
+                pack_features_json(feats, struct, simp, cons, rels, sketch=sketch)
             )
 
         bom_payload = payload.bom
@@ -374,8 +393,10 @@ class MetadataService:
         features, structure, simp_reps, constraints, relations = unpack_features_json(
             features_raw
         )
+        sketch = unpack_sketch_from_features_json(features_raw)
         captured = bool(
             identity
+            or sketch
             or materials
             or bom
             or units
@@ -415,6 +436,7 @@ class MetadataService:
             simp_reps=simp_reps,
             constraints=constraints,
             relations=relations,
+            sketch=sketch,
             captured=captured,
         )
 

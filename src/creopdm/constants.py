@@ -723,7 +723,7 @@ DEFAULT_TYPE_LABELS: tuple[dict[str, str], ...] = (
     {"extension": ".ncl", "label": "CL Data"},
     {"extension": ".tap, .nc, .cnc, .gcode", "label": "G-Code"},
     {"extension": ".frm", "label": "Drawing Format"},
-    {"extension": ".sec", "label": "Section"},
+    {"extension": ".sec", "label": "SKETCH"},
     {"extension": ".lay", "label": "Layout"},
     {"extension": ".mfg", "label": "Manufacturing Model"},
     {"extension": ".stp, .step", "label": "STEP Model"},
@@ -909,6 +909,8 @@ DEFAULT_TYPE_ICON_BY_LABEL: dict[str, str] = {
     "DIAGRAM": "drawing.png",
     "MARKUP": "drawing.png",
     "SECTION": "drawing.png",
+    # Creo 2D section (.sec) reads SKETCH in the Type column.
+    "SKETCH": "drawing.png",
     "PDF Document": "pdf.svg",
     "XPS Document": "xps.svg",
     "Word Document": "word.svg",
