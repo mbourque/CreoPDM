@@ -318,6 +318,8 @@ Quick check that the agent is up: open `http://127.0.0.1:8766/health` in a norma
 
 A prebuilt, unlocked `bin\creopdm_structure.dll` is in that repo. You do not need to compile it to use CreoPDM.
 
+**Sketches (`.sec`):** Collect reads Creo 2D sketches (size, entity counts, dimensions, constraints, closed profiles — shown on Details → Overview and the **Sketch** tab) with Companion **0.6.1 or newer**. An older Companion rejects `.sec`, so Collect reports a Toolkit error for sketches while other models still collect. Update the DLL on the Creo PC (close Creo first) and run **Rebuild metadata**. The Files **Type** column reads **SKETCH** for `.sec`.
+
 **Install**
 
 1. Download or clone [mbourque/CreoPDM-Toolkit-Companion](https://github.com/mbourque/CreoPDM-Toolkit-Companion) and keep these three together in a permanent folder outside Creo’s install (for example `C:\CreoPDM\Toolkit\`):
