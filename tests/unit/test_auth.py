@@ -1868,7 +1868,14 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
 
     hub_products = auth_client.get("/admin/products")
     assert hub_products.status_code == 200
-    assert ">Edit Products</a>" in hub_products.text
+    # The tile and the page are called just "Products" (list, add, edit).
+    assert '<h2><a href="/admin/products/edit">Products</a></h2>' in hub_products.text
+    assert "Edit Products" not in hub_products.text
+    products_page = auth_client.get("/admin/products/edit")
+    assert products_page.status_code == 200, products_page.text
+    assert "<h1>Products</h1>" in products_page.text
+    assert "Add product" in products_page.text
+    assert "Edit Products" not in products_page.text
     assert ">Copy Products</a>" in hub_products.text
     assert ">Promote Products</a>" in hub_products.text
     assert 'href="/admin/products/delete"' in hub_products.text

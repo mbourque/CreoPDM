@@ -2714,10 +2714,16 @@ def test_admin_hub_panel_fills_full_width():
     )
     assert "can_utilities_delete_product" in products_list
     assert 'href="/admin/products/delete"' in products_list
+    # The page itself is headed "Products" and keeps its Add product button.
+    assert "<h1>Products</h1>" in products_list
+    assert "Edit Products" not in products_list
+    assert 'href="/admin/products/new">Add product</a>' in products_list
     hub = (ROOT / "src" / "creopdm" / "templates" / "admin_products_hub.html").read_text(
         encoding="utf-8"
     )
-    assert ">Edit Products</a>" in hub
+    assert '<h2><a href="/admin/products/edit">Products</a></h2>' in hub
+    assert "Edit Products" not in hub
+    assert "See every product on this server, add a new one, or edit" in hub
     assert ">Copy Products</a>" in hub
     assert ">Promote Products</a>" in hub
     assert 'href="/admin/products/delete"' in hub

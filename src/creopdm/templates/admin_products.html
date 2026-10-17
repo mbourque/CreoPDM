@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Edit Products — {{ app_name }}{% endblock %}
+{% block title %}Products — {{ app_name }}{% endblock %}
 {% block content %}
 <article class="detail settings-page admin-page">
   <nav class="crumb">
@@ -11,9 +11,9 @@
     <span>/</span>
     <a href="/admin/products">Manage products</a>
     <span>/</span>
-    <span>Edit Products</span>
+    <span>Products</span>
   </nav>
-  <h1>Edit Products</h1>
+  <h1>Products</h1>
   <p class="muted">Every product on this CreoPDM server (including Archived). Click a name to edit its name, number, and description, or add a new product.{% if can_delete_product and can_utilities_delete_product %} To delete a product and its vault, use <a href="/admin/products/delete">Manage products → Delete products</a>.{% endif %}</p>
   <p><a class="btn btn-primary" href="/admin/products/new">Add product</a></p>
 

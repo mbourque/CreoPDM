@@ -14,7 +14,7 @@
     {% if mode == 'copy' %}
     <a href="/admin/products/copy">Copy Products</a>
     {% else %}
-    <a href="/admin/products/edit">Edit Products</a>
+    <a href="/admin/products/edit">Products</a>
     {% endif %}
     <span>/</span>
     <span>{% if mode == 'new' %}Add product{% elif mode == 'copy' %}Copy {{ form.source_name or form.name }}{% else %}{{ form.name }}{% endif %}</span>
@@ -78,7 +78,7 @@
       <p class="muted small">Default is <strong>In Work</strong>.{% if can_manage_lifecycle_states %} Permissions per state are configured under <a href="/admin/lifecycle">Administration → Lifecycle states</a>.{% else %} Permissions per state are configured under Administration → Lifecycle states.{% endif %}</p>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Create product</button>
-        <a class="btn" href="/admin/products/edit">Back to Edit Products</a>
+        <a class="btn" href="/admin/products/edit">Back to Products</a>
       </div>
     </section>
   </form>
@@ -102,7 +102,7 @@
       <p class="muted small">Set at create; cannot be changed. Change the lifecycle under <a href="/admin/products/promote">Promote Products</a>.</p>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Save</button>
-        <a class="btn" href="/admin/products/edit">Back to Edit Products</a>
+        <a class="btn" href="/admin/products/edit">Back to Products</a>
       </div>
     </section>
   </form>
