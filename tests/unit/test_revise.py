@@ -209,5 +209,10 @@ def test_revise_ui_is_wired_through_the_shared_menu_and_details():
     detail = (root / "templates" / "object_detail.html").read_text(encoding="utf-8")
     assert "product_ui.show_revise and object.can_revise" in detail
     assert 'id="revise-btn"' in detail
+    # /static is cached by URL: changing the menu script needs a new ?v= token or browsers keep
+    # the old menu (Revise… silently missing even though the row flags are right).
+    for name in ("base.html", "embed_explorer.html"):
+        page = (root / "templates" / name).read_text(encoding="utf-8")
+        assert "files_context_menu.js?v={{ app_version }}-files-ctx-revise" in page, name
     nav = (root / "static" / "js" / "embed_explorer.js").read_text(encoding="utf-8")
     assert "canRevise: showRevise && Boolean(obj.can_revise)" in nav
