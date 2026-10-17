@@ -15,6 +15,12 @@
   <p class="muted">Set who can open products, or edit, copy, promote, delete, compact, or rebuild. Each tile is its own page.</p>
 
   <div class="admin-tile-grid">
+    {% if can_manage_products %}
+    <section class="admin-tile">
+      <h2><a href="/admin/products/edit">Products</a></h2>
+      <p>See every product on this server, add a new one, or edit a product’s name, number, and description.</p>
+    </section>
+    {% endif %}
     {% if can_assign_products %}
     <section class="admin-tile">
       <h2><a href="/admin/membership">Product Membership</a></h2>
@@ -22,10 +28,6 @@
     </section>
     {% endif %}
     {% if can_manage_products %}
-    <section class="admin-tile">
-      <h2><a href="/admin/products/edit">Products</a></h2>
-      <p>See every product on this server, add a new one, or edit a product’s name, number, and description.</p>
-    </section>
     <section class="admin-tile">
       <h2><a href="/admin/products/copy">Copy Products</a></h2>
       <p>Make a new product from another product’s current vault files.</p>

@@ -382,8 +382,8 @@ Compact list for Creo’s navigator pane (~350–450 px wide): **`/embed/explore
 
 | Tile | What it does |
 |------|----------------|
-| **Product Membership** | Decide who can open which products (by product or by user). Needs `products.assign`. First tile on the hub. |
-| **Products** | List every product, add a new one, or edit a product’s name, number, and description. The vault folder is fixed after create. |
+| **Products** | List every product, add a new one, or edit a product’s name, number, and description. The vault folder is fixed after create. First tile on the hub. |
+| **Product Membership** | Decide who can open which products (by product or by user). Needs `products.assign`. Second tile, after Products. |
 | **Copy Products** | New product from another product’s current vault files: new id, **A.1**, **In Work**, and a clean Git history (the original is unchanged). **Use hash** locks a UUID as the vault name; uncheck it to type a name with no spaces. |
 | **Promote Products** | Change one product’s lifecycle state. Password confirm explains the change from the Lifecycle states matrix. The audit log records **Product state changed**. |
 | **Delete products** | Password confirm, then remove that product’s CreoPDM vault and unregister it. Needs `utilities.delete_product`. The old **Utilities → Delete products** address redirects here. |

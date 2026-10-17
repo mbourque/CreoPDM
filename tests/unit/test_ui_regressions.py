@@ -2730,7 +2730,9 @@ def test_admin_hub_panel_fills_full_width():
     assert 'href="/admin/products/compact"' in hub
     assert 'href="/admin/products/rebuild"' in hub
     assert 'href="/admin/membership"' in hub
-    assert hub.index('href="/admin/membership"') < hub.index('href="/admin/products/edit"')
+    # Tile order: Products first, then Product Membership, then Copy / Promote / …
+    assert hub.index('href="/admin/products/edit"') < hub.index('href="/admin/membership"')
+    assert hub.index('href="/admin/membership"') < hub.index('href="/admin/products/copy"')
     assert "can_assign_products" in hub
     assert "can_utilities_compact_product" in hub
     assert "can_utilities_rebuild_product" in hub
