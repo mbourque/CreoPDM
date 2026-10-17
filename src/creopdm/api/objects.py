@@ -485,6 +485,7 @@ def revise_preview(
             else ""
         ),
         new_lifecycle_state=preview.new_lifecycle_state,
+        unchanged_since=preview.unchanged_since,
     )
 
 

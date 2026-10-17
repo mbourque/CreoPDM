@@ -769,3 +769,52 @@ def test_promote_page_offers_the_undo_release_choice():
     assert "undo the release" in page
     js = (root / "static" / "js" / "admin.js").read_text(encoding="utf-8")
     assert "syncReopenChoice" in js and '"RELEASED" && (stateSel.value === "IN_WORK"' in js
+
+
+# ---- "Not changed since" note ------------------------------------------------------------
+
+
+@requires_git
+def test_revise_preview_notes_when_the_file_has_not_changed_since_its_revision_started(
+    auth_client, auth_ctx
+):
+    product, obj = _released_under_change(auth_client, auth_ctx)
+    vault = _vault_dir(auth_ctx, product)
+
+    # A.1 -> B.1, nothing edited, released again: B.1 is byte-identical to A.1.
+    first = auth_client.post(f"/api/objects/{obj['uuid']}/revise", json={"reason": "first"})
+    assert first.status_code == 200, first.text
+    assert _promote(auth_client, product, "RELEASED").status_code == 200
+    assert _promote(auth_client, product, "UNDER_CHANGE").status_code == 200
+    preview = auth_client.get(f"/api/objects/{obj['uuid']}/revise-preview").json()
+    assert preview["allowed"] is True  # allowed: a soft note, never a block
+    assert preview["new_display_version"] == "C.1"
+    assert preview["unchanged_since"] == "A.1"
+    # And it can really be revised again.
+    second = auth_client.post(f"/api/objects/{obj['uuid']}/revise", json={"reason": "second"})
+    assert second.status_code == 200, second.text
+    assert second.json()["display_version"] == "C.1"
+
+    # A revision whose content did change carries no note.
+    out = auth_client.post(f"/api/objects/{obj['uuid']}/checkout")
+    assert out.status_code == 200, out.text
+    (vault / "shaft.prt").write_bytes(b"really-edited")
+    checked = auth_client.post(
+        f"/api/objects/{obj['uuid']}/checkin", json={"comment": "edited"}
+    )
+    assert checked.status_code == 200, checked.text
+    assert _promote(auth_client, product, "RELEASED").status_code == 200
+    assert _promote(auth_client, product, "UNDER_CHANGE").status_code == 200
+    changed = auth_client.get(f"/api/objects/{obj['uuid']}/revise-preview").json()
+    assert changed["allowed"] is True and changed["new_display_version"] == "D.1"
+    assert changed["unchanged_since"] == ""
+
+
+def test_revise_dialog_shows_the_unchanged_note():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2] / "src" / "creopdm"
+    base = (root / "templates" / "base.html").read_text(encoding="utf-8")
+    assert 'id="revise-unchanged"' in base
+    app = (root / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    assert "body.unchanged_since" in app and "has not changed since" in app

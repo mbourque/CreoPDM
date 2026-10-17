@@ -334,6 +334,8 @@ class RevisePreviewResponse(BaseModel):
     new_iteration: int = 1
     new_display_version: str = ""
     new_lifecycle_state: str = "IN_WORK"
+    # "A.1" when this file has not changed since the version its revision started from.
+    unchanged_since: str = ""
 
 
 class CheckinRequest(BaseModel):

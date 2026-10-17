@@ -1427,6 +1427,8 @@ button.forgot-password-btn,
 .dialog form { display: flex; flex-direction: column; gap: 0.7rem; padding: 1.1rem; }
 .dialog h2 { margin: 0; }
 .revision-group-row th { text-align: left; background: #eef2f6; color: #3f4d5a; font-size: 0.82rem; padding: 0.35rem 0.75rem; }
+.revise-warning { margin: 0; padding: 0.5rem 0.7rem; border-radius: 6px; background: #fff7e0; border: 1px solid #e8cf85; color: #6b5200; font-size: 0.88rem; }
+.revise-warning[hidden] { display: none; }
 .revise-facts { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 1rem; margin: 0; }
 .revise-facts dt { color: #5d6b79; font-weight: 600; font-size: 0.88rem; }
 .revise-facts dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }

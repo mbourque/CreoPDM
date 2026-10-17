@@ -4291,6 +4291,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       `This preserves ${body.source_display_version} as an immutable historical version. ` +
         `${body.new_display_version} starts from its content.`
     );
+    // Soft warning, never a block: the file is byte-identical to where this revision started.
+    const unchanged = $("#revise-unchanged");
+    if (unchanged) {
+      const same = String(body.unchanged_since || "");
+      unchanged.hidden = !same;
+      unchanged.textContent = same
+        ? `This file has not changed since ${same}. The new revision ${body.new_display_version} ` +
+          "will start identical to it."
+        : "";
+    }
     const confirm = $("#revise-confirm");
     if (confirm) {
       confirm.textContent = `Create Revision ${body.new_revision}`;

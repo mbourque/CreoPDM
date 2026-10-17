@@ -122,6 +122,32 @@ class RevisePreview:
     new_revision: str = ""
     new_iteration: int = INITIAL_ITERATION
     new_lifecycle_state: str = LifecycleState.IN_WORK.value
+    # Display version (for example "A.1") this file is byte-identical to, when the current
+    # revision was started from it and never changed. Informational: it never blocks Revise.
+    unchanged_since: str = ""
+
+
+def unchanged_since(db: Session, obj: EngineeringObject, source: ObjectVersion) -> str:
+    """"A.1" when the current version has the same bytes as the version this revision started from.
+
+    Revising such a file is allowed (a revision can change without the model bytes changing:
+    drawings, metadata, a release step), but it is usually a mistake, so the dialog says so.
+    """
+    origin = db.scalar(
+        select(ObjectVersion)
+        .where(
+            ObjectVersion.object_id == obj.id,
+            ObjectVersion.revision == source.revision,
+            ObjectVersion.created_from_version_id.is_not(None),
+        )
+        .order_by(ObjectVersion.id.asc())
+        .limit(1)
+    )
+    if origin is None or origin.created_from is None:
+        return ""
+    if (origin.created_from.content_hash or "") != (source.content_hash or ""):
+        return ""
+    return f"{origin.created_from.revision}.{origin.created_from.iteration}"
 
 
 def next_revision_for(db: Session, obj: EngineeringObject) -> str:
@@ -170,7 +196,12 @@ def preview_revise(
         return RevisePreview(
             eligibility=ReviseEligibility(False, exc.code, exc.message, exc.details), **base
         )
-    return RevisePreview(eligibility=eligibility, new_revision=new_revision, **base)
+    return RevisePreview(
+        eligibility=eligibility,
+        new_revision=new_revision,
+        unchanged_since=unchanged_since(db, obj, source),
+        **base,
+    )
 
 
 def object_can_revise(obj: EngineeringObject, checkout: Checkout | None) -> bool:
