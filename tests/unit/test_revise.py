@@ -729,10 +729,15 @@ def test_promote_back_keeps_files_released_unless_asked_to_undo_the_release(
     assert kept["lifecycle_state"] == "RELEASED" and kept["can_checkout"] is False
     assert auth_client.get(f"/api/objects/{obj['uuid']}/revise-eligibility").json()["allowed"] is True
 
-    # The choice is ignored for transitions it does not apply to (Released -> Under Change).
+    # The choice is ignored for transitions it does not apply to (-> Under Change).
     assert _promote(auth_client, product, "RELEASED").status_code == 200
     assert _promote_with(auth_client, product, "UNDER_CHANGE", reopen_files="1").status_code == 200
     assert auth_client.get(f"/api/objects/{obj['uuid']}").json()["lifecycle_state"] == "RELEASED"
+
+    # Under Change -> In Work with the choice also undoes the release (Released files in a
+    # reopened product are the common case).
+    assert _promote_with(auth_client, product, "IN_WORK", reopen_files="1").status_code == 200
+    assert auth_client.get(f"/api/objects/{obj['uuid']}").json()["lifecycle_state"] == "IN_WORK"
 
     # Released -> In Work WITH the choice undoes the release.
     assert _promote(auth_client, product, "RELEASED").status_code == 200
@@ -768,7 +773,8 @@ def test_promote_page_offers_the_undo_release_choice():
     assert 'id="promote-reopen"' in page and 'name="reopen_files"' in page
     assert "undo the release" in page
     js = (root / "static" / "js" / "admin.js").read_text(encoding="utf-8")
-    assert "syncReopenChoice" in js and '"RELEASED" && (stateSel.value === "IN_WORK"' in js
+    assert "syncReopenChoice" in js and 'stateSel.value === "IN_WORK" || stateSel.value === "PRE_WORK"' in js
+    assert "opt?.dataset?.released" in js and 'data-released="' in page
 
 
 # ---- "Not changed since" note ------------------------------------------------------------

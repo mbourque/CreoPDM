@@ -923,13 +923,22 @@ window.__creopdmModules.admin = {
         }
       }
       const confirm = shell.confirmByProductName;
-      // Undo a release: only Released -> In Work / Pre-Work offers 'set Released files back'.
+      // Undo a release: offered whenever the product has Released files and the new state is
+      // In Work / Pre-Work (from Released, Under Change, …), with the number of files.
       const syncReopenChoice = () => {
-        const from = productSel.selectedOptions?.[0]?.dataset?.state || "";
+        const opt = productSel.selectedOptions?.[0];
+        const from = opt?.dataset?.state || "";
+        const released = Number(opt?.dataset?.released || 0);
         const wrap = $("#promote-reopen-wrap");
         const hint = $("#promote-reopen-hint");
         const box = $("#promote-reopen");
-        const show = from === "RELEASED" && (stateSel.value === "IN_WORK" || stateSel.value === "PRE_WORK");
+        const label = $("#promote-reopen-label");
+        const toEditable = stateSel.value === "IN_WORK" || stateSel.value === "PRE_WORK";
+        const show = released > 0 && toEditable && from !== stateSel.value;
+        if (label && released > 0) {
+          label.textContent =
+            `Also set the ${released} Released file${released === 1 ? "" : "s"} back to In Work (undo the release)`;
+        }
         if (wrap) wrap.hidden = !show;
         if (hint) hint.hidden = !show;
         if (!show && box) box.checked = false;

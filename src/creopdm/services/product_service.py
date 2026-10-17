@@ -468,8 +468,8 @@ class ProductService:
     ) -> Product:
         """Update name/number/description/state. Never changes vault_folder.
 
-        ``reopen_released_files`` (Promote Products, Released -> In Work / Pre-Work only) also sets
-        the product's Released files back to In Work, i.e. undoes a release. Without it they stay
+        ``reopen_released_files`` (Promote Products, any state -> In Work / Pre-Work) also sets the
+        product's Released files back to In Work, i.e. undoes a release. Without it they stay
         Released and change only through Revise.
         """
         product = self.get_product(session, product_uuid)
@@ -495,7 +495,6 @@ class ProductService:
         reopening = bool(
             reopen_released_files
             and state_changed
-            and old_state == ProductState.RELEASED.value
             and new_state in {ProductState.IN_WORK.value, ProductState.PRE_WORK.value}
         )
         if releasing:

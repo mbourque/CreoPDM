@@ -1987,6 +1987,23 @@ def _require_manage_products_hub(
     return user
 
 
+def _released_file_counts(db: Session) -> dict[str, int]:
+    """Released files per product uuid (Promote Products offers to set them back to In Work)."""
+    from sqlalchemy import func, select
+
+    from creopdm.constants import LifecycleState
+    from creopdm.models.object import EngineeringObject
+    from creopdm.models.product import Product
+
+    rows = db.execute(
+        select(Product.uuid, func.count(EngineeringObject.id))
+        .join(EngineeringObject, EngineeringObject.product_id == Product.id)
+        .where(EngineeringObject.lifecycle_state == LifecycleState.RELEASED.value)
+        .group_by(Product.uuid)
+    ).all()
+    return {uuid: int(count) for uuid, count in rows}
+
+
 def _admin_product_rows(ctx: AppContext, db: Session):
     return [
         product_to_response(p)
@@ -2351,6 +2368,7 @@ def _promote_products_response(
             "success": success,
             "promote_product_id": product_id,
             "promote_state": state,
+            "released_counts": _released_file_counts(db),
             "lifecycle_promote": promote_confirm_payload(),
             **_lifecycle_form_ctx(),
         },

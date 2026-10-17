@@ -25,7 +25,7 @@
         <select name="product_id" id="promote-product" required>
           <option value="">Select a product…</option>
           {% for p in products %}
-          <option value="{{ p.uuid }}" data-state="{{ p.state }}" data-name="{{ p.name }}"
+          <option value="{{ p.uuid }}" data-state="{{ p.state }}" data-name="{{ p.name }}" data-released="{{ released_counts.get(p.uuid, 0) if released_counts else 0 }}"
                   {% if promote_product_id == p.uuid %}selected{% endif %}>{{ p.name }}{% if not p.active %} (inactive){% endif %}</option>
           {% endfor %}
         </select>
@@ -41,9 +41,9 @@
       </label>
       <label class="choice" id="promote-reopen-wrap" hidden>
         <input type="checkbox" name="reopen_files" id="promote-reopen" value="1">
-        <span>Also set Released files back to In Work (undo the release)</span>
+        <span id="promote-reopen-label">Also set Released files back to In Work (undo the release)</span>
       </label>
-      <p class="muted small" id="promote-reopen-hint" hidden>Unchecked, the files stay Released and each one needs a Revise before it can be edited. To reopen a released product for Revise, use Under Change instead.</p>
+      <p class="muted small" id="promote-reopen-hint" hidden>Unchecked, the Released files stay Released and each one needs a Revise before it can be edited. Files already In Work are not touched.</p>
       <input type="hidden" name="confirm_password" value="">
       <p class="form-actions">
         <button type="submit" class="btn btn-primary" {% if not products %}disabled{% endif %}>Change state</button>
