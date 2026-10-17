@@ -203,6 +203,42 @@ def test_embed_explorer_context_follows_switched_product(client):
 
 
 @requires_git
+def test_embed_explorer_file_hint_pins_product_so_polls_must_drop_it(client):
+    """Toolkit opens the pane with ?file=<active model>: the server prefers that file's
+    product over last-used, so a following pane must stop sending file/folder after the
+    first sync or switching products in Files never reaches it."""
+    first = client.post("/api/products", json={"name": "Hint Alpha"}).json()
+    second = client.post("/api/products", json={"name": "Hint Beta"}).json()
+    _add_prt(client, first["uuid"], name="a.prt", relative_path="a.prt")
+    _add_prt(client, second["uuid"], name="b.prt", relative_path="b.prt")
+    assert client.get(f"/?product={second['uuid']}").status_code == 200
+
+    pinned = client.get("/api/embed/explorer/context", params={"file": "a.prt"})
+    assert pinned.status_code == 200, pinned.text
+    assert pinned.json()["product"]["uuid"] == first["uuid"]  # file hint wins
+    followed = client.get("/api/embed/explorer/context")
+    assert followed.status_code == 200, followed.text
+    assert followed.json()["product"]["uuid"] == second["uuid"]  # last-used (Files)
+
+
+def test_embed_explorer_follow_polls_send_file_and_folder_only_once():
+    script = EMBED_JS.read_text(encoding="utf-8")
+    query_fn = script.split("function contextQuery()", 1)[1].split(
+        "async function syncActiveProduct(", 1
+    )[0]
+    # Regression: file/folder on every poll pinned the pane to the active model's product.
+    assert "followActive && contextSeeded" in query_fn
+    assert 'q.set("file", queryFile)' in query_fn
+    assert 'q.set("folder", queryFolder)' in query_fn
+    sync_fn = script.split("async function syncActiveProduct(", 1)[1].split(
+        "async function loadObjects(", 1
+    )[0]
+    assert "contextSeeded = true" in sync_fn
+    # An unswitched refresh keeps the focus the first load seeded.
+    assert "followActive && wasSeeded" in sync_fn
+
+
+@requires_git
 def test_embed_explorer_resolves_product_by_name(client):
     product = client.post("/api/products", json={"name": "Wedge Desk"}).json()
     page = client.get("/embed/explorer", params={"product": "Wedge Desk"})

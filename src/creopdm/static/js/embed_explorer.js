@@ -77,6 +77,13 @@
   var listError = "";
   var listLoadSeq = 0;
   var contextSeq = 0;
+  /**
+   * True after the first context sync. Toolkit opens the pane with ?file=&folder= (the
+   * active model) — that only seeds the first load. Later polls must follow Files'
+   * last-used product; the server prefers a file's product over last-used, so sending
+   * file/folder on every poll pinned the pane to the product of the active model.
+   */
+  var contextSeeded = false;
   var syncingContext = false;
   /** Creo CEF often never fires focus/visibility when the pane stays loaded. */
   var followPollTimer = null;
@@ -848,8 +855,11 @@
       if (queryProduct) q.set("product", queryProduct);
       else if (productId) q.set("product", productId);
     }
-    if (queryFile) q.set("file", queryFile);
-    if (queryFolder) q.set("folder", queryFolder);
+    // A pinned pane (?product=) keeps sending them; a following pane only seeds once.
+    if (!(followActive && contextSeeded)) {
+      if (queryFile) q.set("file", queryFile);
+      if (queryFolder) q.set("folder", queryFolder);
+    }
     q.set("_", String(Date.now()));
     return q;
   }
@@ -879,6 +889,8 @@
       }
       var body = await response.json();
       if (seq !== contextSeq) return false;
+      var wasSeeded = contextSeeded;
+      contextSeeded = true;
       var product = body && body.product ? body.product : null;
       var nextId = product && product.uuid ? String(product.uuid) : "";
       var switched = Boolean(nextId && nextId !== productId);
@@ -889,8 +901,12 @@
       vaultFolder = product
         ? String(product.vault_folder || product.uuid || "")
         : "";
-      focusUuid = String((body && body.focus_uuid) || "").trim();
-      initialFolder = String((body && body.initial_folder) || "").trim();
+      // After the first sync a following pane no longer sends file/folder, so an
+      // unswitched refresh must keep the focus the first load seeded.
+      if (!(followActive && wasSeeded) || switched) {
+        focusUuid = String((body && body.focus_uuid) || "").trim();
+        initialFolder = String((body && body.initial_folder) || "").trim();
+      }
       if (initialFolder) ensureExpandedPath(initialFolder);
       root.setAttribute("data-product-uuid", productId);
       root.setAttribute("data-vault-folder", vaultFolder);
