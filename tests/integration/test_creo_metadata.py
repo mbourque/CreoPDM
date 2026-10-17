@@ -923,3 +923,34 @@ def test_section_the_toolkit_could_not_read_says_why_and_shows_no_subtype_none(c
     assert 'id="overview-subtype-row"' not in text
     assert "<td>NONE</td>" not in text
     assert "<td>Model type</td><td>SKETCH</td>" in text
+
+
+@requires_git
+def test_partial_sketch_shows_data_and_names_what_is_missing(client, repo_parent, tmp_path):
+    product = _create_product(client, repo_parent)
+    sec = _add_part(client, product["uuid"], tmp_path, "partial-sec.sec")
+    partial = dict(_SKETCH_PAYLOAD)
+    partial.update(
+        {
+            "dimensions": None,
+            "constraints": None,
+            "status": {"regenerated": True},
+            "partial_missing": [
+                {"part": "constraints", "function": "ProSectionConstraintIdsGet", "return_code": -2}
+            ],
+        }
+    )
+    posted = client.post(
+        f"/api/objects/{sec['uuid']}/creo-metadata",
+        json={"identity": {"file_name": "partial-sec.sec", "model_type": "SECTION"}, "sketch": partial},
+    )
+    assert posted.status_code == 200, posted.text
+    text = client.get(f"/products/{product['uuid']}/objects/{sec['uuid']}").text
+    assert 'data-tab="sketch"' in text
+    assert 'id="overview-sketch-partial"' in text
+    assert "ProSectionConstraintIdsGet=-2" in text
+    assert 'id="sketch-partial-note"' in text
+    assert 'id="sketch-regenerated-note"' in text
+    assert "4 line, 2 arc" in text  # what was readable is still shown
+    # Unknown (null) counts read "—", not 0.
+    assert '<tr id="overview-sketch-dimensions"><td>Dimensions</td><td>—</td></tr>' in text

@@ -66,6 +66,27 @@ def _tolerance(value: Any) -> str:
     return text or "—"
 
 
+def _partial_text(raw: Any) -> str:
+    """Readable list of the parts the Toolkit could not read (strings or small dicts)."""
+    if not isinstance(raw, list):
+        return ""
+    parts: list[str] = []
+    for item in raw:
+        if isinstance(item, dict):
+            what = _text(item.get("part") or item.get("domain") or item.get("name") or item.get("field"))
+            func = _text(item.get("function") or item.get("func"))
+            code = item.get("return_code", item.get("rc", item.get("code")))
+            where = _text(item.get("id") or item.get("entity_id") or item.get("dimension_id"))
+            reason = f"{func}={code}" if func and code is not None else func or _text(item.get("error"))
+            bits = [bit for bit in (what, reason, f"id {where}" if where else "") if bit]
+            parts.append(" — ".join(bits[:1]) + (f" ({', '.join(bits[1:])})" if len(bits) > 1 else ""))
+        else:
+            text = _text(item)
+            if text:
+                parts.append(text)
+    return "; ".join(part for part in parts if part)
+
+
 def sketch_error(sketch: Any) -> str:
     """The Toolkit's reason when it could not read the sketch ("" when there is none)."""
     if isinstance(sketch, dict) and sketch.get("ok") is False:
@@ -161,6 +182,10 @@ def sketch_overview(sketch: Any) -> dict[str, Any] | None:
         "closed_loops": closed,
         # Only shown when the Toolkit reported a real boolean.
         "fully_dimensioned": "Yes" if fully is True else "No" if fully is False else "",
+        # Parts the Toolkit could not read ("entities (ProSectionEntityIdsGet=-2)" …).
+        "partial": _partial_text(sketch.get("partial_missing")),
+        # True only when the Toolkit regenerated the section in Creo to read it.
+        "regenerated": status.get("regenerated") is True,
     }
     has_data = any(
         (

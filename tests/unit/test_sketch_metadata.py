@@ -153,3 +153,46 @@ def test_a_failed_sketch_domain_keeps_the_toolkit_reason_instead_of_vanishing():
     assert sketch_error(SKETCH) == ""
     assert sketch_error(None) == ""
     assert sketch_error({"ok": False}) == "the Toolkit could not read this sketch"
+
+
+def test_partial_results_say_which_parts_the_toolkit_could_not_read():
+    """Companion 0.5.1: each part is read on its own; failures arrive in partial_missing."""
+    payload = {
+        "ok": True,
+        "domains": {
+            "identity": {"ok": True, "identity": {"file_name": "test-sec.sec", "model_type": "SECTION"}},
+            "sketch": {
+                "ok": True,
+                "units": {"length": "inch"},
+                "outline": None,
+                "entities": {"total": 4, "counts": {"line": 4}, "construction_count": None,
+                             "items": [], "truncated": False},
+                "dimensions": None,
+                "constraints": None,
+                "loops": None,
+                "status": {"regenerated": True},
+                "partial": True,
+                "partial_missing": [
+                    {"part": "dimensions", "function": "ProSectionDimensionIdsGet", "return_code": -2},
+                    "constraints (ProSectionConstraintIdsGet=-2)",
+                ],
+            },
+        },
+    }
+    snap = map_toolkit_collect_to_snapshot(payload, fallback_filename="test-sec.sec")
+    assert snap["sketch"]["partial_missing"][1].startswith("constraints")  # kept, not dropped
+    view = sketch_overview(snap["sketch"])
+    assert view["entity_total"] == 4
+    assert view["dimension_count"] is None  # unknown → "—", not 0
+    assert view["constraint_total"] is None
+    assert view["size"] == ""
+    assert view["partial"] == (
+        "dimensions (ProSectionDimensionIdsGet=-2); constraints (ProSectionConstraintIdsGet=-2)"
+    )
+    assert view["regenerated"] is True
+
+
+def test_a_complete_sketch_has_no_partial_note_and_regenerated_only_when_true():
+    view = sketch_overview(SKETCH)
+    assert view["partial"] == ""
+    assert view["regenerated"] is False  # null / absent is not "regenerated"

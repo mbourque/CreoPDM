@@ -696,10 +696,12 @@ def map_toolkit_collect_to_snapshot(
     if sketch_block:
         nested = sketch_block.get("sketch")
         source = nested if isinstance(nested, dict) else sketch_block
+        # partial_missing is kept: it says which parts (entities / dimensions /
+        # constraints) the Toolkit could not read, and why.
         sketch = {
             k: v
             for k, v in source.items()
-            if k not in {"ok", "fileName", "error", "partial", "partial_missing", "timings_ms"}
+            if k not in {"ok", "fileName", "error", "partial", "timings_ms"}
         } or None
     else:
         raw_domains = payload.get("domains")

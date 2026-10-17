@@ -228,6 +228,9 @@
           {% if sketch_view.fully_dimensioned %}
           <tr id="overview-sketch-dimensioned"><td>Fully dimensioned</td><td>{{ sketch_view.fully_dimensioned }}</td></tr>
           {% endif %}
+          {% if sketch_view.partial %}
+          <tr id="overview-sketch-partial"><td>Sketch data</td><td class="muted">Partial — the Toolkit could not read: {{ sketch_view.partial }}</td></tr>
+          {% endif %}
           {% endif %}
           {% if object.checkout_user %}
           <tr>
@@ -267,6 +270,12 @@
 
   {% if show_sketch_tab %}
   <section class="tab-panel" id="panel-sketch" hidden>
+    {% if sketch_view.partial %}
+    <p class="muted" id="sketch-partial-note">Partial data — the Toolkit could not read: {{ sketch_view.partial }}</p>
+    {% endif %}
+    {% if sketch_view.regenerated %}
+    <p class="muted small" id="sketch-regenerated-note">The Toolkit regenerated this sketch in Creo to read it.</p>
+    {% endif %}
     <h3>Entities</h3>
     {% if sketch_view.entity_counts %}
     <div class="table-wrap">
