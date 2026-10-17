@@ -1513,8 +1513,8 @@ def test_drawing_outline_lists_dimension_inventory_rows():
     """Drawings get dimensions only as DIMENSION inventory rows: Modifications must show them."""
     snap = _wedge_drawing_snapshot(
         [
-            {"name": "add2", "type": "DIMENSION", "detail": "ANGLE", "id": "dim:wedge.drw:2", "level": 2, "sheet": 1},
-            {"name": "d2", "type": "DIMENSION", "detail": "LINEAR", "id": "dim:wedge.prt:2", "level": 2, "sheet": 1},
+            {"name": "add2", "type": "DIMENSION", "subtype": "ANGLE", "id": "dim:wedge.drw:2", "level": 2, "sheet": 1},
+            {"name": "d2", "type": "DIMENSION", "subtype": "LINEAR", "id": "dim:wedge.prt:2", "level": 2, "sheet": 1},
         ]
     )
     outline = format_snapshot_compare_text(snap)

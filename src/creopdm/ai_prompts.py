@@ -169,8 +169,10 @@ def _inventory_outline_line(row: dict[str, Any]) -> str:
     nest = "└ " if level > 1 else ""
     extras: list[str] = []
     detail = str(row.get("detail") or "").strip()
-    if typ.upper() == "DIMENSION" and detail:
-        extras.append(detail)  # kind (LINEAR / ANGLE / RADIUS) instead of the word DIMENSION
+    dim_kind = str(row.get("subtype") or row.get("subType") or "").strip()
+    if typ.upper() == "DIMENSION" and (dim_kind or detail):
+        # kind (LINEAR / ANGLE / RADIUS) instead of the word DIMENSION
+        extras.append(dim_kind or detail)
     elif typ and typ.upper() not in name.upper():
         extras.append(typ)
     if status:
