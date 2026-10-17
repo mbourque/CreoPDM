@@ -382,7 +382,7 @@ Compact list for Creo’s navigator pane (~350–450 px wide): **`/embed/explore
 
 | Tile | What it does |
 |------|----------------|
-| **Membership** | Decide who can open which products (by product or by user). Needs `products.assign`. First tile on the hub. |
+| **Product Membership** | Decide who can open which products (by product or by user). Needs `products.assign`. First tile on the hub. |
 | **Products** | List every product, add a new one, or edit a product’s name, number, and description. The vault folder is fixed after create. |
 | **Copy Products** | New product from another product’s current vault files: new id, **A.1**, **In Work**, and a clean Git history (the original is unchanged). **Use hash** locks a UUID as the vault name; uncheck it to type a name with no spaces. |
 | **Promote Products** | Change one product’s lifecycle state. Password confirm explains the change from the Lifecycle states matrix. The audit log records **Product state changed**. |

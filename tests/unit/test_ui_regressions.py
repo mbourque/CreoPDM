@@ -3008,3 +3008,25 @@ def test_agent_auth_headers_sent_to_localhost_agent():
     health = _between(script, "async function probeCreoAgent(", "async function pushLocalWorkspaceToVault(")
     assert 'fetch(`${agentBase()}/health`' in health or 'agentBase()}/health' in health
     assert "agentAuthHeaders" not in health
+
+
+def test_membership_pages_are_labelled_product_membership():
+    """Tile, titles, headings, breadcrumbs and Back buttons all say Product Membership."""
+    templates = ROOT / "src" / "creopdm" / "templates"
+    names = (
+        "admin_membership.html",
+        "admin_membership_users.html",
+        "admin_membership_products.html",
+        "admin_membership_user.html",
+        "admin_membership_product.html",
+    )
+    for name in names:
+        text = (templates / name).read_text(encoding="utf-8")
+        assert "{% block title %}Product Membership" in text, name
+        assert "<h1>Product Membership" in text, name
+        assert "<h1>Membership" not in text, name
+        assert 'href="/admin/membership">Membership</a>' not in text, name
+        assert "<span>Membership</span>" not in text, name
+        assert "Back to Membership" not in text, name
+    hub = (templates / "admin_products_hub.html").read_text(encoding="utf-8")
+    assert '<h2><a href="/admin/membership">Product Membership</a></h2>' in hub

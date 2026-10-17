@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Membership by user — {{ app_name }}{% endblock %}
+{% block title %}Product Membership by user — {{ app_name }}{% endblock %}
 {% block content %}
 <article class="detail settings-page admin-page">
   <nav class="crumb">
@@ -11,11 +11,11 @@
     <span>/</span>
     <a href="/admin/products">Manage products</a>
     <span>/</span>
-    <a href="/admin/membership">Membership</a>
+    <a href="/admin/membership">Product Membership</a>
     <span>/</span>
     <span>By user</span>
   </nav>
-  <h1>Membership — By user</h1>
+  <h1>Product Membership — By user</h1>
   <p class="muted">Click a user to set All products or a specific product list.</p>
 
   <section class="settings-card settings-form-wide">
@@ -40,6 +40,6 @@
       </tbody>
     </table>
   </section>
-  <p><a class="btn" href="/admin/membership">Back to Membership</a></p>
+  <p><a class="btn" href="/admin/membership">Back to Product Membership</a></p>
 </article>
 {% endblock %}

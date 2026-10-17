@@ -181,7 +181,7 @@ def test_admin_copy_product_is_a_fresh_add(auth_client, auth_ctx):
     assert released.status_code == 200, released.text
 
     hub = auth_client.get("/admin")
-    assert "Membership, then edit, copy, promote, delete, compact, or rebuild." in hub.text
+    assert "Product Membership, then edit, copy, promote, delete, compact, or rebuild." in hub.text
 
     form = auth_client.get(f"/admin/products/{source['uuid']}/copy")
     assert form.status_code == 200, form.text

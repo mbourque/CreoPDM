@@ -1851,7 +1851,7 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     assert hub.status_code == 200
     assert 'href="/admin/products"' in hub.text
     assert ">Manage products</a>" in hub.text
-    assert "Membership, then edit, copy, promote, delete, compact, or rebuild." in hub.text
+    assert "Product Membership, then edit, copy, promote, delete, compact, or rebuild." in hub.text
 
     created = auth_client.post(
         "/admin/products/new",
@@ -1876,6 +1876,13 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     assert "<h1>Products</h1>" in products_page.text
     assert "Add product" in products_page.text
     assert "Edit Products" not in products_page.text
+    # Membership tile, page heading and breadcrumb are all "Product Membership".
+    assert '<h2><a href="/admin/membership">Product Membership</a></h2>' in hub_products.text
+    membership_page = auth_client.get("/admin/membership")
+    assert membership_page.status_code == 200, membership_page.text
+    assert "<h1>Product Membership</h1>" in membership_page.text
+    assert "<span>Product Membership</span>" in membership_page.text
+    assert "<title>Product Membership" in membership_page.text
     assert ">Copy Products</a>" in hub_products.text
     assert ">Promote Products</a>" in hub_products.text
     assert 'href="/admin/products/delete"' in hub_products.text

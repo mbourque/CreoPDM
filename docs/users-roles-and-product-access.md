@@ -30,7 +30,7 @@ Users with any CreoPDM Administration capability (`users.manage`, `users.passwor
 
 - **Users** — list accounts (Products column: **All** or membership count); click a **name** to edit the user, or a **role** name to open that role (`roles.manage`); **Add user** (`users.manage` + `users.password` for the initial password). Username is 2–64 characters (letters, numbers, or underscore only — no spaces or special characters; sign-in is not case-sensitive). Email is required and must be a valid `name@domain.tld`. New users get **no product access**; membership is not edited here.
 - **Roles** — list/create/edit/delete roles and their permission checkboxes (`roles.manage`). The role editor groups **CreoPDM Administration** (`users.manage`, `users.password`, `roles.assign`, `roles.manage`, `products.assign`, `products.manage`, `lifecycle_states.manage`, `settings.manage`, `email.manage`, and all `utilities.*` keys), **Products** (`products.view`, `products.create`, `products.edit`, `products.delete`), and **Objects**.
-- **Membership** — decide who can open which products (`products.assign`): hub with **By product** and **By user** list pages, then edit members / All-products for one row
+- **Product Membership** — decide who can open which products (`products.assign`): hub with **By product** and **By user** list pages, then edit members / All-products for one row
 - **Products** — list every active product on the server; create, edit, and soft-delete (`products.manage`). Not limited by the signed-in user’s product membership list. (Files-page New/Delete still use `products.create` / `products.delete`.)
 - **Lifecycle states** — edit the product lifecycle matrix (`lifecycle_states.manage`; Administrator by default).
 - **Email** — choose Local Postfix (`127.0.0.1:25`) or Authenticated SMTP; From address, administrator email, Test Email (`email.manage`). When notifications are **enabled**, signed-in users with product access and a valid email can **Watch** a product (bell next to the gear on Files) and receive activity summaries; the bell is hidden when notifications are disabled.
@@ -52,13 +52,13 @@ Others do not see Administration; direct URLs return **403**.
 | --- | --- |
 | `roles.assign` | Change another user’s role. Full administrators may pick any role (including Administrator). Everyone else may only pick a role with **fewer** permissions than their own. Without this cap, Role is read-only and new users default to **Engineer** |
 | `users.password` | Set initial password on Add user, or reset password on Edit |
-| `products.assign` | Open **Manage products → Membership** (By product / By user). New users default to **no** product access |
+| `products.assign` | Open **Manage products → Product Membership** (By product / By user). New users default to **no** product access |
 
 Assignable roles are always a **proper subset** of the signed-in user’s permissions (never peer or higher).
 
-### Product access (Membership)
+### Product access (Product Membership)
 
-On **Manage products → Membership** (`products.assign`):
+On **Manage products → Product Membership** (`products.assign`):
 
 | Mode | Behavior |
 | --- | --- |
