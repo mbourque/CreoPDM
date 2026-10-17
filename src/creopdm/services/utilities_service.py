@@ -47,6 +47,7 @@ from creopdm.models.dependency import Dependency
 from creopdm.models.object import EngineeringObject
 from creopdm.models.parameter import Parameter
 from creopdm.models.product import Product
+from creopdm.models.revise_operation import ReviseOperation
 from creopdm.models.user import User
 from creopdm.models.version import ObjectVersion
 from creopdm.schemas.common import (
@@ -861,6 +862,14 @@ def compact_product_vault_history(
                 if not chunk:
                     continue
                 db.execute(delete(Parameter).where(Parameter.version_id.in_(chunk)))
+                db.execute(
+                    delete(ReviseOperation).where(
+                        or_(
+                            ReviseOperation.new_version_id.in_(chunk),
+                            ReviseOperation.source_version_id.in_(chunk),
+                        )
+                    )
+                )
                 db.execute(delete(ObjectVersion).where(ObjectVersion.id.in_(chunk)))
             if keep_version_ids:
                 db.execute(
@@ -964,6 +973,7 @@ def _clear_product_object_records(db: Session, product: Product) -> int:
     )
     # Keep audit rows; null live object FKs (snapshots remain on Activity).
     db.execute(update(Activity).where(Activity.object_id.in_(object_ids)).values(object_id=None))
+    db.execute(delete(ReviseOperation).where(ReviseOperation.object_id.in_(object_ids)))
     db.execute(delete(ObjectVersion).where(ObjectVersion.object_id.in_(object_ids)))
     db.execute(delete(EngineeringObject).where(EngineeringObject.id.in_(object_ids)))
     db.flush()

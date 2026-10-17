@@ -42,6 +42,7 @@ from creopdm.models.object import EngineeringObject
 from creopdm.models.parameter import Parameter
 from creopdm.models.product import Product
 from creopdm.models.remote import Remote
+from creopdm.models.revise_operation import ReviseOperation
 from creopdm.models.version import ObjectVersion
 from creopdm.services.activity_service import ActivityService
 from creopdm.services.git_service import GitService
@@ -810,6 +811,8 @@ class ProductService:
                     )
                 )
             )
+            # Revise operation rows point at versions and objects: they go first.
+            session.execute(delete(ReviseOperation).where(ReviseOperation.object_id.in_(object_ids)))
             session.execute(delete(ObjectVersion).where(ObjectVersion.object_id.in_(object_ids)))
             session.execute(delete(EngineeringObject).where(EngineeringObject.id.in_(object_ids)))
         session.execute(delete(Dependency).where(Dependency.product_id == product.id))

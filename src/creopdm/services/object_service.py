@@ -44,6 +44,7 @@ from creopdm.models.dependency import Dependency
 from creopdm.models.object import EngineeringObject
 from creopdm.models.parameter import Parameter
 from creopdm.models.product import Product
+from creopdm.models.revise_operation import ReviseOperation
 from creopdm.models.version import ObjectVersion
 from creopdm.product_state import ensure_product_allows
 from creopdm.services.activity_service import ActivityService
@@ -438,6 +439,7 @@ class ObjectService:
         )
         session.execute(update(Activity).where(Activity.object_id == object_id).values(object_id=None))
         session.expire(obj, ["versions", "current_version", "checkouts", "parameters"])
+        session.execute(delete(ReviseOperation).where(ReviseOperation.object_id == object_id))
         session.execute(delete(ObjectVersion).where(ObjectVersion.object_id == object_id))
         session.delete(obj)
         session.flush()
@@ -463,6 +465,7 @@ class ObjectService:
                 )
             )
             session.execute(update(Activity).where(Activity.object_id.in_(chunk)).values(object_id=None))
+            session.execute(delete(ReviseOperation).where(ReviseOperation.object_id.in_(chunk)))
             session.execute(delete(ObjectVersion).where(ObjectVersion.object_id.in_(chunk)))
             session.execute(delete(EngineeringObject).where(EngineeringObject.id.in_(chunk)))
         session.flush()

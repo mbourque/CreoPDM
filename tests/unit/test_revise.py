@@ -860,3 +860,55 @@ def test_promote_into_a_state_that_blocks_checkout_is_refused_while_files_are_ch
     assert undone.status_code == 200, undone.text
     assert _promote(auth_client, product, "IN_REVIEW").status_code == 200
     assert auth_client.get(f"/api/products/{product['uuid']}").json()["state"] == "IN_REVIEW"
+
+
+# ---- Deleting revised data must not trip over revise_operations ---------------------------
+
+
+@requires_git
+def test_deleting_a_revised_product_or_file_removes_its_revise_operation_rows(
+    auth_client, auth_ctx
+):
+    """revise_operations points at objects and versions (a real foreign key on PostgreSQL), so every
+    delete path has to remove those rows first or the delete fails with INTERNAL_ERROR."""
+    from sqlalchemy import func, select
+
+    from creopdm.models.revise_operation import ReviseOperation
+
+    product, obj = _released_under_change(auth_client, auth_ctx, name="Doomed")
+    done = auth_client.post(
+        f"/api/objects/{obj['uuid']}/revise",
+        json={"reason": "r", "operation_id": "cccccccc-0000-0000-0000-000000000003"},
+    )
+    assert done.status_code == 200, done.text
+
+    def operation_rows() -> int:
+        with auth_ctx.session_factory() as db:
+            return int(db.scalar(select(func.count()).select_from(ReviseOperation)) or 0)
+
+    assert operation_rows() == 1
+
+    # Product delete (Administration → Delete products / forget).
+    forgotten = auth_client.post(
+        f"/api/products/{product['uuid']}/forget", json={"confirm_password": "AdminPass1"}
+    )
+    assert forgotten.status_code == 200, forgotten.text
+    assert operation_rows() == 0
+
+    # Removing a single revised file from a product.
+    product2, obj2 = _make_product_with_file(auth_client, "Keeper", "keeper.prt")
+    assert _promote(auth_client, product2, "RELEASED").status_code == 200
+    assert _promote(auth_client, product2, "UNDER_CHANGE").status_code == 200
+    ok = auth_client.post(
+        f"/api/objects/{obj2['uuid']}/revise",
+        json={"reason": "r", "operation_id": "dddddddd-0000-0000-0000-000000000004"},
+    )
+    assert ok.status_code == 200, ok.text
+    assert operation_rows() == 1
+    with auth_ctx.session_factory() as db:
+        from creopdm.models.object import EngineeringObject
+
+        row = db.scalar(select(EngineeringObject).where(EngineeringObject.uuid == obj2["uuid"]))
+        auth_ctx.objects._delete_metadata(db, row)
+        db.commit()
+    assert operation_rows() == 0
