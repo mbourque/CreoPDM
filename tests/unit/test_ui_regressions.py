@@ -2733,6 +2733,14 @@ def test_admin_hub_panel_fills_full_width():
     # Tile order: Products first, then Product Membership, then Copy / Promote / …
     assert hub.index('href="/admin/products/edit"') < hub.index('href="/admin/membership"')
     assert hub.index('href="/admin/membership"') < hub.index('href="/admin/products/copy"')
+    # Lifecycle states lives here, right after Promote Products and before the red tiles.
+    assert hub.index('href="/admin/products/promote"') < hub.index('href="/admin/lifecycle"')
+    assert hub.index('href="/admin/lifecycle"') < hub.index('href="/admin/products/delete"')
+    assert "can_manage_lifecycle_states" in hub
+    admin_home_tpl = (ROOT / "src" / "creopdm" / "templates" / "admin.html").read_text(
+        encoding="utf-8"
+    )
+    assert 'href="/admin/lifecycle"' not in admin_home_tpl
     assert "can_assign_products" in hub
     assert "can_utilities_compact_product" in hub
     assert "can_utilities_rebuild_product" in hub

@@ -75,7 +75,7 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_PRODUCTS_MANAGE, "Create, edit, and delete products in Administration"),
     (
         PERMISSION_LIFECYCLE_STATES_MANAGE,
-        "Administration → Lifecycle states (product state matrix)",
+        "Manage products → Lifecycle states (product state matrix)",
     ),
     (PERMISSION_SETTINGS_MANAGE, "Change global CreoPDM settings"),
     (PERMISSION_SETTINGS_AI, "Configure AI settings (Ollama, snapshot compare prompt)"),

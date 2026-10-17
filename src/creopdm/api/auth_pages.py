@@ -1965,7 +1965,7 @@ def _product_form(
 def _require_manage_products_hub(
     request: Request, ctx: AppContext, db: Session
 ) -> User | HTMLResponse | RedirectResponse:
-    """Manage products hub: editors, membership, or anyone who can delete, compact, or rebuild."""
+    """Manage products hub: editors, membership, lifecycle states, or delete / compact / rebuild."""
     user_uuid = request.session.get(SESSION_USER_KEY)
     user = ctx.user_accounts.get_by_uuid(db, str(user_uuid)) if user_uuid else None
     if user is None:
@@ -1973,6 +1973,7 @@ def _require_manage_products_hub(
     if not (
         ctx.user_accounts.can_manage_products(user)
         or ctx.user_accounts.can_assign_products(user)
+        or ctx.user_accounts.can_manage_lifecycle_states(user)
         or ctx.user_accounts.can_utilities_delete_product(user)
         or ctx.user_accounts.can_utilities_compact_product(user)
         or ctx.user_accounts.can_utilities_rebuild_product(user)

@@ -666,7 +666,7 @@ System Settings → Email (`email.manage`) stores delivery settings in `settings
 
 System Settings → AI (`settings.ai`) configures Ollama host URL, model, **Enable AI features**, and the snapshot compare prompt. Administrator gets this by default (same as other CreoPDM Administration caps). The AI tile lives only under the System Settings hub (not a separate Administration tile). `settings.manage` alone does not open or change AI settings.
 
-Administration → Lifecycle states (`lifecycle_states.manage`) edits the product lifecycle matrix. Administrator gets this by default. `products.manage` alone does not open or change Lifecycle states.
+Manage products → Lifecycle states (`lifecycle_states.manage`) edits the product lifecycle matrix. Administrator gets this by default. `products.manage` alone does not open or change Lifecycle states.
 
 ---
 

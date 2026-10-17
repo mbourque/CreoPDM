@@ -438,7 +438,7 @@ class LifecycleStateConfig(BaseModel):
 
 
 class LifecycleConfig(BaseModel):
-    """Product lifecycle states + permission matrix (Administration → Lifecycle states)."""
+    """Product lifecycle states + permission matrix (Manage products → Lifecycle states)."""
 
     states: list[LifecycleStateConfig] = Field(default_factory=list)
 
