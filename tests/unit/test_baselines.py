@@ -1446,3 +1446,8 @@ def test_baseline_commit_is_shown_in_the_contents_dialog():
     assert "git_commit_sha" in module and "baseline-commit-sha" in module
     template = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     assert 'id="baseline-commit-sha"' in template
+    # The dialog opens at its top: the title takes focus and the dialog itself never scrolls.
+    assert 'id="baseline-members-title" tabindex="-1"' in template
+    assert "title?.focus({ preventScroll: true })" in module
+    css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    assert ".baseline-members-dialog { width: min(52rem, 94vw); max-height: 92vh; overflow: hidden; }" in css

@@ -1435,8 +1435,15 @@ button.forgot-password-btn,
 }
 .metric-link * { pointer-events: none; }
 .metric-link:hover { border-color: var(--accent-2); }
-.baseline-members-dialog { width: min(52rem, 94vw); }
-.baseline-members-wrap { max-height: 55vh; overflow: auto; }
+/* The dialog never scrolls (so it opens at its top with rounded corners); the two tables share
+   the leftover height and scroll inside themselves. */
+.baseline-members-dialog { width: min(52rem, 94vw); max-height: 92vh; overflow: hidden; }
+.baseline-members-dialog[open] { display: flex; flex-direction: column; }
+.baseline-members-dialog form { flex: 1 1 auto; min-height: 0; }
+.baseline-members-dialog form > :not(.table-wrap) { flex: 0 0 auto; }
+.baseline-members-wrap { flex: 3 1 8rem; min-height: 6rem; overflow: auto; border-radius: 8px; }
+#baseline-structure-wrap { flex: 2 1 5rem; min-height: 4rem; overflow: auto; border-radius: 8px; }
+.baseline-members-dialog h2:focus { outline: none; }
 .baseline-frozen {
   margin: 0; padding: 0.45rem 0.7rem; border-radius: 6px; background: #eef5fa;
   border: 1px solid #c2d9e8; color: #1f4f68; font-size: 0.88rem;

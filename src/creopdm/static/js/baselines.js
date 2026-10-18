@@ -157,6 +157,9 @@ window.__creopdmModules.baselines = {
       const staleCommit = $("#baseline-commit-line");
       if (staleCommit) staleCommit.hidden = true;
       if (!dialog.open) dialog.showModal();
+      // Start at the top: without this the browser focuses a scrollable table and scrolls to it.
+      dialog.scrollTop = 0;
+      title?.focus({ preventScroll: true });
       try {
         const [baselineResp, membersResp, structureResp] = await Promise.all([
           fetch(`/api/baselines/${encodeURIComponent(baselineUuid)}`),
