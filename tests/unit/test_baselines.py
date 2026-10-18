@@ -572,6 +572,10 @@ def test_baseline_contents_dialog_is_wired():
     module = (ROOT / "src" / "creopdm" / "static" / "js" / "baselines.js").read_text(encoding="utf-8")
     assert "openBaselineMembers" in module and "/members`" in module
     assert "data-open-baseline" in module and "OUT_OF_DATE" in module
+    # The page-wide click handler soft-navigates every <a href>; "#" is the current page, so a
+    # link here reloaded the Files tab instead of opening the dialog.
+    assert '<a href="#"' not in module
+    assert 'class="baseline-open"' in module and "<button type=\"button\" class=\"baseline-open\"" in module
     page = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     assert 'id="baseline-members-dialog"' in page and 'id="baseline-members-table"' in page
     assert "this baseline is immutable" in page

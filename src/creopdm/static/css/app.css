@@ -1441,7 +1441,14 @@ button.forgot-password-btn,
   margin: 0; padding: 0.45rem 0.7rem; border-radius: 6px; background: #eef5fa;
   border: 1px solid #c2d9e8; color: #1f4f68; font-size: 0.88rem;
 }
-.baseline-open { font-weight: 700; }
+.baseline-open {
+  appearance: none;
+  -webkit-appearance: none;
+  background: none; border: 0; padding: 0; margin: 0;
+  font: inherit; font-weight: 700; text-align: left;
+  color: var(--accent-2, #2f6f8f); cursor: pointer;
+}
+.baseline-open:hover, .baseline-open:focus-visible { text-decoration: underline; }
 .baseline-members-wrap td.is-newer { color: #8a4b12; }
 .baselines-head {
   display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;

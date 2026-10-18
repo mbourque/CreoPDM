@@ -65,9 +65,9 @@ window.__creopdmModules.baselines = {
         .map((item) => {
           const description = String(item.description || "").trim();
           return `<tr class="baseline-row" data-baseline="${esc(item.uuid)}">
-            <td class="filename-cell"><a href="#" class="baseline-open" data-open-baseline="${esc(
+            <td class="filename-cell"><button type="button" class="baseline-open" data-open-baseline="${esc(
               item.uuid
-            )}" title="Show the exact versions in this baseline">${esc(item.name)}</a>${
+            )}" title="Show the exact versions in this baseline">${esc(item.name)}</button>${
               description ? `<div class="muted small">${esc(description)}</div>` : ""
             }</td>
             <td>${esc(titleCase(item.baseline_type))}</td>
@@ -249,6 +249,8 @@ window.__creopdmModules.baselines = {
     mod.openCreateBaselineDialog = openCreateBaselineDialog;
 
     $("#baselines-table")?.addEventListener("click", (event) => {
+      // A button, not <a href="#">: the page-wide link handler soft-navigates every anchor,
+      // and "#" is this very page, so an anchor here reloaded the Files tab.
       const link = event.target instanceof Element ? event.target.closest("[data-open-baseline]") : null;
       if (!link) return;
       event.preventDefault();
