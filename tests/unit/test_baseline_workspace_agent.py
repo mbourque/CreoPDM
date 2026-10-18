@@ -77,6 +77,9 @@ def agent(tmp_path, monkeypatch):
             return served.get(path, _Response(404, b"", "not found"))
 
     monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    # Tests must never apply a real folder lock (they write into the folders to simulate Creo
+    # saves). The lock tests switch it on with a fake icacls.
+    monkeypatch.setattr("creopdm_agent.baseline_workspace._is_windows", lambda: False)
     with TestClient(create_agent_app(settings)) as client:
         yield client, root, served, seen
 
