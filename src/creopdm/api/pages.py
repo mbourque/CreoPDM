@@ -731,6 +731,75 @@ def object_detail(
     )
 
 
+@router.get(
+    "/products/{product_id}/objects/{object_id}/versions/{version_id}",
+    response_class=HTMLResponse,
+)
+def object_version_detail(
+    product_id: str,
+    object_id: str,
+    version_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> HTMLResponse:
+    """One EXACT historical version, by its version uuid. Never redirects to the current version:
+    a baseline member opens the version it captured even when the file is at C.4 now."""
+    from sqlalchemy import select
+
+    from creopdm.constants import LifecycleState
+    from creopdm.exceptions import ObjectNotFoundError
+    from creopdm.models.version import ObjectVersion
+
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    product = load_accessible_product(request, ctx, db, product_id)
+    obj = ctx.objects.get_object(db, object_id)
+    if obj.product_id != product.id:
+        raise ObjectNotFoundError("Object not found in this product.", details={"object": object_id})
+    version = db.scalar(
+        select(ObjectVersion).where(
+            ObjectVersion.uuid == (version_id or "").strip(),
+            ObjectVersion.object_id == obj.id,
+        )
+    )
+    if version is None:
+        raise ObjectNotFoundError(
+            "That version does not belong to this file.", details={"version": version_id}
+        )
+    current = obj.current_version
+    display = f"{version.revision}.{version.iteration}"
+    source = db.get(ObjectVersion, version.created_from_version_id) if version.created_from_version_id else None
+    try:
+        identity = json.loads(version.identity_json) if version.identity_json else {}
+    except ValueError:
+        identity = {}
+    identity_rows = [
+        (str(key).replace("_", " ").capitalize(), str(value))
+        for key, value in (identity.items() if isinstance(identity, dict) else [])
+        if value not in (None, "") and isinstance(value, (str, int, float, bool))
+    ]
+    return render(
+        request,
+        "object_version.html",
+        {
+            "app_name": APP_NAME,
+            "app_version": APP_VERSION,
+            **_creo_page(ctx),
+            "product": product_to_response(product),
+            "object": obj,
+            "version": version,
+            "display": display,
+            "is_current": current is not None and current.id == version.id,
+            "current_display": f"{current.revision}.{current.iteration}" if current is not None else "",
+            "lifecycle_label": (version.lifecycle_state or LifecycleState.IN_WORK.value)
+            .replace("_", " ")
+            .title(),
+            "created_from": f"{source.revision}.{source.iteration}" if source is not None else "",
+            "identity_rows": identity_rows,
+        },
+    )
+
+
 @router.get("/help")
 def user_help_page() -> FileResponse:
     """Standalone user help (opened from the top-bar Help pill in a named tab)."""

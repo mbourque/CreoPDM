@@ -1465,6 +1465,9 @@ button.forgot-password-btn,
 .baseline-release-choice + .baseline-tag-choice { margin-top: -0.35rem; }
 .baseline-release-choice input, .baseline-structure-confirm input, .baseline-tag-choice input { flex: 0 0 auto; width: auto; margin: 0; }
 #baseline-tag-line .btn { margin-left: 0.5rem; padding: 0.15rem 0.6rem; }
+.baseline-desc { margin: 0; white-space: pre-wrap; }
+.baseline-version-link { color: inherit; text-decoration: underline dotted; }
+.baseline-version-link:hover { text-decoration: underline; }
 .baseline-structure-title { margin: 14px 0 6px; font-size: 1rem; }
 .baseline-unresolved { color: #b42318; font-weight: 700; }
 #baseline-structure-table tr.is-unresolved td { background: #fff4f2; }

@@ -28,10 +28,13 @@ from creopdm.utils.timefmt import as_utc
 router = APIRouter()
 
 
-def baseline_to_response(baseline: Baseline, product_uuid: str) -> BaselineResponse:
+def baseline_to_response(
+    baseline: Baseline, product_uuid: str, product_name: str | None = None
+) -> BaselineResponse:
     return BaselineResponse(
         uuid=baseline.uuid,
         product_uuid=product_uuid,
+        product_name=product_name,
         name=baseline.name,
         description=baseline.description,
         baseline_type=baseline.baseline_type,
@@ -60,7 +63,7 @@ def list_baselines(
     require_permission(request, ctx, PERMISSION_BASELINES_VIEW)
     product = load_accessible_product(request, ctx, db, product_id)
     return [
-        baseline_to_response(row, product.uuid)
+        baseline_to_response(row, product.uuid, product.name)
         for row in ctx.baselines.list_for_product(db, product)
     ]
 
@@ -77,7 +80,7 @@ def get_baseline(
     baseline = ctx.baselines.get(db, baseline_uuid)
     product = db.get(Product, baseline.product_id)
     require_product_access(request, ctx, product)
-    return baseline_to_response(baseline, product.uuid)
+    return baseline_to_response(baseline, product.uuid, product.name)
 
 
 @router.get("/api/baselines/{baseline_uuid}/members", response_model=list[BaselineMemberResponse])
@@ -138,7 +141,7 @@ def retry_baseline_git_tag(
     product = db.get(Product, baseline.product_id)
     require_product_access(request, ctx, product)
     baseline = ctx.baselines.retry_tag(db, baseline, product)
-    return baseline_to_response(baseline, product.uuid)
+    return baseline_to_response(baseline, product.uuid, product.name)
 
 
 @router.post("/api/products/{product_id}/baselines", response_model=BaselineResponse, status_code=201)
@@ -162,4 +165,4 @@ def create_baseline(
         baseline_type=payload.baseline_type,
         git_tag=payload.git_tag,
     )
-    return baseline_to_response(baseline, product.uuid)
+    return baseline_to_response(baseline, product.uuid, product.name)

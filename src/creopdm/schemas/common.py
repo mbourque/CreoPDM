@@ -311,6 +311,7 @@ class BaselineCreateRequest(BaseModel):
 class BaselineResponse(BaseModel):
     uuid: str
     product_uuid: str
+    product_name: str | None = None
     name: str
     description: str | None = None
     baseline_type: str

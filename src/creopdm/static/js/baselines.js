@@ -157,6 +157,17 @@ window.__creopdmModules.baselines = {
 
     let openBaselineUuid = "";
 
+    /** The file name links to the EXACT captured version (by its version uuid), never to "latest". */
+    function versionLink(info, m) {
+      if (!info?.product_uuid || !m.object_uuid || !m.version_uuid) return esc(m.filename);
+      const href = `/products/${encodeURIComponent(info.product_uuid)}/objects/${encodeURIComponent(
+        m.object_uuid
+      )}/versions/${encodeURIComponent(m.version_uuid)}`;
+      return `<a class="baseline-version-link" href="${href}" title="Open exactly ${esc(
+        m.display_version
+      )}, even if the file has moved on">${esc(m.filename)}</a>`;
+    }
+
     /** The optional Git tag: a note when it is fine, a warning when it moved, a retry when it failed. */
     function renderTag(info, check) {
       const line = $("#baseline-tag-line");
@@ -196,6 +207,8 @@ window.__creopdmModules.baselines = {
       if (meta) meta.textContent = "";
       setBaselineView("files");
       renderTag(null, null);
+      const staleDesc = $("#baseline-members-desc");
+      if (staleDesc) staleDesc.hidden = true;
       const staleCommit = $("#baseline-commit-line");
       if (staleCommit) staleCommit.hidden = true;
       if (!dialog.open) dialog.showModal();
@@ -213,6 +226,11 @@ window.__creopdmModules.baselines = {
         const members = await membersResp.json();
         let info = null;
         if (baselineResp.ok) info = await baselineResp.json();
+        const descLine = $("#baseline-members-desc");
+        if (descLine) {
+          descLine.hidden = !info?.description;
+          descLine.textContent = info?.description || "";
+        }
         const commitLine = $("#baseline-commit-line");
         const commitCode = $("#baseline-commit-sha");
         if (commitLine && commitCode) {
@@ -224,6 +242,7 @@ window.__creopdmModules.baselines = {
         if (info && meta) {
           meta.textContent =
             `${titleCase(info.status)} · ${titleCase(info.baseline_type)} · ` +
+            (info.product_name ? `${info.product_name} · ` : "") +
             `${info.member_count} member${info.member_count === 1 ? "" : "s"} · ` +
             `${info.dependency_count || 0} link${info.dependency_count === 1 ? "" : "s"}` +
             (info.unresolved_dependency_count
@@ -244,7 +263,7 @@ window.__creopdmModules.baselines = {
               ? `Newer: ${esc(m.current_display_version || "—")}`
               : "Same version";
             return `<tr data-version="${esc(m.version_uuid)}" data-object="${esc(m.object_uuid)}">
-              <td class="baseline-name-cell">${esc(m.filename)}${
+              <td class="baseline-name-cell">${versionLink(info, m)}${
                 m.relative_path && m.relative_path !== m.filename
                   ? `<div class="muted small">${esc(m.relative_path)}</div>`
                   : ""

@@ -1630,3 +1630,105 @@ def test_git_tag_ui_is_wired():
         'id="baseline-tag-warning"',
     ):
         assert needle in template
+
+
+# ---- Stories 17-20: list, detail, exact members, exact historical version ---------------------
+
+
+def test_the_baseline_list_shows_the_required_columns_newest_first(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+    _create(auth_client, product, "Design Review 01")
+    _create(auth_client, product, "GEARBOX-R1", baseline_type="RELEASE")
+
+    listed = auth_client.get(f"/api/products/{product['uuid']}/baselines").json()
+    assert [row["name"] for row in listed] == ["GEARBOX-R1", "Design Review 01"]  # newest first
+    first = listed[0]
+    assert first["baseline_type"] == "RELEASE" and first["status"] == "FINALIZED"
+    assert first["member_count"] == 3 and first["created_by"] == "admin"
+    assert first["created_at"]
+    assert listed[1]["baseline_type"] == "MANUAL"
+
+    template = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
+    header = template[template.index('id="baselines-table"') :]
+    header = header[: header.index("</thead>")]
+    for column in ("Name", "Type", "Status", "Members", "Created", "Created by"):
+        assert f"<th>{column}</th>" in header
+
+
+def test_the_baseline_detail_shows_its_facts(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client, "Gearbox")
+    created = _create(
+        auth_client, product, "Design Review 01", description="October design review"
+    ).json()
+    detail = auth_client.get(f"/api/baselines/{created['uuid']}").json()
+    assert detail["name"] == "Design Review 01"
+    assert detail["description"] == "October design review"
+    assert detail["status"] == "FINALIZED" and detail["baseline_type"] == "MANUAL"
+    assert detail["product_uuid"] == product["uuid"] and detail["product_name"] == "Gearbox"
+    assert detail["created_by"] == "admin" and detail["created_at"]
+    assert detail["member_count"] == 3
+    assert "git_commit_sha" in detail and "git_tag_name" in detail  # the advanced facts
+
+    module = (ROOT / "src" / "creopdm" / "static" / "js" / "baselines.js").read_text(encoding="utf-8")
+    assert "info.product_name" in module and "baseline-members-desc" in module
+    template = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
+    assert 'id="baseline-members-desc"' in template
+
+
+@requires_git
+def test_a_member_opens_the_exact_version_even_when_the_file_moved_on(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client)
+    shaft = objects["shaft.prt"]
+    _check_in(auth_client, auth_ctx, product, shaft, b"shaft-v2")  # shaft A.2
+    created = _create(auth_client, product).json()
+    member = _members(auth_client, created["uuid"])["shaft.prt"]
+    assert member["display_version"] == "A.2"
+    _check_in(auth_client, auth_ctx, product, shaft, b"shaft-v3")  # now A.3
+
+    url = f"/products/{product['uuid']}/objects/{member['object_uuid']}/versions/{member['version_uuid']}"
+    page = auth_client.get(url)
+    assert page.status_code == 200, page.text
+    html = page.text
+    # The page is for A.2, labelled historical, and points at the current A.3 without redirecting.
+    assert "A.2" in html and "Historical version" in html and "<strong>A.3</strong>" in html
+    assert f"/products/{product['uuid']}/objects/{shaft['uuid']}" in html
+    assert 'id="version-facts"' in html and "In Work" in html
+    with auth_ctx.session_factory() as db:
+        version = db.scalar(select(ObjectVersion).where(ObjectVersion.uuid == member["version_uuid"]))
+        assert version.content_hash in html and (version.revision, version.iteration) == ("A", 2)
+
+    # The current version's page says so.
+    current = auth_client.get(
+        f"/products/{product['uuid']}/objects/{shaft['uuid']}/versions/{member['current_version_uuid']}"
+    )
+    assert current.status_code == 200 and "<strong>current</strong>" in current.text
+
+
+@requires_git
+def test_an_exact_version_page_refuses_a_version_of_another_file_or_product(
+    auth_client, auth_ctx
+):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client)
+    other, _o = _product(auth_client, "Other", ("bracket.prt",))
+    created = _create(auth_client, product).json()
+    members = _members(auth_client, created["uuid"])
+    shaft, housing = members["shaft.prt"], members["housing.prt"]
+    base = f"/products/{product['uuid']}/objects"
+
+    # A version uuid that belongs to a different file, a made-up one, and the wrong product.
+    assert auth_client.get(f"{base}/{shaft['object_uuid']}/versions/{housing['version_uuid']}").status_code == 404
+    assert auth_client.get(f"{base}/{shaft['object_uuid']}/versions/not-a-version").status_code == 404
+    wrong_product = f"/products/{other['uuid']}/objects/{shaft['object_uuid']}/versions/{shaft['version_uuid']}"
+    assert auth_client.get(wrong_product).status_code == 404
+
+
+def test_baseline_member_rows_link_to_the_exact_version():
+    module = (ROOT / "src" / "creopdm" / "static" / "js" / "baselines.js").read_text(encoding="utf-8")
+    assert "function versionLink" in module and "/versions/${encodeURIComponent(m.version_uuid)}" in module
+    assert "baseline-version-link" in module
+    template = (ROOT / "src" / "creopdm" / "templates" / "object_version.html").read_text(encoding="utf-8")
+    assert "Historical version" in template and 'id="version-facts"' in template
