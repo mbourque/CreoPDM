@@ -744,6 +744,28 @@
   </form>
 </dialog>
 
+{% if can_view_baselines and selected %}
+<dialog id="baseline-members-dialog" class="dialog baseline-members-dialog">
+  <form method="dialog" id="baseline-members-form">
+    <h2 id="baseline-members-title">Baseline</h2>
+    <p class="muted small" id="baseline-members-meta"></p>
+    <p class="baseline-frozen">Configuration snapshot — this baseline is immutable. Each row is the exact version captured, whatever the product holds today.</p>
+    <p class="error" id="baseline-members-error" hidden></p>
+    <div class="table-wrap baseline-members-wrap">
+      <table class="grid" id="baseline-members-table">
+        <thead>
+          <tr><th>Name</th><th>Rev</th><th>State</th><th>Type</th><th>Product now</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="dialog-actions">
+      <button type="submit" class="btn btn-primary" id="baseline-members-close">Close</button>
+    </div>
+  </form>
+</dialog>
+{% endif %}
+
 {% if can_create_baselines and selected %}
 <dialog id="baseline-dialog" class="dialog">
   <form method="dialog" id="baseline-form">

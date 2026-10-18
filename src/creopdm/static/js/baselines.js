@@ -65,7 +65,9 @@ window.__creopdmModules.baselines = {
         .map((item) => {
           const description = String(item.description || "").trim();
           return `<tr class="baseline-row" data-baseline="${esc(item.uuid)}">
-            <td class="filename-cell"><strong>${esc(item.name)}</strong>${
+            <td class="filename-cell"><a href="#" class="baseline-open" data-open-baseline="${esc(
+              item.uuid
+            )}" title="Show the exact versions in this baseline">${esc(item.name)}</a>${
               description ? `<div class="muted small">${esc(description)}</div>` : ""
             }</td>
             <td>${esc(titleCase(item.baseline_type))}</td>
@@ -93,6 +95,59 @@ window.__creopdmModules.baselines = {
         body.innerHTML = `<tr class="empty-row"><td colspan="6">Could not load baselines (${esc(
           err?.message || "error"
         )}).</td></tr>`;
+      }
+    }
+
+    /** The exact versions captured, read through the stored version ids (not the current ones). */
+    async function openBaselineMembers(baselineUuid) {
+      const dialog = $("#baseline-members-dialog");
+      if (!(dialog instanceof HTMLDialogElement)) return;
+      const body = $("#baseline-members-table tbody");
+      const title = $("#baseline-members-title");
+      const meta = $("#baseline-members-meta");
+      showError($("#baseline-members-error"), "");
+      if (body) body.innerHTML = '<tr class="empty-row"><td colspan="5">Loading…</td></tr>';
+      const row = $(`#baselines-table tr[data-baseline="${CSS.escape(baselineUuid)}"]`);
+      if (title) title.textContent = row?.querySelector(".baseline-open")?.textContent || "Baseline";
+      if (meta) meta.textContent = "";
+      if (!dialog.open) dialog.showModal();
+      try {
+        const [baselineResp, membersResp] = await Promise.all([
+          fetch(`/api/baselines/${encodeURIComponent(baselineUuid)}`),
+          fetch(`/api/baselines/${encodeURIComponent(baselineUuid)}/members`),
+        ]);
+        if (!membersResp.ok) throw new Error(await readError(membersResp));
+        const members = await membersResp.json();
+        if (baselineResp.ok && meta) {
+          const info = await baselineResp.json();
+          meta.textContent =
+            `${titleCase(info.status)} · ${titleCase(info.baseline_type)} · ` +
+            `${info.member_count} member${info.member_count === 1 ? "" : "s"} · ` +
+            `created ${formatWhen(info.created_at)} by ${info.created_by}`;
+        }
+        if (!body) return;
+        body.innerHTML = (Array.isArray(members) ? members : [])
+          .map((m) => {
+            const newer = m.status === "OUT_OF_DATE";
+            const now = newer
+              ? `Newer: ${esc(m.current_display_version || "—")}`
+              : "Same version";
+            return `<tr data-version="${esc(m.version_uuid)}" data-object="${esc(m.object_uuid)}">
+              <td class="filename-cell">${esc(m.filename)}${
+                m.relative_path && m.relative_path !== m.filename
+                  ? `<div class="muted small">${esc(m.relative_path)}</div>`
+                  : ""
+              }</td>
+              <td>${esc(m.display_version)}</td>
+              <td>${esc(titleCase(String(m.lifecycle_state || "").replace(/_/g, " ")))}</td>
+              <td>${esc(String(m.object_type || "").replace(/^CREO_/, "").toLowerCase() || "—")}</td>
+              <td class="${newer ? "is-newer" : ""}">${now}</td>
+            </tr>`;
+          })
+          .join("");
+      } catch (err) {
+        if (body) body.innerHTML = "";
+        showError($("#baseline-members-error"), `Could not load the baseline: ${err?.message || "error"}`);
       }
     }
 
@@ -189,8 +244,16 @@ window.__creopdmModules.baselines = {
       }
     }
 
+    mod.openBaselineMembers = openBaselineMembers;
     mod.loadBaselinesTab = loadBaselinesTab;
     mod.openCreateBaselineDialog = openCreateBaselineDialog;
+
+    $("#baselines-table")?.addEventListener("click", (event) => {
+      const link = event.target instanceof Element ? event.target.closest("[data-open-baseline]") : null;
+      if (!link) return;
+      event.preventDefault();
+      void openBaselineMembers(link.getAttribute("data-open-baseline") || "");
+    });
 
     $("#create-baseline-btn")?.addEventListener("click", () => {
       void openCreateBaselineDialog();

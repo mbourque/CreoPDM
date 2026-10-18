@@ -16,7 +16,11 @@ from creopdm.auth_constants import PERMISSION_BASELINES_CREATE, PERMISSION_BASEL
 from creopdm.context import AppContext
 from creopdm.models.baseline import Baseline
 from creopdm.models.product import Product
-from creopdm.schemas.common import BaselineCreateRequest, BaselineResponse
+from creopdm.schemas.common import (
+    BaselineCreateRequest,
+    BaselineMemberResponse,
+    BaselineResponse,
+)
 from creopdm.utils.timefmt import as_utc
 
 router = APIRouter()
@@ -65,6 +69,20 @@ def get_baseline(
     product = db.get(Product, baseline.product_id)
     require_product_access(request, ctx, product)
     return baseline_to_response(baseline, product.uuid)
+
+
+@router.get("/api/baselines/{baseline_uuid}/members", response_model=list[BaselineMemberResponse])
+def list_baseline_members(
+    baseline_uuid: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> list[BaselineMemberResponse]:
+    """Every exact version in the baseline, with the two uuids that identify it."""
+    require_permission(request, ctx, PERMISSION_BASELINES_VIEW)
+    baseline = ctx.baselines.get(db, baseline_uuid)
+    require_product_access(request, ctx, db.get(Product, baseline.product_id))
+    return [BaselineMemberResponse(**row) for row in ctx.baselines.members(db, baseline)]
 
 
 @router.post("/api/products/{product_id}/baselines", response_model=BaselineResponse, status_code=201)

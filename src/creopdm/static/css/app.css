@@ -1435,6 +1435,14 @@ button.forgot-password-btn,
 }
 .metric-link * { pointer-events: none; }
 .metric-link:hover { border-color: var(--accent-2); }
+.baseline-members-dialog { width: min(52rem, 94vw); }
+.baseline-members-wrap { max-height: 55vh; overflow: auto; }
+.baseline-frozen {
+  margin: 0; padding: 0.45rem 0.7rem; border-radius: 6px; background: #eef5fa;
+  border: 1px solid #c2d9e8; color: #1f4f68; font-size: 0.88rem;
+}
+.baseline-open { font-weight: 700; }
+.baseline-members-wrap td.is-newer { color: #8a4b12; }
 .baselines-head {
   display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
   margin: 0.2rem 0 0.6rem;

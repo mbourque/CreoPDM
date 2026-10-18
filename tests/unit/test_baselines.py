@@ -459,3 +459,119 @@ def test_other_records_refer_to_the_baseline_by_uuid_and_the_uuid_cannot_change(
 
     with auth_ctx.session_factory() as db:
         assert db.scalar(select(Baseline.uuid).where(Baseline.uuid == created["uuid"])) is not None
+
+
+# ---- Story 3: the exact object versions are what is stored and what is read back ----------
+
+
+def _members(auth_client, baseline_uuid):
+    response = auth_client.get(f"/api/baselines/{baseline_uuid}/members")
+    assert response.status_code == 200, response.text
+    return {row["filename"]: row for row in response.json()}
+
+
+@requires_git
+def test_members_are_resolved_through_the_stored_version_ids(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client)
+    shaft = objects["shaft.prt"]
+    _check_in(auth_client, auth_ctx, product, shaft, b"shaft-v2")  # A.2
+    created = _create(auth_client, product, "Design Review 01").json()
+
+    with auth_ctx.session_factory() as db:
+        expected = {
+            obj.filename: (obj.uuid, obj.current_version.uuid, obj.current_version.content_hash)
+            for obj in db.scalars(select(EngineeringObject))
+        }
+
+    members = _members(auth_client, created["uuid"])
+    assert set(members) == {"shaft.prt", "housing.prt", "gear.prt"}
+    for filename, row in members.items():
+        object_uuid, version_uuid, content_hash = expected[filename]
+        # The two uuids are the identity of the member.
+        assert row["object_uuid"] == object_uuid
+        assert row["version_uuid"] == version_uuid
+        assert row["content_hash"] == content_hash
+        assert row["status"] == "SAME" and row["lifecycle_state"] == "IN_WORK"
+    assert members["shaft.prt"]["display_version"] == "A.2"
+    assert members["housing.prt"]["display_version"] == "A.1"
+
+    # The product moves on: A.3. Reopening the baseline still answers with A.2.
+    _check_in(auth_client, auth_ctx, product, shaft, b"shaft-v3")  # A.3
+    again = _members(auth_client, created["uuid"])
+    assert again["shaft.prt"]["version_uuid"] == members["shaft.prt"]["version_uuid"]
+    assert again["shaft.prt"]["display_version"] == "A.2"
+    assert again["shaft.prt"]["status"] == "OUT_OF_DATE"
+    assert again["shaft.prt"]["current_display_version"] == "A.3"
+    assert again["shaft.prt"]["current_version_uuid"] != members["shaft.prt"]["version_uuid"]
+    assert again["housing.prt"]["status"] == "SAME"
+
+
+@requires_git
+def test_reopening_a_baseline_ignores_current_pointers_names_and_stored_strings(
+    auth_client, auth_ctx
+):
+    """Neither the object's current version, its filename, nor the copied revision text decides
+    what the baseline says: the stored version id does."""
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client)
+    shaft = objects["shaft.prt"]
+    created = _create(auth_client, product, "Design Review 01").json()
+    before = _members(auth_client, created["uuid"])["shaft.prt"]
+
+    second = _check_in(auth_client, auth_ctx, product, shaft, b"shaft-v2")
+    assert second["display_revision"] == "A.2"
+
+    with auth_ctx.session_factory() as db:
+        obj = db.scalar(select(EngineeringObject).where(EngineeringObject.uuid == shaft["uuid"]))
+        # The object is renamed and its revision text rewritten ...
+        obj.filename = "drive_shaft.prt"
+        obj.revision = "Z"
+        obj.iteration = 99
+        # ... and the baseline's own copied strings are tampered with.
+        baseline = db.scalar(select(Baseline).where(Baseline.uuid == created["uuid"]))
+        member = next(m for m in baseline.members if m.object_id == obj.id)
+        member.revision = "Q"
+        member.iteration = 7
+        db.commit()
+
+    after = _members(auth_client, created["uuid"])["shaft.prt"]  # name as captured
+    assert after["version_uuid"] == before["version_uuid"]
+    assert after["object_uuid"] == before["object_uuid"]
+    # Revision and iteration come from the exact version row, not the tampered strings.
+    assert (after["revision"], after["iteration"], after["display_version"]) == ("A", 1, "A.1")
+    assert after["status"] == "OUT_OF_DATE"
+
+
+@requires_git
+def test_baseline_members_need_permission_and_product_access(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+    other, _o = _product(auth_client, "Other", ("bracket.prt",))
+    created = _create(auth_client, product, "Design Review 01").json()
+
+    _login(auth_client, "view", "ViewPass1")
+    assert auth_client.get(f"/api/baselines/{created['uuid']}/members").status_code == 200
+    assert auth_client.get("/api/baselines/does-not-exist/members").status_code == 404
+
+    _login(auth_client, "admin", "AdminPass1")
+    with auth_ctx.session_factory() as db:
+        from creopdm.models.user import User
+
+        eng = db.scalar(select(User).where(User.username == "eng"))
+        auth_ctx.user_accounts.set_product_access(
+            db, eng, access_all=False, product_uuids=[other["uuid"]]
+        )
+        db.commit()
+    _login(auth_client, "eng", "EngPass1")
+    denied = auth_client.get(f"/api/baselines/{created['uuid']}/members")
+    assert denied.status_code == 403, denied.text
+
+
+def test_baseline_contents_dialog_is_wired():
+    module = (ROOT / "src" / "creopdm" / "static" / "js" / "baselines.js").read_text(encoding="utf-8")
+    assert "openBaselineMembers" in module and "/members`" in module
+    assert "data-open-baseline" in module and "OUT_OF_DATE" in module
+    page = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
+    assert 'id="baseline-members-dialog"' in page and 'id="baseline-members-table"' in page
+    assert "this baseline is immutable" in page

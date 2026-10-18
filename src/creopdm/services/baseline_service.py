@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 
 from creopdm.constants import ActivityAction, LifecycleState
 from creopdm.exceptions import (
@@ -19,6 +19,7 @@ from creopdm.exceptions import (
 from creopdm.logging_setup import get_logger
 from creopdm.models.baseline import Baseline, BaselineMember
 from creopdm.models.object import EngineeringObject
+from creopdm.models.version import ObjectVersion
 from creopdm.models.product import Product
 from creopdm.services.activity_service import ActivityService
 from creopdm.services.lock_manager import ProductLockManager
@@ -87,6 +88,48 @@ class BaselineService:
         if row is None:
             raise BaselineNotFoundError("Baseline not found.", details={"uuid": baseline_uuid})
         return row
+
+    def members(self, session: Session, baseline: Baseline) -> list[dict]:
+        """The baseline's exact members, resolved through the STORED version ids.
+
+        Never through the object's current version: after later check-ins, revisions or a rename
+        this still answers with what was captured. ``status`` compares to the current version only
+        for information.
+        """
+        current = aliased(ObjectVersion)
+        rows = session.execute(
+            select(BaselineMember, ObjectVersion, EngineeringObject, current)
+            .join(ObjectVersion, ObjectVersion.id == BaselineMember.object_version_id)
+            .join(EngineeringObject, EngineeringObject.id == BaselineMember.object_id)
+            .outerjoin(current, current.id == EngineeringObject.current_version_id)
+            .where(BaselineMember.baseline_id == baseline.id)
+            .order_by(BaselineMember.relative_path.asc(), BaselineMember.id.asc())
+        ).all()
+        out: list[dict] = []
+        for member, version, obj, cur in rows:
+            same = obj.current_version_id == member.object_version_id
+            out.append(
+                {
+                    "object_uuid": obj.uuid,
+                    "version_uuid": version.uuid,
+                    # Name and path as they were when the baseline was made.
+                    "filename": member.filename,
+                    "relative_path": member.relative_path,
+                    "object_type": member.object_type,
+                    # Everything else from the exact captured version row.
+                    "revision": version.revision,
+                    "iteration": version.iteration,
+                    "display_version": f"{version.revision}.{version.iteration}",
+                    "lifecycle_state": version.lifecycle_state or member.lifecycle_state or "",
+                    "content_hash": version.content_hash,
+                    "current_version_uuid": cur.uuid if cur is not None else None,
+                    "current_display_version": (
+                        f"{cur.revision}.{cur.iteration}" if cur is not None else None
+                    ),
+                    "status": "SAME" if same else "OUT_OF_DATE",
+                }
+            )
+        return out
 
     # ---- create ------------------------------------------------------------------------
 

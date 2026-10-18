@@ -315,6 +315,29 @@ class BaselineResponse(BaseModel):
     finalized_at: datetime | None = None
 
 
+class BaselineMemberResponse(BaseModel):
+    """One exact object version in a baseline. The two uuids are authoritative.
+
+    Revision, iteration, state and hash are read from that exact version row, never from the
+    object's current version. ``current_*`` only says where the product has moved on to.
+    """
+
+    object_uuid: str
+    version_uuid: str
+    filename: str
+    relative_path: str
+    object_type: str | None = None
+    revision: str
+    iteration: int
+    display_version: str
+    lifecycle_state: str = ""
+    content_hash: str | None = None
+    current_version_uuid: str | None = None
+    current_display_version: str | None = None
+    # SAME = the product still has this exact version; OUT_OF_DATE = it has a newer one.
+    status: str
+
+
 class ReviseRequest(BaseModel):
     """Only the reason comes from the client; the server chooses the source and the revision."""
 
