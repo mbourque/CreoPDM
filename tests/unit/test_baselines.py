@@ -805,3 +805,47 @@ def test_new_check_ins_leave_an_existing_baseline_unchanged(auth_client, auth_ct
             select(EngineeringObject).where(EngineeringObject.uuid == shaft["uuid"])
         ).current_version
         assert current.id != version.id and current.iteration == 4
+
+
+# ---- Story 6: a new revision does not change an existing baseline -------------------------
+
+
+@requires_git
+def test_a_new_revision_leaves_an_existing_baseline_unchanged(auth_client, auth_ctx):
+    from tests.unit.test_revise import _released_under_change
+
+    product, obj = _released_under_change(auth_client, auth_ctx, filename="shaft.prt")
+    created = _create(auth_client, product, "Released A.1").json()
+
+    def pinned():
+        with auth_ctx.session_factory() as db:
+            baseline = _baseline_row(db, created["uuid"])
+            return baseline.member_count, sorted(
+                (m.id, m.object_version_id, m.revision, m.iteration, m.lifecycle_state, m.content_hash)
+                for m in baseline.members
+            )
+
+    before = pinned()
+    before_members = _members(auth_client, created["uuid"])
+    assert before_members["shaft.prt"]["revision"] == "A"
+    assert before_members["shaft.prt"]["lifecycle_state"] == "RELEASED"
+
+    revised = auth_client.post(f"/api/objects/{obj['uuid']}/revise", json={"reason": "Design change"})
+    assert revised.status_code == 200, revised.text
+    assert revised.json()["revision"] == "B"
+
+    # The file now has revision B, the baseline still says A (same version, same state, same rows).
+    assert pinned() == before
+    after_members = _members(auth_client, created["uuid"])
+    assert after_members["shaft.prt"]["revision"] == "A"
+    assert after_members["shaft.prt"]["version_uuid"] == before_members["shaft.prt"]["version_uuid"]
+    assert after_members["shaft.prt"]["lifecycle_state"] == "RELEASED"
+    assert after_members["shaft.prt"]["status"] == "OUT_OF_DATE"
+    assert after_members["shaft.prt"]["current_display_version"] == "B.1"
+
+    with auth_ctx.session_factory() as db:
+        version = db.scalar(
+            select(ObjectVersion).where(ObjectVersion.uuid == before_members["shaft.prt"]["version_uuid"])
+        )
+        assert version is not None and (version.revision, version.iteration) == ("A", 1)
+        assert version.lifecycle_state == "RELEASED"
