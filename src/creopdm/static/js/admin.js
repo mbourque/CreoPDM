@@ -1018,6 +1018,75 @@ window.__creopdmModules.admin = {
     }
     bindPromoteProducts();
 
+    // ---- Utilities -> Audit log: "(+N more)" opens the full file list of an event.
+    // (Was an inline <script>; a soft navigation never runs those, so it only worked after a
+    // full reload.)
+    function bindAuditMoreToggle() {
+      const table = document.getElementById("utilities-audit-table");
+      if (!table) return;
+      onPage(table, "click", (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        const btn = target ? target.closest(".audit-more-toggle") : null;
+        if (!btn || !table.contains(btn)) return;
+        const id = btn.getAttribute("data-audit-more");
+        const row = id ? document.getElementById(id) : null;
+        if (!row) return;
+        const opening = row.hasAttribute("hidden");
+        if (opening) row.removeAttribute("hidden");
+        else row.setAttribute("hidden", "");
+        btn.setAttribute("aria-expanded", opening ? "true" : "false");
+      });
+    }
+    bindAuditMoreToggle();
+
+    // ---- Settings -> Email: show the panel of the chosen delivery method, and keep Send test
+    // email disabled while the form has unsaved changes (the test uses the last saved settings).
+    function bindEmailSettingsForm() {
+      const form = document.getElementById("email-settings-form");
+      if (!form) return;
+      const localPanel = document.getElementById("email-local-panel");
+      const smtpPanel = document.getElementById("email-smtp-panel");
+      const testBtn = document.getElementById("email-test-btn");
+      const dirtyHint = document.getElementById("email-test-dirty-hint");
+      const ignoreDirty = { action: 1, test_to: 1, test_subject: 1, test_message: 1, smtp_password: 1 };
+
+      function syncPanels() {
+        const checked = form.querySelector('input[name="transport"]:checked');
+        const mode = checked ? checked.value : "local";
+        if (localPanel) localPanel.hidden = mode !== "local";
+        if (smtpPanel) smtpPanel.hidden = mode !== "smtp";
+      }
+
+      function snapshot() {
+        const data = new FormData(form);
+        const parts = [];
+        data.forEach((value, key) => {
+          if (ignoreDirty[key]) return;
+          parts.push(`${key}=${String(value)}`);
+        });
+        parts.sort();
+        const pwd = form.querySelector('input[name="smtp_password"]');
+        parts.push(`smtp_password_set=${pwd && pwd.value ? "1" : "0"}`);
+        return parts.join("&");
+      }
+
+      const baseline = snapshot();
+
+      function syncDirty() {
+        syncPanels();
+        if (!testBtn) return;
+        const dirty = snapshot() !== baseline;
+        testBtn.disabled = dirty;
+        if (dirtyHint) dirtyHint.hidden = !dirty;
+      }
+
+      form.querySelectorAll("[data-email-transport]").forEach((el) => onPage(el, "change", syncDirty));
+      onPage(form, "input", syncDirty);
+      onPage(form, "change", syncDirty);
+      syncDirty();
+    }
+    bindEmailSettingsForm();
+
     mod.syncProductAccessUi();
   },
 };

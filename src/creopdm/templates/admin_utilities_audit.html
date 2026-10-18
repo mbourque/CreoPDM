@@ -161,21 +161,4 @@
     {% endif %}
   </section>
 </article>
-<script>
-(function () {
-  var table = document.getElementById("utilities-audit-table");
-  if (!table) return;
-  table.addEventListener("click", function (event) {
-    var btn = event.target.closest(".audit-more-toggle");
-    if (!btn || !table.contains(btn)) return;
-    var id = btn.getAttribute("data-audit-more");
-    var row = id ? document.getElementById(id) : null;
-    if (!row) return;
-    var open = row.hasAttribute("hidden");
-    if (open) row.removeAttribute("hidden");
-    else row.setAttribute("hidden", "");
-    btn.setAttribute("aria-expanded", open ? "true" : "false");
-  });
-})();
-</script>
 {% endblock %}
