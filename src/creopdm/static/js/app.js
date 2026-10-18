@@ -3215,13 +3215,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     syncToolbar();
   }
 
-  function setCheckedOutTabCount(count) {
+  function setCheckedOutTabCount(count, mine) {
     const tab = document.querySelector('.tab[data-tab="checked-out"]');
     if (!tab) return;
     const n = Number(count) || 0;
     tab.textContent = n ? `Checked out · ${n}` : "Checked out";
-    if (checkinProductBtn) checkinProductBtn.dataset.checkoutCount = String(n);
-    if (checkinMenuBtn) checkinMenuBtn.dataset.checkoutCount = String(n);
+    // The tab counts everyone's checkouts; "Check in product…" can only act on MY checkouts,
+    // so the button reads the count of files checked out by the signed-in user.
+    const own = Number(mine == null ? 0 : mine) || 0;
+    if (checkinProductBtn) checkinProductBtn.dataset.checkoutCount = String(own);
+    if (checkinMenuBtn) checkinMenuBtn.dataset.checkoutCount = String(own);
   }
 
   function setCheckoutableCount(count) {
@@ -7711,7 +7714,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (!response.ok) throw new Error("checkouts");
       const items = await response.json();
       const list = Array.isArray(items) ? items : [];
-      setCheckedOutTabCount(list.length);
+      setCheckedOutTabCount(list.length, list.filter((item) => item && item.owned_by_me).length);
       if (!list.length) {
         body.innerHTML = `<tr class="empty-row"><td colspan="7">No files are checked out.</td></tr>`;
         refreshTabMetrics();

@@ -100,9 +100,14 @@ class CheckoutService:
         )
         return list(rows.unique())
 
-    def count_for_product(self, session: Session, product_id: int) -> int:
-        """How many files currently have an active checkout in this product."""
-        value = session.scalar(
+    def count_for_product(
+        self, session: Session, product_id: int, user_name: str | None = None
+    ) -> int:
+        """How many files currently have an active checkout in this product.
+
+        With ``user_name`` only that user's checkouts count (what "Check in product…" can act on).
+        """
+        stmt = (
             select(func.count())
             .select_from(Checkout)
             .join(EngineeringObject, Checkout.object_id == EngineeringObject.id)
@@ -111,7 +116,9 @@ class CheckoutService:
                 Checkout.status == CheckoutStatus.ACTIVE.value,
             )
         )
-        return int(value or 0)
+        if user_name:
+            stmt = stmt.where(Checkout.user_name == user_name)
+        return int(session.scalar(stmt) or 0)
 
     def count_checkoutable_for_product(self, session: Session, product_id: int) -> int:
         """IN_WORK files with no active checkout — available for Checkout product."""

@@ -488,8 +488,8 @@
               title="Check in selected files, or everything pending in this product.">Check In ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="checkin-product-btn"
-                {% if selected %}data-product="{{ selected.uuid }}" data-checkout-count="{{ checkout_count|default(0) }}"{% endif %}
-                {% if not selected or ((pending_saves|default(0)) == 0 and (new_workspace_files|default(0)) == 0 and (checkout_count|default(0)) == 0) %}disabled{% endif %}
+                {% if selected %}data-product="{{ selected.uuid }}" data-checkout-count="{{ my_checkout_count|default(0) }}"{% endif %}
+                {% if not selected or ((pending_saves|default(0)) == 0 and (new_workspace_files|default(0)) == 0 and (my_checkout_count|default(0)) == 0) %}disabled{% endif %}
                 title="Check in modified files and new files, and release unchanged checkouts so the product looks fully checked in.">Check in product…</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="checkin-btn"
                 {% if selected %}data-product="{{ selected.uuid }}" data-pending-saves="{{ pending_saves|default(0) }}" data-new-files="{{ new_workspace_files|default(0) }}"{% endif %}

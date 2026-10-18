@@ -161,6 +161,7 @@ _PAGE_DEFAULTS = {
     "pending_saves": 0,
     "new_workspace_files": 0,
     "checkout_count": 0,
+    "my_checkout_count": 0,
     "checkoutable_count": 0,
     "checkin_queue": {"saves": [], "new_files": []},
     "email_notifications_enabled": False,
@@ -511,6 +512,7 @@ def home(
     objects: list = []
     list_entries: list = []
     checkout_count = 0
+    my_checkout_count = 0
     checkoutable_count = 0
     pending_saves = 0
     new_workspace_files = 0
@@ -518,6 +520,9 @@ def home(
     if product is not None:
         objects, list_entries = _folder_page(ctx, db, product, current_folder)
         checkout_count = ctx.checkouts.count_for_product(db, product.id)
+        my_checkout_count = ctx.checkouts.count_for_product(
+            db, product.id, ctx.users.get_current_user().user_name
+        )
         checkoutable_count = ctx.checkouts.count_checkoutable_for_product(db, product.id)
         known = ctx.objects.list_path_index(db, product.id)
         product_object_count = len(known)
@@ -569,6 +574,7 @@ def home(
             "type_label_settings": ctx.config.type_labels(),
             "checkin_queue": checkin_queue,
             "checkout_count": checkout_count,
+            "my_checkout_count": my_checkout_count,
             "checkoutable_count": checkoutable_count,
             "pending_saves": pending_saves,
             "new_workspace_files": new_workspace_files,
@@ -661,6 +667,9 @@ def object_detail(
     snapshot_tab_label = "Modifications"
     snapshot_tab_mode = "compare" if snapshot_count >= 2 else "pending"
     checkout_count = ctx.checkouts.count_for_product(db, product.id)
+    my_checkout_count = ctx.checkouts.count_for_product(
+        db, product.id, ctx.users.get_current_user().user_name
+    )
     checkoutable_count = ctx.checkouts.count_checkoutable_for_product(db, product.id)
     siblings = ctx.objects.list_objects(db, product.id)
     watch = ctx.workspaces.watch_stamp(product, [(o.relative_path, o.filename) for o in siblings])
@@ -710,6 +719,7 @@ def object_detail(
             "workspace_path": str(ctx.workspaces.vault_for(product)),
             "workspace_folder": folder_of(obj.relative_path),
             "checkout_count": checkout_count,
+            "my_checkout_count": my_checkout_count,
             "checkoutable_count": checkoutable_count,
             "pending_saves": pending_saves,
             "new_workspace_files": new_workspace_files,
