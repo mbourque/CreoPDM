@@ -283,6 +283,20 @@ def run_tray(settings: AgentConfig) -> int:
                 f"Could not open the log window.\n{exc}\n\nLog file:\n{log_path}",
             )
 
+    def on_open_creopdm(icon: object, item: object) -> None:
+        # Read the URL at click time: Settings may have changed it since the tray started.
+        url = (settings.pdm_url or "").strip()
+        if not url:
+            threading.Timer(
+                0.2,
+                lambda: _message_box(
+                    "CreoPDM agent",
+                    "The CreoPDM address is not set yet.\n\nChoose Settings… and enter the server.",
+                ),
+            ).start()
+            return
+        webbrowser.open(url)
+
     def on_open_cache(icon: object, item: object) -> None:
         path = Path(settings.resolved_root())
         path.mkdir(parents=True, exist_ok=True)
@@ -298,6 +312,7 @@ def run_tray(settings: AgentConfig) -> int:
         Item(f"CreoPDM agent {__version__}", None, enabled=False),
         Item(f"Listening on {settings.port}", None, enabled=False),
         pystray.Menu.SEPARATOR,
+        Item("Open CreoPDM in browser", on_open_creopdm, default=True),
         Item("Show status", on_show_status),
         Item("Settings…", on_settings),
         Item("Show logs", on_show_logs),

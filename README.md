@@ -256,6 +256,7 @@ creopdm-agent-tray
 
 That starts in the system tray (no console). Menu items:
 
+- **Open CreoPDM in browser** — opens the CreoPDM web page at the address set in Settings (also the double-click action; says so if no address is set)
 - **Show status** — port, version, and cache folder
 - **Show logs** — opens a live log window (also written to `%LOCALAPPDATA%\CreoPDM-agent\logs\agent.log`)
 - **Open cache folder** — Explorer on the local download cache
