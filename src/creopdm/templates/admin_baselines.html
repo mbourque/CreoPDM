@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Baselines — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page admin-page" id="admin-baselines-page">
+  <nav class="crumb">
+    {% if can_view_products %}
+    <a href="/">Products</a>
+    <span>/</span>
+    {% endif %}
+    <a href="/admin">Administration</a>
+    <span>/</span>
+    <span>Baselines</span>
+  </nav>
+  <h1>Baselines</h1>
+  <p class="muted">Every baseline of every product. A baseline is an exact, immutable snapshot, so there is no Delete: you can <strong>check its integrity</strong> and <strong>archive</strong> it (and restore it). Archived baselines still protect the versions they hold.</p>
+
+  <div class="baseline-admin-stats" id="baseline-admin-stats" aria-live="polite">
+    <span class="metric"><strong id="bstat-total">—</strong> Baselines</span>
+    <span class="metric"><strong id="bstat-finalized">—</strong> Finalized</span>
+    <span class="metric"><strong id="bstat-archived">—</strong> Archived</span>
+    <span class="metric"><strong id="bstat-release">—</strong> Release</span>
+    <span class="metric"><strong id="bstat-manual">—</strong> Manual</span>
+    <span class="metric"><strong id="bstat-warning">—</strong> Integrity warnings</span>
+    <span class="metric"><strong id="bstat-error">—</strong> Integrity errors</span>
+  </div>
+
+  <div class="baseline-admin-bar">
+    <label>Search
+      <input id="baseline-admin-q" type="search" placeholder="Baseline, product or creator" autocomplete="off">
+    </label>
+    <label>Type
+      <select id="baseline-admin-type">
+        <option value="">All</option>
+        <option value="MANUAL">Manual</option>
+        <option value="RELEASE">Release</option>
+      </select>
+    </label>
+    <label>Status
+      <select id="baseline-admin-status">
+        <option value="">All</option>
+        <option value="FINALIZED">Finalized</option>
+        <option value="ARCHIVED">Archived</option>
+      </select>
+    </label>
+    <button type="button" class="btn btn-primary" id="baseline-admin-check-all"
+            title="Quick check of every baseline: versions, content in the vault, Git commit and tag. Does not hash the files.">Run integrity check</button>
+  </div>
+  <p class="error" id="baseline-admin-error" hidden></p>
+  <p class="muted small" id="baseline-admin-note" hidden></p>
+
+  <div class="table-wrap">
+    <table class="grid" id="baseline-admin-table">
+      <thead>
+        <tr>
+          <th>Product</th><th>Baseline</th><th>Type</th><th>Status</th><th>Members</th>
+          <th>Created</th><th>Created by</th><th>Integrity</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody><tr class="empty-row"><td colspan="9">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</article>
+
+<dialog id="baseline-integrity-dialog" class="dialog baseline-integrity-dialog">
+  <form method="dialog">
+    <h2 id="baseline-integrity-title">Integrity</h2>
+    <p class="muted small" id="baseline-integrity-sub"></p>
+    <dl class="revise-facts" id="baseline-integrity-facts"></dl>
+    <div class="table-wrap baseline-integrity-wrap">
+      <table class="grid" id="baseline-integrity-problems">
+        <thead><tr><th>Problem</th><th>File</th><th>Version</th><th>Detail</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="muted small">This check only reports. It never changes the baseline or substitutes another version: restore missing or damaged files from a backup.</p>
+    <div class="dialog-actions">
+      <button type="button" class="btn" id="baseline-integrity-deep"
+              title="Also read every file and verify its SHA-256 (slower).">Verify file hashes</button>
+      <button type="submit" class="btn btn-primary">Close</button>
+    </div>
+  </form>
+</dialog>
+<script src="/static/js/admin_baselines.js?v={{ app_version }}-baselines-admin-1" defer></script>
+{% endblock %}

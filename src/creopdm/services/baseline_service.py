@@ -657,6 +657,242 @@ class BaselineService:
                 self._apply_tag(session, product, baseline)
             return baseline
 
+    # ---- administration: archive, global list, integrity ---------------------------------
+
+    STATUS_ARCHIVED = "ARCHIVED"
+
+    def archive(self, session: Session, baseline: Baseline, product: Product) -> Baseline:
+        """Hide a finalized baseline from everyday use. Nothing it pins is released, and it can be
+        restored. Baselines are never deleted."""
+        return self._set_archived(session, baseline, product, archive=True)
+
+    def restore(self, session: Session, baseline: Baseline, product: Product) -> Baseline:
+        return self._set_archived(session, baseline, product, archive=False)
+
+    def _set_archived(
+        self, session: Session, baseline: Baseline, product: Product, *, archive: bool
+    ) -> Baseline:
+        wanted = "ARCHIVED" if archive else STATUS_FINALIZED
+        needed = STATUS_FINALIZED if archive else "ARCHIVED"
+        if baseline.status != needed:
+            raise ValidationAppError(
+                f'"{baseline.name}" is {baseline.status.title()}, so it cannot be '
+                f"{'archived' if archive else 'restored'}.",
+                details={"baseline": baseline.uuid, "status": baseline.status},
+            )
+        user = self._users.get_current_user()
+        baseline.status = wanted
+        session.flush()
+        self._activities.record(
+            session,
+            ActivityAction.BASELINE_ARCHIVED if archive else ActivityAction.BASELINE_RESTORED,
+            user,
+            product_id=product.id,
+            details={"baseline_uuid": baseline.uuid, "baseline_name": baseline.name},
+        )
+        session.commit()
+        session.refresh(baseline)
+        return baseline
+
+    def admin_summary(self, session: Session) -> dict:
+        """Counts for the Administration → Baselines diagnostics (always for all baselines)."""
+        rows = session.execute(select(Baseline.status, Baseline.baseline_type)).all()
+        return {
+            "total": len(rows),
+            "finalized": sum(1 for status, _t in rows if status == STATUS_FINALIZED),
+            "archived": sum(1 for status, _t in rows if status == "ARCHIVED"),
+            "release": sum(1 for _s, kind in rows if kind == BASELINE_TYPE_RELEASE),
+            "manual": sum(1 for _s, kind in rows if kind == BASELINE_TYPE_MANUAL),
+        }
+
+    def admin_list(
+        self,
+        session: Session,
+        *,
+        q: str = "",
+        baseline_type: str = "",
+        status: str = "",
+    ) -> list[dict]:
+        """Every baseline of every product, newest first, optionally filtered."""
+        stmt = (
+            select(Baseline, Product)
+            .join(Product, Product.id == Baseline.product_id)
+            .order_by(Baseline.id.desc())
+        )
+        if baseline_type.strip():
+            stmt = stmt.where(Baseline.baseline_type == baseline_type.strip().upper())
+        if status.strip():
+            stmt = stmt.where(Baseline.status == status.strip().upper())
+        rows = session.execute(stmt).all()
+        needle = q.strip().casefold()
+        labels = self.release_labels(session, [b.id for b, _p in rows])
+        out: list[dict] = []
+        for baseline, product in rows:
+            if needle and needle not in f"{baseline.name} {product.name} {baseline.created_by}".casefold():
+                continue
+            out.append(
+                {
+                    "uuid": baseline.uuid,
+                    "name": baseline.name,
+                    "description": baseline.description,
+                    "product_uuid": product.uuid,
+                    "product_name": product.name,
+                    "baseline_type": baseline.baseline_type,
+                    "release_label": labels.get(baseline.id),
+                    "status": baseline.status,
+                    "member_count": baseline.member_count,
+                    "created_by": baseline.created_by,
+                    "created_at": baseline.created_at,
+                    "git_commit_sha": baseline.git_commit_sha,
+                    "git_tag_name": baseline.git_tag_name,
+                }
+            )
+        return out
+
+    def integrity(
+        self, session: Session, baseline: Baseline, product: Product, *, deep: bool = False
+    ) -> dict:
+        """Is everything this baseline refers to still there and intact? Read only.
+
+        Checks: every member's object and version rows, the exact content in the vault (present,
+        and with ``deep`` its SHA-256 matches), the stored Git commit, and the optional tag. A
+        problem is reported, never repaired: membership is not changed and nothing newer is
+        substituted. ERROR = missing or damaged content/commit; WARNING = tag moved, missing or
+        not created; HEALTHY otherwise.
+        """
+        problems: list[dict] = []
+        all_members = list(
+            session.scalars(select(BaselineMember).where(BaselineMember.baseline_id == baseline.id))
+        )
+        rows = self._member_rows(session, baseline)
+        if len(rows) != len(all_members):
+            present = {member.id for member, _v, _o in rows}
+            for member in all_members:
+                if member.id not in present:
+                    problems.append(
+                        self._problem(
+                            member.filename,
+                            f"{member.revision}.{member.iteration}",
+                            "MEMBER_RECORD_MISSING",
+                            "its object or version record is missing",
+                        )
+                    )
+        content_ok = 0
+        hashes_ok: int | None = 0 if deep else None
+        commit_state = "NOT_RECORDED"
+        vault_error = None
+        if self._git is None or self._config is None:
+            vault_error = "the repository is not available"
+        else:
+            try:
+                vault = self._vault_path(product)
+                specs: list[str] = []
+                spans: list[tuple[int, int]] = []
+                for _member, version, obj in rows:
+                    start = len(specs)
+                    commit = (version.git_commit_hash or "").strip()
+                    if commit:
+                        specs.extend(f"{commit}:{p}" for p in self._stored_paths(obj, version))
+                    spans.append((start, len(specs)))
+                sizes = self._git.blob_sizes(vault, specs)
+                found_specs: list[tuple[str, ObjectVersion, EngineeringObject]] = []
+                for (member, version, obj), (start, end) in zip(rows, spans):
+                    shown = f"{version.revision}.{version.iteration}"
+                    index = next((i for i in range(start, end) if sizes[i] is not None), None)
+                    if index is None:
+                        problems.append(
+                            self._problem(member.filename, shown, "CONTENT_MISSING", "is not in the vault")
+                        )
+                        continue
+                    if (
+                        version.file_size
+                        and self._size_is_exact(obj)
+                        and int(version.file_size) != sizes[index]
+                    ):
+                        problems.append(
+                            self._problem(
+                                member.filename,
+                                shown,
+                                "CORRUPT",
+                                f"is stored with {sizes[index]} bytes but was recorded as {version.file_size}",
+                            )
+                        )
+                        continue
+                    content_ok += 1
+                    found_specs.append((specs[index], version, member))
+                if deep and found_specs:
+                    digests = self._git.blob_digests(vault, [spec for spec, _v, _m in found_specs])
+                    for (spec, version, member), digest in zip(found_specs, digests):
+                        shown = f"{version.revision}.{version.iteration}"
+                        if digest is not None and digest == (version.content_hash or "").strip().lower():
+                            hashes_ok = (hashes_ok or 0) + 1
+                        else:
+                            problems.append(
+                                self._problem(
+                                    member.filename,
+                                    shown,
+                                    "CORRUPT",
+                                    "its content does not match the recorded SHA-256",
+                                )
+                            )
+                if baseline.git_commit_sha:
+                    commit_state = (
+                        "OK" if self._git.commit_exists(vault, baseline.git_commit_sha) else "MISSING"
+                    )
+                    if commit_state == "MISSING":
+                        problems.append(
+                            {
+                                "code": "COMMIT_MISSING",
+                                "file": "",
+                                "version": "",
+                                "reason": f"the stored repository commit {baseline.git_commit_sha[:12]} no longer exists",
+                            }
+                        )
+            except RepositoryError as exc:
+                vault_error = exc.message
+        if vault_error:
+            problems.append(
+                {"code": "VAULT_UNREADABLE", "file": "", "version": "", "reason": vault_error}
+            )
+        tag = self.check_tag(product, baseline)
+        errors = [p for p in problems]
+        status = "ERROR" if errors else "HEALTHY"
+        if status == "HEALTHY" and tag["state"] in {"MOVED", "MISSING", "NOT_CREATED"}:
+            status = "WARNING"
+        return {
+            "baseline_uuid": baseline.uuid,
+            "name": baseline.name,
+            "product_uuid": product.uuid,
+            "product_name": product.name,
+            "baseline_type": baseline.baseline_type,
+            "baseline_status": baseline.status,
+            "status": status,
+            "deep": bool(deep),
+            "members": len(all_members),
+            "versions_ok": len(rows),
+            "content_ok": content_ok,
+            "hashes_ok": hashes_ok,
+            "commit": commit_state,
+            "stored_commit": baseline.git_commit_sha,
+            "tag_state": tag["state"],
+            "tag_name": tag["tag_name"],
+            "tag_points_at": tag["tag_points_at"],
+            "tag_warning": tag["warning"],
+            "problems": problems[:100],
+            "problem_count": len(problems),
+            "checked_at": datetime.now(timezone.utc),
+        }
+
+    def integrity_all(self, session: Session) -> list[dict]:
+        """A quick (no hashing) check of every baseline, so an admin sees the whole picture."""
+        out: list[dict] = []
+        for baseline in session.scalars(select(Baseline).order_by(Baseline.id.desc())):
+            product = session.get(Product, baseline.product_id)
+            if product is None:
+                continue
+            out.append(self.integrity(session, baseline, product, deep=False))
+        return out
+
     # ---- product releases ---------------------------------------------------------------
 
     def create_release(self, session: Session, product: Product, user_name: str) -> ProductRelease:

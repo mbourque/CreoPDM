@@ -14,13 +14,19 @@ from creopdm.api.deps import (
     require_permission,
     require_product_access,
 )
-from creopdm.auth_constants import PERMISSION_BASELINES_CREATE, PERMISSION_BASELINES_VIEW
+from creopdm.auth_constants import (
+    PERMISSION_BASELINES_ADMIN,
+    PERMISSION_BASELINES_CREATE,
+    PERMISSION_BASELINES_VIEW,
+)
 from creopdm.context import AppContext
 from creopdm.models.baseline import Baseline
 from creopdm.services.baseline_service import BaselineService
 from creopdm.models.product import Product
 from creopdm.schemas.common import (
+    BaselineAdminList,
     BaselineCompareResponse,
+    BaselineIntegrityReport,
     BaselineCreateRequest,
     BaselineDependencyResponse,
     BaselineGitCheckResponse,
@@ -138,6 +144,78 @@ def list_baseline_dependencies(
     baseline = ctx.baselines.get(db, baseline_uuid)
     require_product_access(request, ctx, db.get(Product, baseline.product_id))
     return [BaselineDependencyResponse(**row) for row in ctx.baselines.dependencies(db, baseline)]
+
+
+@router.get("/api/admin/baselines", response_model=BaselineAdminList)
+def admin_list_baselines(
+    request: Request,
+    q: str = "",
+    type: str = "",
+    status: str = "",
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> BaselineAdminList:
+    """Administration → Baselines: every baseline of every product, with overall counts."""
+    require_permission(request, ctx, PERMISSION_BASELINES_ADMIN)
+    return BaselineAdminList(
+        summary=ctx.baselines.admin_summary(db),
+        items=ctx.baselines.admin_list(db, q=q, baseline_type=type, status=status),
+    )
+
+
+@router.post("/api/admin/baselines/integrity", response_model=list[BaselineIntegrityReport])
+def admin_check_all_baselines(
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> list[BaselineIntegrityReport]:
+    """A quick integrity check of every baseline (no hashing). Read only."""
+    require_permission(request, ctx, PERMISSION_BASELINES_ADMIN)
+    return [BaselineIntegrityReport(**row) for row in ctx.baselines.integrity_all(db)]
+
+
+@router.post("/api/baselines/{baseline_uuid}/integrity", response_model=BaselineIntegrityReport)
+def admin_check_baseline(
+    baseline_uuid: str,
+    request: Request,
+    deep: bool = False,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> BaselineIntegrityReport:
+    """Integrity of one baseline; ``deep=true`` also verifies every file's SHA-256."""
+    require_permission(request, ctx, PERMISSION_BASELINES_ADMIN)
+    baseline = ctx.baselines.get(db, baseline_uuid)
+    product = db.get(Product, baseline.product_id)
+    return BaselineIntegrityReport(**ctx.baselines.integrity(db, baseline, product, deep=deep))
+
+
+@router.post("/api/baselines/{baseline_uuid}/archive", response_model=BaselineResponse)
+def admin_archive_baseline(
+    baseline_uuid: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> BaselineResponse:
+    """Archive a finalized baseline (hidden from everyday use, never deleted, restorable)."""
+    require_permission(request, ctx, PERMISSION_BASELINES_ADMIN)
+    baseline = ctx.baselines.get(db, baseline_uuid)
+    product = db.get(Product, baseline.product_id)
+    baseline = ctx.baselines.archive(db, baseline, product)
+    return baseline_to_response(baseline, product.uuid, product.name)
+
+
+@router.post("/api/baselines/{baseline_uuid}/restore", response_model=BaselineResponse)
+def admin_restore_baseline(
+    baseline_uuid: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> BaselineResponse:
+    require_permission(request, ctx, PERMISSION_BASELINES_ADMIN)
+    baseline = ctx.baselines.get(db, baseline_uuid)
+    product = db.get(Product, baseline.product_id)
+    baseline = ctx.baselines.restore(db, baseline, product)
+    return baseline_to_response(baseline, product.uuid, product.name)
 
 
 @router.get("/api/baselines/{baseline_uuid}/compare", response_model=BaselineCompareResponse)

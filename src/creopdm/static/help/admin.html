@@ -347,6 +347,7 @@
         <a href="#lifecycle">Lifecycle states</a>
         <a href="#promote">Promote Products</a>
         <a href="#revise">Revise (admin view)</a>
+        <a href="#baselines">Baselines</a>
         <a href="#danger">Delete, compact, rebuild</a>
         <a href="#settings">System Settings</a>
         <a href="#email">Email &amp; notifications</a>
@@ -584,6 +585,27 @@
           <strong>A user says they cannot see Revise?</strong> Check in this order: the file reads Released · it is not checked out · their role has Revise · the product’s state allows Revise · the page was reloaded after a deploy.
         </div>
         <p>Each revise appears in the <a href="#audit">Audit log</a> as <em>Revision created</em> (A.3 → B.1, with the reason). The new revision keeps its own copy of the metadata; the released one is never changed, and baselines and product releases keep pointing at the version they used.</p>
+      </section>
+
+      <section id="baselines">
+        <h2>Baselines</h2>
+        <p><strong>Administration → Baselines</strong> (the <code>baselines.admin</code> permission, Administrator by default) lists <em>every</em> baseline of every product. Engineers create, view, compare and download baselines from a product’s <strong>Baselines</strong> tab; this page is for looking after them.</p>
+        <ul class="clean">
+          <li><strong>The list</strong>: search by baseline, product or creator; filter by <strong>Type</strong> (Manual or Release) and <strong>Status</strong> (Finalized or Archived). The counts at the top include Integrity warnings and errors once you have run a check. A baseline name opens that product’s Baselines tab.</li>
+          <li><strong>No Delete</strong>: a finalized baseline is immutable and protects the file versions it holds (they cannot be removed, compacted or rebuilt away while it exists). Deleting a <em>product</em> removes its baselines with it.</li>
+          <li><strong>Archive / Restore</strong>: an archived baseline stays listed, searchable, viewable and downloadable and keeps protecting its versions. It is only marked Archived. Both are written to the Audit log.</li>
+          <li><strong>Check</strong> (one baseline) and <strong>Run integrity check</strong> (all, quick): verifies the member records, that every exact file is still in the vault, that the stored Git commit exists, and the optional Git tag. It only <em>reports</em>: it never repairs, changes membership or substitutes a newer version. <strong>Verify file hashes</strong> in the details also reads every file and checks its SHA-256 (slower).</li>
+        </ul>
+        <div class="grid-2">
+          <article class="tile">
+            <h3>Error</h3>
+            <p>Missing or damaged content, a missing repository commit, or missing records. The message names the file and version. Restore the vault from a backup; the baseline itself is intact.</p>
+          </article>
+          <article class="tile">
+            <h3>Warning</h3>
+            <p>The optional Git tag was moved, deleted or never created. The baseline still points at its stored commit, which is the record.</p>
+          </article>
+        </div>
       </section>
 
       <section id="danger">

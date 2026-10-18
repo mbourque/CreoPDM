@@ -53,6 +53,8 @@ ACTION_LABELS: dict[str, str] = {
     ActivityAction.REVISION_CREATED.value: "Revision created",
     ActivityAction.CHANGES_DISCARDED.value: "Changes discarded",
     ActivityAction.BASELINE_CREATED.value: "Baseline created",
+    ActivityAction.BASELINE_ARCHIVED.value: "Baseline archived",
+    ActivityAction.BASELINE_RESTORED.value: "Baseline restored",
     ActivityAction.VAULT_HISTORY_COMPACTED.value: "Vault history compacted",
     ActivityAction.PRODUCT_DB_REBUILT.value: "Product DB rebuilt",
     ActivityAction.USER_CREATED.value: "User created",
@@ -92,6 +94,8 @@ AUDIT_ACTION_FILTER_CHOICES: list[tuple[str, str]] = [
     (ActivityAction.VERSION_RESTORED.value, "Version restored"),
     (ActivityAction.REVISION_CREATED.value, "Revision created"),
     (ActivityAction.BASELINE_CREATED.value, "Baseline created"),
+    (ActivityAction.BASELINE_ARCHIVED.value, "Baseline archived"),
+    (ActivityAction.BASELINE_RESTORED.value, "Baseline restored"),
     (ActivityAction.USER_CREATED.value, "User created"),
     (ActivityAction.ROLE_CHANGED.value, "Role changed"),
     (ActivityAction.MEMBERSHIP_CHANGED.value, "Membership changed"),
@@ -723,6 +727,15 @@ def _event_summary(
             parts.append(f"from {source}")
     if action in {ActivityAction.PRODUCT_DELETED.value, "PRODUCT_DELETED"}:
         name = details.get("name") or details.get("product_name")
+        if name:
+            parts.append(str(name))
+    if action in {
+        ActivityAction.BASELINE_ARCHIVED.value,
+        ActivityAction.BASELINE_RESTORED.value,
+        "BASELINE_ARCHIVED",
+        "BASELINE_RESTORED",
+    }:
+        name = details.get("baseline_name")
         if name:
             parts.append(str(name))
     if action in {ActivityAction.BASELINE_CREATED.value, "BASELINE_CREATED"}:

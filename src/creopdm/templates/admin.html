@@ -31,6 +31,12 @@
       <p>Product Membership, then edit, copy, promote, lifecycle states, delete, compact, or rebuild.</p>
     </section>
     {% endif %}
+    {% if can_admin_baselines %}
+    <section class="admin-tile">
+      <h2><a href="/admin/baselines">Baselines</a></h2>
+      <p>Every baseline of every product, integrity checks of the stored versions, content and Git commits, and archive.</p>
+    </section>
+    {% endif %}
     {% if can_access_utilities %}
     <section class="admin-tile">
       <h2><a href="/admin/utilities">Utilities</a></h2>

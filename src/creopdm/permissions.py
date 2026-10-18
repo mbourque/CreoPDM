@@ -18,6 +18,7 @@ from creopdm.auth_constants import (
     PERMISSION_OBJECTS_REMOVE,
     PERMISSION_OBJECTS_REVERT,
     PERMISSION_OBJECTS_REVISE,
+    PERMISSION_BASELINES_ADMIN,
     PERMISSION_BASELINES_CREATE,
     PERMISSION_BASELINES_VIEW,
     PERMISSION_OBJECTS_VIEW,
@@ -86,6 +87,7 @@ class CapabilityFlags:
     can_revise_objects: bool
     can_view_baselines: bool
     can_create_baselines: bool
+    can_admin_baselines: bool
     can_update_metadata: bool
     can_copy_to_vault: bool
     can_export_product: bool
@@ -128,6 +130,7 @@ def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
         can_revise_objects=PERMISSION_OBJECTS_REVISE in keys,
         can_view_baselines=PERMISSION_BASELINES_VIEW in keys,
         can_create_baselines=PERMISSION_BASELINES_CREATE in keys,
+        can_admin_baselines=PERMISSION_BASELINES_ADMIN in keys,
         can_update_metadata=PERMISSION_OBJECTS_METADATA in keys,
         can_copy_to_vault=PERMISSION_OBJECTS_COPY_TO_VAULT in keys,
         can_export_product=PERMISSION_PRODUCTS_EXPORT in keys,
@@ -182,6 +185,7 @@ def apply_caps(request: Request, caps: CapabilityFlags) -> None:
     request.state.can_revise_objects = caps.can_revise_objects
     request.state.can_view_baselines = caps.can_view_baselines
     request.state.can_create_baselines = caps.can_create_baselines
+    request.state.can_admin_baselines = caps.can_admin_baselines
     request.state.can_update_metadata = caps.can_update_metadata
     request.state.can_copy_to_vault = caps.can_copy_to_vault
     request.state.can_export_product = caps.can_export_product
@@ -235,6 +239,7 @@ def caps_dict(request: Request) -> dict:
         "can_revise_objects": bool(getattr(request.state, "can_revise_objects", False)),
         "can_view_baselines": bool(getattr(request.state, "can_view_baselines", False)),
         "can_create_baselines": bool(getattr(request.state, "can_create_baselines", False)),
+        "can_admin_baselines": bool(getattr(request.state, "can_admin_baselines", False)),
         "can_update_metadata": bool(getattr(request.state, "can_update_metadata", False)),
         "can_copy_to_vault": bool(getattr(request.state, "can_copy_to_vault", False)),
         "can_export_product": bool(getattr(request.state, "can_export_product", False)),
@@ -252,6 +257,7 @@ def caps_dict(request: Request) -> dict:
         or flags["can_manage_lifecycle_states"]
         or flags["can_manage_email"]
         or flags["can_access_utilities"]
+        or flags["can_admin_baselines"]
     )
     return flags
 
@@ -269,6 +275,7 @@ def can_open_administration(caps: CapabilityFlags) -> bool:
         or caps.can_manage_lifecycle_states
         or caps.can_manage_email
         or caps.can_access_utilities
+        or caps.can_admin_baselines
     )
 
 

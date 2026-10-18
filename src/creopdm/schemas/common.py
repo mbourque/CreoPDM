@@ -369,6 +369,69 @@ class ProductReleaseResponse(BaseModel):
     member_count: int = 0
 
 
+class BaselineAdminItem(BaseModel):
+    uuid: str
+    name: str
+    description: str | None = None
+    product_uuid: str
+    product_name: str
+    baseline_type: str
+    release_label: str | None = None
+    status: str
+    member_count: int
+    created_by: str
+    created_at: datetime | None = None
+    git_commit_sha: str | None = None
+    git_tag_name: str | None = None
+
+
+class BaselineAdminSummary(BaseModel):
+    total: int
+    finalized: int
+    archived: int
+    release: int
+    manual: int
+
+
+class BaselineAdminList(BaseModel):
+    summary: BaselineAdminSummary
+    items: list[BaselineAdminItem]
+
+
+class BaselineIntegrityProblem(BaseModel):
+    code: str
+    file: str = ""
+    version: str = ""
+    reason: str = ""
+
+
+class BaselineIntegrityReport(BaseModel):
+    """A read-only health report for one baseline (nothing is repaired or substituted)."""
+
+    baseline_uuid: str
+    name: str
+    product_uuid: str
+    product_name: str
+    baseline_type: str
+    baseline_status: str
+    # HEALTHY, WARNING (tag) or ERROR (missing/damaged content or commit)
+    status: str
+    deep: bool = False
+    members: int
+    versions_ok: int
+    content_ok: int
+    hashes_ok: int | None = None
+    commit: str = "NOT_RECORDED"
+    stored_commit: str | None = None
+    tag_state: str = "NO_TAG"
+    tag_name: str | None = None
+    tag_points_at: str | None = None
+    tag_warning: str | None = None
+    problems: list[BaselineIntegrityProblem] = []
+    problem_count: int = 0
+    checked_at: datetime | None = None
+
+
 class BaselineWorkspaceFile(BaseModel):
     object_uuid: str
     version_uuid: str

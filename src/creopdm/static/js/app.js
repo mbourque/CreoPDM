@@ -7882,6 +7882,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     document.querySelector('.tab[data-tab="snapshot"]')?.click();
   } else if (window.location.hash === "#changes") {
     document.querySelector('.tab[data-tab="changes"]')?.click();
+  } else if (window.location.hash === "#baselines") {
+    document.querySelector('.tab[data-tab="baselines"]')?.click();
   } else if (window.location.hash === "#modified") {
     document.querySelector('.tab[data-tab="modified"]')?.click();
   } else if (window.location.hash === "#checked-out") {

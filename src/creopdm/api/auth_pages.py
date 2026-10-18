@@ -3505,6 +3505,26 @@ def _utilities_logs_response(
     )
 
 
+@router.get("/admin/baselines", response_class=HTMLResponse)
+def admin_baselines_page(
+    request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
+):
+    manager = _require_utilities_permission(
+        request,
+        ctx,
+        db,
+        check=ctx.user_accounts.can_admin_baselines,
+        message="Administration → Baselines required (baselines.admin).",
+    )
+    if _is_blocked(manager):
+        return manager
+    return templates.TemplateResponse(
+        request,
+        "admin_baselines.html",
+        {**_base_ctx(request, ctx, current_user=manager)},
+    )
+
+
 @router.get("/admin/utilities", response_class=HTMLResponse)
 def admin_utilities_page(
     request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)

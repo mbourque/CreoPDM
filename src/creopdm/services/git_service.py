@@ -452,6 +452,70 @@ class GitService:
         logger.debug("commit finished")
         return self.get_head(path)
 
+    def commit_exists(self, path: Path, sha: str) -> bool:
+        """True when ``sha`` is a commit in this repository."""
+        result = self._run(
+            ["cat-file", "-e", f"{sha}^{{commit}}"], cwd=path, check=False, quiet=True
+        )
+        return result.returncode == 0
+
+    def blob_digests(self, path: Path, specs: list[str]) -> list[str | None]:
+        """SHA-256 of each ``<commit>:<path>`` blob, read through ONE ``cat-file --batch`` process.
+
+        ``None`` for a spec that is missing. The content is hashed as it streams, so a large
+        product does not need one process per file or the files in memory.
+        """
+        import hashlib
+
+        if not specs:
+            return []
+        process = subprocess.Popen(
+            self._command(["cat-file", "--batch"], path),
+            cwd=str(path),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            shell=False,
+        )
+        out: list[str | None] = []
+        try:
+            assert process.stdin is not None and process.stdout is not None
+            import threading
+
+            def feed() -> None:
+                try:
+                    for spec in specs:
+                        process.stdin.write((spec + "\n").encode("utf-8"))
+                    process.stdin.close()
+                except OSError:
+                    pass
+
+            writer = threading.Thread(target=feed, daemon=True)
+            writer.start()
+            for _spec in specs:
+                header = process.stdout.readline().decode("utf-8", errors="replace").split()
+                if len(header) == 3 and header[1] == "blob" and header[2].isdigit():
+                    remaining = int(header[2])
+                    digest = hashlib.sha256()
+                    while remaining > 0:
+                        chunk = process.stdout.read(min(remaining, 1024 * 1024))
+                        if not chunk:
+                            break
+                        digest.update(chunk)
+                        remaining -= len(chunk)
+                    process.stdout.read(1)  # the newline git adds after each object
+                    out.append(digest.hexdigest() if remaining == 0 else None)
+                else:
+                    out.append(None)
+            writer.join(timeout=5)
+        finally:
+            try:
+                process.kill()
+            except OSError:
+                pass
+            process.wait()
+        return out
+
     def tag_target(self, path: Path, name: str) -> str | None:
         """The commit a tag points at (full SHA), or None when the tag does not exist."""
         result = self._run(

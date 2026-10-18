@@ -292,6 +292,11 @@ class UserService:
     def can_utilities_delete_product(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_UTILITIES_DELETE_PRODUCT)
 
+    def can_admin_baselines(self, user: User) -> bool:
+        from creopdm.auth_constants import PERMISSION_BASELINES_ADMIN
+
+        return self.has_permission(user, PERMISSION_BASELINES_ADMIN)
+
     def can_utilities_audit(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_UTILITIES_AUDIT)
 

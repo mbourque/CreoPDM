@@ -54,6 +54,7 @@ PERMISSION_OBJECTS_REVERT = "objects.revert"
 PERMISSION_OBJECTS_REVISE = "objects.revise"
 PERMISSION_BASELINES_VIEW = "baselines.view"
 PERMISSION_BASELINES_CREATE = "baselines.create"
+PERMISSION_BASELINES_ADMIN = "baselines.admin"
 PERMISSION_OBJECTS_METADATA = "objects.metadata"
 PERMISSION_OBJECTS_COPY_TO_VAULT = "objects.copy_to_vault"
 PERMISSION_PRODUCTS_EXPORT = "products.export"
@@ -108,6 +109,10 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_OBJECTS_REVISE, "Create the next revision of a released file (Revise)"),
     (PERMISSION_BASELINES_VIEW, "View baselines (exact configuration snapshots) of a product"),
     (PERMISSION_BASELINES_CREATE, "Create a baseline of a product's current configuration"),
+    (
+        PERMISSION_BASELINES_ADMIN,
+        "Administration → Baselines (all baselines, integrity check, archive and restore)",
+    ),
     (PERMISSION_OBJECTS_METADATA, "Update Creo metadata on objects"),
     (PERMISSION_OBJECTS_COPY_TO_VAULT, "Copy selected files into the vault (Copy to Vault)"),
     (PERMISSION_PRODUCTS_EXPORT, "Export an entire product as a zip download"),
@@ -208,6 +213,7 @@ PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         (
             PERMISSION_BASELINES_VIEW,
             PERMISSION_BASELINES_CREATE,
+            PERMISSION_BASELINES_ADMIN,
         ),
     ),
 )
