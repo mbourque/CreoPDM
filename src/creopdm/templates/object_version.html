@@ -23,9 +23,11 @@
     <strong>{{ current_display }}</strong>; <a href="/products/{{ product.uuid }}/objects/{{ object.uuid }}">open the current version</a>.</p>
   {% endif %}
 
-  <section class="detail-card">
-    <h2>Version {{ display }}</h2>
-    <table class="grid kv" id="version-facts">
+  <h2 class="version-section-title">Version {{ display }}</h2>
+  <div class="detail-sections">
+    <div class="table-wrap">
+    <table class="grid inventory-table" id="version-facts">
+      <thead><tr><th>Field</th><th>Value</th></tr></thead>
       <tbody>
         <tr><td>File</td><td class="filename-cell">{{ version.filename or object.filename }}</td></tr>
         {% if version.relative_path and version.relative_path != version.filename %}
@@ -49,19 +51,23 @@
         <tr><td>Repository commit</td><td class="filename-cell">{{ version.git_commit_hash or "—" }}</td></tr>
       </tbody>
     </table>
-  </section>
+    </div>
+  </div>
 
   {% if identity_rows %}
-  <section class="detail-card">
-    <h2>Identity as of {{ display }}</h2>
-    <table class="grid kv" id="version-identity">
+  <h2 class="version-section-title">Identity as of {{ display }}</h2>
+  <div class="detail-sections">
+    <div class="table-wrap">
+    <table class="grid inventory-table" id="version-identity">
+      <thead><tr><th>Field</th><th>Value</th></tr></thead>
       <tbody>
         {% for key, value in identity_rows %}
         <tr><td>{{ key }}</td><td>{{ value }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
-  </section>
+    </div>
+  </div>
   {% endif %}
 </article>
 {% endblock %}

@@ -1465,6 +1465,9 @@ button.forgot-password-btn,
 .baseline-release-choice + .baseline-tag-choice { margin-top: -0.35rem; }
 .baseline-release-choice input, .baseline-structure-confirm input, .baseline-tag-choice input { flex: 0 0 auto; width: auto; margin: 0; }
 #baseline-tag-line .btn { margin-left: 0.5rem; padding: 0.15rem 0.6rem; }
+#version-facts td:first-child, #version-identity td:first-child { width: 14rem; white-space: nowrap; font-weight: 600; }
+#version-facts td.filename-cell { overflow-wrap: anywhere; }
+.version-section-title { margin: 1rem 0 0.5rem; font-size: 1.1rem; }
 .baseline-desc { margin: 0; white-space: pre-wrap; }
 .baseline-version-link { color: inherit; text-decoration: underline dotted; }
 .baseline-version-link:hover { text-decoration: underline; }
