@@ -373,6 +373,12 @@ class ProductReleaseResponse(BaseModel):
     git_tag_error: str | None = None
 
 
+class BaselineArchiveRequest(BaseModel):
+    """Archiving re-checks the signed-in user's password, like the other confirmed actions."""
+
+    confirm_password: str = Field(default="", max_length=256)
+
+
 class BaselineAdminItem(BaseModel):
     uuid: str
     name: str

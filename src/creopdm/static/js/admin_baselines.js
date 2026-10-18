@@ -6,7 +6,7 @@
  */
 window.__creopdmModules = window.__creopdmModules || {};
 window.__creopdmModules.admin_baselines = {
-  init() {
+  init(shell) {
     const page = document.getElementById("admin-baselines-page");
     if (!page) return;
     // An account that cannot browse products would just be sent back to Administration by the
@@ -268,10 +268,13 @@ window.__creopdmModules.admin_baselines = {
     }
   }
 
-  async function act(uuid, action) {
+  async function act(uuid, action, body) {
     showError("");
     try {
-      const response = await fetch(`/api/baselines/${encodeURIComponent(uuid)}/${action}`, { method: "POST" });
+      const response = await fetch(`/api/baselines/${encodeURIComponent(uuid)}/${action}`, {
+        method: "POST",
+        ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}),
+      });
       if (!response.ok) throw new Error(await errorText(response));
       await load();
     } catch (err) {
@@ -298,13 +301,40 @@ window.__creopdmModules.admin_baselines = {
     if (archive) {
       const uuid = archive.getAttribute("data-archive") || "";
       const name = items.find((i) => i.uuid === uuid)?.name || "this baseline";
-      if (window.confirm(`Archive “${name}”? It stays protected and can be restored; nothing is deleted.`)) {
-        await act(uuid, "archive");
-      }
+      // The same confirmation window as the other administration actions: it explains what
+      // happens and asks for the signed-in user's password.
+      const confirmed = await shell.confirmByProductName({
+        title: "Archive baseline",
+        lead: `“${name}” will be archived.`,
+        note: "Nothing is deleted.",
+        submitLabel: "Archive baseline",
+        detailsHtml:
+          "<ul>" +
+          "<li>It is hidden from the product’s Baselines tab and its count, unless <em>Show archived</em> is ticked there.</li>" +
+          "<li>It stays readable, comparable and downloadable, keeps its name, and keeps protecting the file versions it holds.</li>" +
+          "<li>You can restore it here at any time. The action is written to the Audit log.</li>" +
+          "</ul>",
+      });
+      if (!confirmed.ok) return;
+      await act(uuid, "archive", { confirm_password: confirmed.password || "" });
       return;
     }
     const restore = target.closest("[data-restore]");
-    if (restore) await act(restore.getAttribute("data-restore") || "", "restore");
+    if (restore) {
+      const uuid = restore.getAttribute("data-restore") || "";
+      const name = items.find((i) => i.uuid === uuid)?.name || "this baseline";
+      const confirmed = await shell.confirmByProductName({
+        title: "Restore baseline",
+        lead: `“${name}” will be restored.`,
+        note: "",
+        submitLabel: "Restore baseline",
+        requirePassword: false,
+        detailsHtml:
+          "<ul><li>It returns to the product’s Baselines tab and its count.</li>" +
+          "<li>Nothing about its contents changes. The action is written to the Audit log.</li></ul>",
+      });
+      if (confirmed.ok) await act(uuid, "restore");
+    }
   });
 
   $("#baseline-integrity-deep")?.addEventListener("click", async (event) => {

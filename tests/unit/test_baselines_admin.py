@@ -31,6 +31,7 @@ from tests.unit.test_baselines import (
 )
 
 ROOT = Path(__file__).resolve().parents[2]
+ARCHIVE = {"confirm_password": "AdminPass1"}  # archiving re-checks the signed-in user's password
 
 
 @pytest.fixture()
@@ -123,7 +124,7 @@ def test_archive_hides_nothing_deletes_nothing_and_can_be_restored(auth_client, 
     baseline = _create(auth_client, product).json()
     before = {n: m["version_uuid"] for n, m in _members(auth_client, baseline["uuid"]).items()}
 
-    archived = auth_client.post(f"/api/baselines/{baseline['uuid']}/archive")
+    archived = auth_client.post(f"/api/baselines/{baseline['uuid']}/archive", json=ARCHIVE)
     assert archived.status_code == 200, archived.text
     assert archived.json()["status"] == "ARCHIVED"
     # Hidden from the everyday list, but still there when asked for, readable, and unchanged.
@@ -141,7 +142,7 @@ def test_archive_hides_nothing_deletes_nothing_and_can_be_restored(auth_client, 
     assert refused.json()["error"]["code"] == "VERSION_REFERENCED_BY_BASELINE"
     # No Delete exists, and archiving twice is refused.
     assert auth_client.delete(f"/api/baselines/{baseline['uuid']}").status_code in (404, 405)
-    assert auth_client.post(f"/api/baselines/{baseline['uuid']}/archive").status_code in (400, 409, 422)
+    assert auth_client.post(f"/api/baselines/{baseline['uuid']}/archive", json=ARCHIVE).status_code in (400, 409, 422)
 
     restored = auth_client.post(f"/api/baselines/{baseline['uuid']}/restore")
     assert restored.status_code == 200 and restored.json()["status"] == "FINALIZED"
@@ -256,6 +257,28 @@ def test_the_quick_check_of_everything_reports_each_baseline(auth_client, auth_c
 # ---- UI wiring ------------------------------------------------------------------------------
 
 
+@requires_git
+def test_archiving_needs_the_password_and_restoring_does_not(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+    baseline = _create(auth_client, product).json()
+    url = f"/api/baselines/{baseline['uuid']}/archive"
+
+    for payload in (None, {"confirm_password": ""}, {"confirm_password": "wrong-password"}):
+        refused = auth_client.post(url, **({"json": payload} if payload is not None else {}))
+        assert refused.status_code in (400, 422), refused.text
+    assert auth_client.get(f"/api/baselines/{baseline['uuid']}").json()["status"] == "FINALIZED"
+
+    # The permission is still checked first: an engineer is refused with 403 whatever they send.
+    _login(auth_client, "eng", "EngPass1")
+    assert auth_client.post(url, json=ARCHIVE).status_code == 403
+
+    _login(auth_client, "admin", "AdminPass1")
+    assert auth_client.post(url, json=ARCHIVE).status_code == 200
+    restored = auth_client.post(f"/api/baselines/{baseline['uuid']}/restore")  # no password
+    assert restored.status_code == 200 and restored.json()["status"] == "FINALIZED"
+
+
 def test_admin_baselines_page_is_wired():
     template = (ROOT / "src" / "creopdm" / "templates" / "admin_baselines.html").read_text(encoding="utf-8")
     for needle in (
@@ -288,6 +311,10 @@ def test_admin_baselines_page_is_wired():
     assert 'if ($("#admin-baselines-page"))' in boot and 'initJobModule("admin_baselines"' in boot
     assert "/api/admin/baselines" in script and "/integrity" in script
     assert "data-archive" in script and "data-restore" in script and "deep=" in script
+    # The shared confirmation window (explains, asks for the password), never a browser alert.
+    assert "window.confirm" not in script and "window.alert" not in script
+    assert "shell.confirmByProductName" in script and "confirm_password: confirmed.password" in script
+    assert "requirePassword: false" in script  # restoring explains but needs no password
     assert "function applyPill" in script and "function syncPills" in script and "healthFilter" in script
     # Clicking the active pill again switches it off (and keeps the search text).
     assert "const switchingOff = name !== \"total\" && name === activePill();" in script
@@ -309,7 +336,7 @@ def test_archived_baselines_leave_the_product_tab_but_stay_readable_and_reserve_
     base = f"/api/products/{product['uuid']}/baselines"
 
     assert [b["name"] for b in auth_client.get(base).json()] == ["Hide me", "Keep"]
-    assert auth_client.post(f"/api/baselines/{hide['uuid']}/archive").status_code == 200
+    assert auth_client.post(f"/api/baselines/{hide['uuid']}/archive", json=ARCHIVE).status_code == 200
 
     # Hidden by default, back with include_archived (what the "Show archived" box asks for).
     assert [b["name"] for b in auth_client.get(base).json()] == ["Keep"]

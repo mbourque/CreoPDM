@@ -25,6 +25,7 @@ from creopdm.services.baseline_service import BaselineService
 from creopdm.models.product import Product
 from creopdm.schemas.common import (
     BaselineAdminList,
+    BaselineArchiveRequest,
     BaselineCompareResponse,
     BaselineIntegrityReport,
     BaselineCreateRequest,
@@ -194,11 +195,23 @@ def admin_check_baseline(
 def admin_archive_baseline(
     baseline_uuid: str,
     request: Request,
+    payload: BaselineArchiveRequest | None = None,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> BaselineResponse:
-    """Archive a finalized baseline (hidden from everyday use, never deleted, restorable)."""
+    """Archive a finalized baseline (hidden from everyday use, never deleted, restorable).
+
+    Needs the signed-in user's password, like the other confirmed administration actions.
+    """
+    from creopdm.utils.danger_confirm import require_danger_password
+
     require_permission(request, ctx, PERMISSION_BASELINES_ADMIN)
+    require_danger_password(
+        ctx,
+        db,
+        payload.confirm_password if payload is not None else "",
+        auth_user=getattr(request.state, "auth_user", None),
+    )
     baseline = ctx.baselines.get(db, baseline_uuid)
     product = db.get(Product, baseline.product_id)
     baseline = ctx.baselines.archive(db, baseline, product)
