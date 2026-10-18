@@ -320,6 +320,8 @@ class BaselineResponse(BaseModel):
     dependency_count: int = 0
     unresolved_dependency_count: int = 0
     structure_indexed: bool = True
+    # The folder name this baseline uses on a workstation (separate from the product's own).
+    workspace_folder: str | None = None
     # Full SHA of the vault repository when the baseline was made (None for older baselines).
     git_commit_sha: str | None = None
     git_tag_name: str | None = None
@@ -351,6 +353,28 @@ class BaselineMemberResponse(BaseModel):
     current_display_version: str | None = None
     # SAME = the product still has this exact version; OUT_OF_DATE = it has a newer one.
     status: str
+
+
+class BaselineWorkspaceFile(BaseModel):
+    object_uuid: str
+    version_uuid: str
+    filename: str
+    relative_path: str
+    display_version: str
+    lifecycle_state: str = ""
+    sha256: str  # the agent must verify this before installing the file
+    size: int
+    content_path: str  # exact-version download, relative to the CreoPDM address
+
+
+class BaselineWorkspaceManifest(BaseModel):
+    """Everything a workstation needs to rebuild a baseline: exact version ids and hashes."""
+
+    baseline: dict
+    product: dict
+    folder: str  # the baseline's own folder name on the workstation
+    read_only: bool = True
+    files: list[BaselineWorkspaceFile]
 
 
 class BaselineGitCheckResponse(BaseModel):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 import uuid as uuidlib
 from datetime import datetime, timezone
@@ -16,6 +17,7 @@ from creopdm.exceptions import (
     BaselineImmutableError,
     BaselineNameConflictError,
     BaselineNotFoundError,
+    BaselineReconstructionError,
     BaselineStructureNotIndexedError,
     BaselineValidationError,
     RepositoryError,
@@ -300,6 +302,159 @@ class BaselineService:
             "baseline_type": baseline.baseline_type,
             "git_commit_sha": baseline.git_commit_sha,
         }
+
+    # ---- workspace reconstruction ------------------------------------------------------
+
+    @staticmethod
+    def workspace_folder(baseline: Baseline) -> str:
+        """The folder name for this baseline on a workstation: readable and always unique."""
+        slug = re.sub(r"[^A-Za-z0-9._-]+", "_", baseline.name).strip("._-") or "baseline"
+        return f"{slug[:60]}-{baseline.uuid[:8]}"
+
+    @staticmethod
+    def _stored_paths(obj: EngineeringObject, version: ObjectVersion) -> list[str]:
+        """Every name the version may be stored under in Git (a rename keeps the old one)."""
+        names: list[str] = []
+        for raw in (version.relative_path, obj.relative_path, version.filename, obj.filename):
+            text = str(raw or "").replace("\\", "/").strip().lstrip("/")
+            if text and text not in names:
+                names.append(text)
+        return names
+
+    def _member_rows(self, session: Session, baseline: Baseline):
+        return session.execute(
+            select(BaselineMember, ObjectVersion, EngineeringObject)
+            .join(ObjectVersion, ObjectVersion.id == BaselineMember.object_version_id)
+            .join(EngineeringObject, EngineeringObject.id == BaselineMember.object_id)
+            .where(BaselineMember.baseline_id == baseline.id)
+            .order_by(BaselineMember.relative_path.asc(), BaselineMember.id.asc())
+        ).all()
+
+    def workspace_manifest(self, session: Session, baseline: Baseline, product: Product) -> dict:
+        """The exact files a workstation needs to rebuild this baseline.
+
+        Built from the STORED version ids only (never the current version) and checked against
+        the vault first: if any member's exact content is missing the whole reconstruction is
+        refused and every missing member is named. Nothing is ever substituted.
+        """
+        rows = self._member_rows(session, baseline)
+        if self._git is None or self._config is None:
+            raise BaselineReconstructionError("The repository is not available.")
+        vault = self._vault_path(product)
+        specs: list[str] = []
+        spans: list[tuple[int, int]] = []
+        for _member, version, obj in rows:
+            start = len(specs)
+            commit = (version.git_commit_hash or "").strip()
+            if commit:
+                specs.extend(f"{commit}:{path}" for path in self._stored_paths(obj, version))
+            spans.append((start, len(specs)))
+        try:
+            sizes = self._git.blob_sizes(vault, specs)
+        except RepositoryError as exc:
+            raise BaselineReconstructionError(
+                f"The vault for {product.name} could not be read: {exc.message}",
+                details={"product": product.uuid},
+            ) from exc
+        problems: list[dict] = []
+        files: list[dict] = []
+        for (member, version, obj), (start, end) in zip(rows, spans):
+            shown = f"{version.revision}.{version.iteration}"
+            size = next((v for v in sizes[start:end] if v is not None), None)
+            if size is None:
+                problems.append(
+                    self._problem(member.filename, shown, "CONTENT_MISSING", "is not in the vault")
+                )
+                continue
+            if not (version.content_hash or "").strip():
+                problems.append(
+                    self._problem(member.filename, shown, "NO_CONTENT_HASH", "has no recorded hash")
+                )
+                continue
+            files.append(
+                {
+                    "object_uuid": obj.uuid,
+                    "version_uuid": version.uuid,
+                    "filename": member.filename,
+                    "relative_path": member.relative_path,
+                    "display_version": shown,
+                    "lifecycle_state": version.lifecycle_state or member.lifecycle_state or "",
+                    "sha256": version.content_hash.strip().lower(),
+                    "size": int(size),
+                    "content_path": f"/api/baselines/{baseline.uuid}/versions/{version.uuid}/content",
+                }
+            )
+        if problems:
+            names = "; ".join(f"{p['file']} {p['version']} {p['reason']}" for p in problems[:5])
+            more = f" and {len(problems) - 5} more" if len(problems) > 5 else ""
+            raise BaselineReconstructionError(
+                f"The baseline cannot be reconstructed: {len(problems)} member"
+                f"{'s' if len(problems) != 1 else ''} can't be provided at the exact captured "
+                f"version ({names}{more}). No other version is substituted.",
+                details={"baseline": baseline.uuid, "problems": problems[:50]},
+            )
+        return {
+            "baseline": {
+                "uuid": baseline.uuid,
+                "name": baseline.name,
+                "baseline_type": baseline.baseline_type,
+                "git_commit_sha": baseline.git_commit_sha,
+            },
+            "product": {
+                "uuid": product.uuid,
+                "name": product.name,
+                "vault_folder": (product.vault_folder or "").strip(),
+            },
+            "folder": self.workspace_folder(baseline),
+            "read_only": True,
+            "files": files,
+        }
+
+    def member_content(
+        self, session: Session, baseline: Baseline, product: Product, version_uuid: str
+    ) -> tuple[bytes, str, str]:
+        """The exact bytes of one captured version: (bytes, filename, sha256).
+
+        Only a version that is a member of THIS baseline is served, never "latest". The bytes are
+        hashed against the recorded SHA-256 before anything is returned, so damaged content is an
+        error, not a download.
+        """
+        wanted = (version_uuid or "").strip()
+        match = next(
+            (row for row in self._member_rows(session, baseline) if row[1].uuid == wanted), None
+        )
+        if match is None:
+            raise BaselineNotFoundError(
+                "That version is not part of this baseline.",
+                details={"baseline": baseline.uuid, "version": version_uuid},
+            )
+        member, version, obj = match
+        if self._git is None or self._config is None:
+            raise BaselineReconstructionError("The repository is not available.")
+        vault = self._vault_path(product)
+        commit = (version.git_commit_hash or "").strip()
+        shown = f"{version.revision}.{version.iteration}"
+        data = None
+        if commit:
+            for path in self._stored_paths(obj, version):
+                try:
+                    data = self._git.show_file(vault, path, commit)
+                    break
+                except RepositoryError:
+                    continue
+        if data is None:
+            raise BaselineReconstructionError(
+                f"{member.filename} {shown} is not in the vault. No other version is substituted.",
+                details={"baseline": baseline.uuid, "version": wanted, "file": member.filename},
+            )
+        digest = hashlib.sha256(data).hexdigest()
+        if digest != (version.content_hash or "").strip().lower():
+            raise BaselineReconstructionError(
+                f"{member.filename} {shown} is damaged in the vault (its content does not match "
+                "the recorded SHA-256). It was not sent.",
+                details={"baseline": baseline.uuid, "version": wanted, "file": member.filename},
+            )
+        return data, member.filename, digest
 
     def dependencies(self, session: Session, baseline: Baseline) -> list[dict]:
         """The structure captured with the baseline, read from the STORED rows only.

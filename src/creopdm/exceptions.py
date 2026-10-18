@@ -148,6 +148,13 @@ class BaselineValidationError(CreoPDMError):
     http_status = 409
 
 
+class BaselineReconstructionError(CreoPDMError):
+    """Exact baseline content is unavailable or damaged. Nothing else is ever substituted."""
+
+    code = "BASELINE_RECONSTRUCTION_FAILED"
+    http_status = 409
+
+
 class BaselineEmptyError(CreoPDMError):
     """A product with no checked-in files has nothing to capture."""
 

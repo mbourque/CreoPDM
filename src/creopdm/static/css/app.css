@@ -1471,7 +1471,10 @@ button.forgot-password-btn,
 .baseline-compare-pane { display: flex; flex-direction: column; gap: 0.5rem; flex: 1 1 auto; min-height: 12rem; }
 .baseline-compare-pane[hidden] { display: none; }
 .baseline-compare-bar { display: flex; align-items: flex-end; gap: 1.2rem; flex-wrap: wrap; }
-.baseline-compare-bar select { min-width: 16rem; }
+.baseline-compare-bar select {
+  min-width: 16rem; font: inherit; font-weight: 400; padding: 0.45rem 0.55rem;
+  border: 1px solid var(--line); border-radius: 4px; background: white;
+}
 .baseline-compare-pane .baseline-members-wrap { flex: 1 1 auto; }
 #baseline-compare-table tr.compare-version_changed td { background: #fff8e8; }
 #baseline-compare-table tr.compare-added td { background: #eefaf0; }

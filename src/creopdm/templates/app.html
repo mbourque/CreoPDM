@@ -796,7 +796,39 @@
       </table>
     </div>
     <div class="dialog-actions">
+      <button type="button" class="btn" id="baseline-ws-remove"
+              title="Delete this baseline's folder on this PC. Nothing in CreoPDM changes.">Remove from workspace…</button>
+      <button type="button" class="btn" id="baseline-ws-add"
+              title="Download this baseline's exact versions to a read-only folder on this PC.">Add to workspace…</button>
       <button type="submit" class="btn btn-primary" id="baseline-members-close">Close</button>
+    </div>
+  </form>
+</dialog>
+{% endif %}
+
+{% if can_view_baselines and selected %}
+<dialog id="baseline-workspace-dialog" class="dialog baseline-workspace-dialog">
+  <form method="dialog" id="baseline-workspace-form">
+    <h2>Add baseline to workspace</h2>
+    <p class="muted small" id="baseline-ws-intro">Downloads the exact version of every file this baseline captured into its <strong>own read-only folder</strong> on this PC. Your normal working files are not touched, and no newer version is ever substituted.</p>
+    <dl class="revise-facts">
+      <dt>Baseline</dt><dd id="baseline-ws-name">—</dd>
+      <dt>Files</dt><dd id="baseline-ws-files">—</dd>
+      <dt>Folder</dt><dd id="baseline-ws-folder" class="filename-cell">—</dd>
+    </dl>
+    <label class="choice" id="baseline-ws-wd-row">
+      <input type="checkbox" id="baseline-ws-wd">
+      <span>Make this my Creo working directory <span class="muted small" id="baseline-ws-wd-note"></span></span>
+    </label>
+    <label class="choice baseline-structure-confirm" id="baseline-ws-overwrite-row" hidden>
+      <input type="checkbox" id="baseline-ws-overwrite">
+      <span>Replace the files that differ from the baseline</span>
+    </label>
+    <p class="error" id="baseline-ws-error" hidden></p>
+    <p class="baseline-frozen" id="baseline-ws-result" hidden></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn" id="baseline-ws-cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" id="baseline-ws-start" disabled>Add to workspace</button>
     </div>
   </form>
 </dialog>

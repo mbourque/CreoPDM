@@ -1700,9 +1700,11 @@ def test_a_member_opens_the_exact_version_even_when_the_file_moved_on(auth_clien
         version = db.scalar(select(ObjectVersion).where(ObjectVersion.uuid == member["version_uuid"]))
         assert version.content_hash in html and (version.revision, version.iteration) == ("A", 2)
 
-    # The current version's page says so.
+    # The current version's page says so. (Re-read the member: the earlier read predates A.3.)
+    latest = _members(auth_client, created["uuid"])["shaft.prt"]
+    assert latest["current_display_version"] == "A.3"
     current = auth_client.get(
-        f"/products/{product['uuid']}/objects/{shaft['uuid']}/versions/{member['current_version_uuid']}"
+        f"/products/{product['uuid']}/objects/{shaft['uuid']}/versions/{latest['current_version_uuid']}"
     )
     assert current.status_code == 200 and "<strong>current</strong>" in current.text
 
@@ -1863,3 +1865,138 @@ def test_compare_ui_is_wired():
     template = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     for needle in ('data-baseline-view="compare"', 'id="baseline-compare-to"', 'id="baseline-compare-table"'):
         assert needle in template
+
+
+# ---- Stories 21-25 (server half): exact manifest, exact content, explicit failure --------------
+
+
+def _manifest_of(auth_client, baseline_uuid):
+    response = auth_client.get(f"/api/baselines/{baseline_uuid}/workspace-manifest")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+@requires_git
+def test_the_workspace_manifest_lists_exact_versions_with_hashes(auth_client, auth_ctx):
+    import hashlib
+
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client)
+    created = _create(auth_client, product).json()
+    manifest = _manifest_of(auth_client, created["uuid"])
+
+    assert manifest["baseline"]["uuid"] == created["uuid"] and manifest["read_only"] is True
+    assert manifest["folder"] == created["workspace_folder"]
+    assert manifest["folder"].endswith(created["uuid"][:8]) and "Design_Review_01" in manifest["folder"]
+    assert manifest["product"]["uuid"] == product["uuid"]
+    members = _members(auth_client, created["uuid"])
+    files = {f["filename"]: f for f in manifest["files"]}
+    assert set(files) == {"shaft.prt", "housing.prt", "gear.prt"}
+    for name, entry in files.items():
+        assert entry["version_uuid"] == members[name]["version_uuid"]  # exact ids, not "latest"
+        assert entry["sha256"] == hashlib.sha256(f"{name}-v1".encode()).hexdigest()
+        assert entry["size"] == len(f"{name}-v1")
+        assert entry["content_path"] == f"/api/baselines/{created['uuid']}/versions/{entry['version_uuid']}/content"
+
+
+@requires_git
+def test_no_latest_substitution_the_baseline_version_is_delivered(auth_client, auth_ctx):
+    import hashlib
+
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client)
+    shaft = objects["shaft.prt"]
+    created = _create(auth_client, product).json()  # shaft is A.1 here
+    _check_in(auth_client, auth_ctx, product, shaft, b"shaft-NEWER")
+    _check_in(auth_client, auth_ctx, product, shaft, b"shaft-NEWEST")
+
+    manifest = _manifest_of(auth_client, created["uuid"])
+    entry = next(f for f in manifest["files"] if f["filename"] == "shaft.prt")
+    assert entry["display_version"] == "A.1"
+    assert entry["sha256"] == hashlib.sha256(b"shaft.prt-v1").hexdigest()
+
+    content = auth_client.get(entry["content_path"])
+    assert content.status_code == 200, content.text
+    assert content.content == b"shaft.prt-v1"  # the captured bytes, not the current ones
+    assert content.headers["x-content-sha256"] == entry["sha256"]
+    assert content.headers["cache-control"] == "no-store"
+
+    # A newer version of the same file is not part of this baseline and is never served by it.
+    with auth_ctx.session_factory() as db:
+        newest = db.scalar(
+            select(EngineeringObject).where(EngineeringObject.uuid == shaft["uuid"])
+        ).current_version
+        newest_uuid = newest.uuid
+    refused = auth_client.get(f"/api/baselines/{created['uuid']}/versions/{newest_uuid}/content")
+    assert refused.status_code == 404, refused.text
+
+
+@requires_git
+def test_missing_exact_content_fails_the_reconstruction_and_names_the_member(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client)
+    created = _create(auth_client, product).json()
+    before = _members(auth_client, created["uuid"])
+    # The captured shaft version loses its content in the vault; its object also has a newer one.
+    _check_in(auth_client, auth_ctx, product, objects["shaft.prt"], b"shaft-NEWER")
+    with auth_ctx.session_factory() as db:
+        version = db.scalar(select(ObjectVersion).where(ObjectVersion.uuid == before["shaft.prt"]["version_uuid"]))
+        version.git_commit_hash = "0" * 40
+        db.commit()
+
+    refused = auth_client.get(f"/api/baselines/{created['uuid']}/workspace-manifest")
+    assert refused.status_code == 409, refused.text
+    error = refused.json()["error"]
+    assert error["code"] == "BASELINE_RECONSTRUCTION_FAILED"
+    assert "shaft.prt A.1" in error["message"] and "No other version is substituted" in error["message"]
+    assert [p["file"] for p in error["details"]["problems"]] == ["shaft.prt"]
+    content = auth_client.get(f"/api/baselines/{created['uuid']}/versions/{before['shaft.prt']['version_uuid']}/content")
+    assert content.status_code == 409 and content.json()["error"]["code"] == "BASELINE_RECONSTRUCTION_FAILED"
+
+    # The baseline itself is unchanged: same members, same version ids.
+    after = _members(auth_client, created["uuid"])
+    assert {n: m["version_uuid"] for n, m in after.items()} == {n: m["version_uuid"] for n, m in before.items()}
+
+
+@requires_git
+def test_damaged_content_is_never_sent(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client)
+    created = _create(auth_client, product).json()
+    members = _members(auth_client, created["uuid"])
+    with auth_ctx.session_factory() as db:
+        version = db.scalar(select(ObjectVersion).where(ObjectVersion.uuid == members["gear.prt"]["version_uuid"]))
+        version.content_hash = "f" * 64  # the record no longer matches the stored bytes
+        db.commit()
+    url = f"/api/baselines/{created['uuid']}/versions/{members['gear.prt']['version_uuid']}/content"
+    refused = auth_client.get(url)
+    assert refused.status_code == 409, refused.text
+    assert "damaged" in refused.json()["error"]["message"] and not refused.content.startswith(b"gear")
+
+
+def test_workspace_manifest_needs_the_view_permission_and_exists_for_viewers(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+    created = _create(auth_client, product).json()
+    _login(auth_client, "view", "ViewPass1")
+    assert auth_client.get(f"/api/baselines/{created['uuid']}/workspace-manifest").status_code == 200
+    for method in ("post", "put", "delete"):
+        response = auth_client.request(method.upper(), f"/api/baselines/{created['uuid']}/workspace-manifest")
+        assert response.status_code in (404, 405)
+
+
+def test_workspace_ui_is_wired():
+    module = (ROOT / "src" / "creopdm" / "static" / "js" / "baselines.js").read_text(encoding="utf-8")
+    assert "/workspace-manifest`" in module and "/baseline-workspace" in module
+    assert "async function openAddToWorkspace" in module and "async function removeFromWorkspace" in module
+    assert "canSetCreoWorkingDirectory" in module and "setCreoWorkingDirectory" in module
+    template = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
+    for needle in (
+        'id="baseline-ws-add"',
+        'id="baseline-ws-remove"',
+        'id="baseline-workspace-dialog"',
+        'id="baseline-ws-wd"',
+    ):
+        assert needle in template
+    app_js = (ROOT / "src" / "creopdm" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    assert "options && options.directory" in app_js and "canSetCreoWorkingDirectory" in app_js

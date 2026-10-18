@@ -451,6 +451,23 @@ class MaterializeResponse(BaseModel):
     purged_newer: list[str] = Field(default_factory=list)
 
 
+class BaselineWorkspaceRequest(BaseModel):
+    pdm_url: str = ""
+    token: str | None = None
+    product_id: str = ""
+    vault_folder: str = ""
+    # The manifest exactly as CreoPDM sent it (exact version ids and SHA-256s).
+    manifest: dict
+    # Replace files in the baseline folder that differ from the baseline (after the user agreed).
+    overwrite: bool = False
+
+
+class BaselineFolderRequest(BaseModel):
+    product_id: str = ""
+    vault_folder: str = ""
+    folder: str
+
+
 class CachePlanItem(BaseModel):
     object_id: str
     filename: str = ""
@@ -3183,6 +3200,61 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             kept_newer_count=kept_newer,
             download_count=len(download_ids),
         )
+
+    # ---- baselines: exact, read-only copies in their own folder ----------------------------
+
+    def _baseline_call(func, *args, **kwargs):
+        from creopdm_agent import baseline_workspace as bw
+
+        try:
+            return func(*args, **kwargs)
+        except bw.BaselineWorkspaceError as exc:
+            raise HTTPException(status_code=exc.status, detail=exc.detail()) from exc
+
+    @app.post("/baseline-workspace")
+    def baseline_workspace_add(payload: BaselineWorkspaceRequest) -> dict[str, object]:
+        """Download a baseline's exact versions, verify every SHA-256, install read-only."""
+        from creopdm_agent import baseline_workspace as bw
+
+        base = _normalize_base(payload.pdm_url or settings.pdm_url)
+        headers: dict[str, str] = {}
+        token = (payload.token or settings.token or "").strip()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        key = _product_cache_key(payload.product_id, payload.vault_folder)
+        with httpx.Client(timeout=300.0, follow_redirects=True) as client:
+            result = _baseline_call(
+                bw.reconstruct,
+                root,
+                client,
+                base,
+                headers,
+                payload.manifest,
+                key,
+                overwrite=bool(payload.overwrite),
+            )
+        logger.info(
+            "Baseline workspace ready: %s (%s file(s), %s downloaded) → %s",
+            payload.manifest.get("folder"),
+            result["files_total"],
+            result["downloaded"],
+            result["path"],
+        )
+        return result
+
+    @app.post("/baseline-workspace/check")
+    def baseline_workspace_check(payload: BaselineFolderRequest) -> dict[str, object]:
+        from creopdm_agent import baseline_workspace as bw
+
+        key = _product_cache_key(payload.product_id, payload.vault_folder)
+        return _baseline_call(bw.check, root, key, payload.folder)
+
+    @app.post("/baseline-workspace/remove")
+    def baseline_workspace_remove(payload: BaselineFolderRequest) -> dict[str, object]:
+        from creopdm_agent import baseline_workspace as bw
+
+        key = _product_cache_key(payload.product_id, payload.vault_folder)
+        return _baseline_call(bw.remove, root, key, payload.folder)
 
     @app.post("/open", response_model=OpenLocalResponse)
     def open_local(payload: OpenLocalRequest) -> OpenLocalResponse:

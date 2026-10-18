@@ -5434,7 +5434,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         );
         return false;
       }
-      const directory = await agentWorkdir(currentProductId(), currentVaultFolder());
+      // A caller (Add baseline to workspace) can name the folder; otherwise it is the product's.
+      const directory =
+        (options && options.directory) || (await agentWorkdir(currentProductId(), currentVaultFolder()));
       await whenCreoJSReady();
       const result = await window.CreoJS.setWorkingDirectory(directory);
       const text = result == null ? "" : String(result);
@@ -5442,7 +5444,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         showError($("#toolbar-error"), text.slice("CREOPDM_ERROR:".length));
         return false;
       }
-      if (!quiet) showOk("Creo working directory set to the local workspace.");
+      if (!quiet) showOk((options && options.message) || "Creo working directory set to the local workspace.");
       return true;
     } catch (err) {
       const message = err && err.message ? err.message : String(err);
@@ -8242,6 +8244,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     agentAuthHeaders,
     agentPdmAuth,
     probeCreoAgent,
+    setCreoWorkingDirectory,
+    // True only inside Creo's built-in browser (where Set Working Directory can work).
+    canSetCreoWorkingDirectory: async () => {
+      try {
+        await creoJSReady;
+        return Boolean(hostedCreoJS());
+      } catch {
+        return false;
+      }
+    },
     currentFolder,
     indexWhereUsedUnderBusy,
     pushCreoMetadataForItems,

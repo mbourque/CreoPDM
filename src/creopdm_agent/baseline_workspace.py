@@ -1,0 +1,294 @@
+"""Rebuild a baseline on this PC: exact versions, hash-verified, read-only, in its own folder.
+
+A baseline never goes into the product's normal workspace folder (that is where check-outs and
+unsaved changes live). It gets ``<agent root>/_baselines/<product>/<baseline folder>/`` holding
+only the exact versions the baseline captured. Everything is staged and verified first: if any
+file is missing or fails its SHA-256 nothing is installed.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import os
+import shutil
+import stat
+import time
+import uuid
+from pathlib import Path
+
+import httpx
+
+from creopdm_agent.trash import move_to_trash
+
+logger = logging.getLogger("creopdm_agent")
+
+BASELINES_DIRNAME = "_baselines"
+MARKER_NAME = ".creopdm-baseline.json"
+
+
+class BaselineWorkspaceError(Exception):
+    """A refusal with an HTTP status and structured detail for the caller."""
+
+    def __init__(self, status: int, message: str, **extra: object) -> None:
+        super().__init__(message)
+        self.status = status
+        self.message = message
+        self.extra = extra
+
+    def detail(self) -> dict[str, object]:
+        return {"message": self.message, **self.extra}
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _set_read_only(path: Path) -> None:
+    os.chmod(path, stat.S_IREAD if os.name == "nt" else 0o444)
+
+
+def _set_writable(path: Path) -> None:
+    try:
+        os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+    except OSError:
+        pass
+
+
+def baseline_dir(root: Path, product_key: str, folder: str) -> Path:
+    """``<root>/_baselines/<product>/<folder>``, never outside ``root``."""
+    from creopdm_agent.server import _safe_segment
+
+    base = root.resolve()
+    target = (
+        base
+        / BASELINES_DIRNAME
+        / _safe_segment(product_key, "local")
+        / _safe_segment(folder, "baseline")
+    ).resolve()
+    try:
+        target.relative_to(base / BASELINES_DIRNAME)
+    except ValueError as exc:
+        raise BaselineWorkspaceError(403, "Refusing to use a path outside the local workspace.") from exc
+    return target
+
+
+def _dest_relative(item: dict) -> Path:
+    from creopdm_agent.server import _cache_dest_relative
+
+    filename = str(item.get("filename") or "")
+    return _cache_dest_relative(item.get("relative_path"), filename)
+
+
+def _marker(dest_root: Path) -> dict | None:
+    path = dest_root / MARKER_NAME
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _extras(dest_root: Path, expected: set[str]) -> list[str]:
+    found: list[str] = []
+    if not dest_root.is_dir():
+        return found
+    for path in sorted(dest_root.rglob("*")):
+        if not path.is_file() or path.name == MARKER_NAME:
+            continue
+        rel = path.relative_to(dest_root).as_posix()
+        if rel not in expected:
+            found.append(rel)
+    return found
+
+
+def reconstruct(
+    root: Path,
+    client: httpx.Client,
+    base_url: str,
+    headers: dict[str, str],
+    manifest: dict,
+    product_key: str,
+    *,
+    overwrite: bool = False,
+) -> dict:
+    """Install the manifest's exact files. All or nothing; returns what happened."""
+    files = manifest.get("files")
+    if not isinstance(files, list) or not files:
+        raise BaselineWorkspaceError(400, "The baseline manifest has no files.")
+    folder = str(manifest.get("folder") or "").strip()
+    if not folder:
+        raise BaselineWorkspaceError(400, "The baseline manifest has no folder name.")
+    dest_root = baseline_dir(root, product_key, folder)
+
+    plan: list[tuple[dict, Path, str]] = []
+    for item in files:
+        digest = str(item.get("sha256") or "").strip().lower()
+        if not digest or not item.get("content_path"):
+            raise BaselineWorkspaceError(
+                400, f"The manifest entry for {item.get('filename')} has no hash or content path."
+            )
+        rel = _dest_relative(item)
+        target = (dest_root / rel).resolve()
+        try:
+            target.relative_to(dest_root)
+        except ValueError as exc:
+            raise BaselineWorkspaceError(403, "Refusing a file path outside the baseline folder.") from exc
+        plan.append((item, target, digest))
+
+    # Files already there: the right content stays, different content is a conflict the user
+    # must confirm (it can only be a local edit or damage; the baseline folder is read-only).
+    keep: set[str] = set()
+    conflicts: list[str] = []
+    for item, target, digest in plan:
+        if not target.is_file():
+            continue
+        if sha256_file(target) == digest:
+            keep.add(target.as_posix())
+        else:
+            conflicts.append(target.relative_to(dest_root).as_posix())
+    if conflicts and not overwrite:
+        raise BaselineWorkspaceError(
+            409,
+            f"{len(conflicts)} file{'s' if len(conflicts) != 1 else ''} in the baseline folder "
+            "differ from the baseline. Nothing was changed.",
+            conflicts=conflicts,
+            path=str(dest_root),
+        )
+
+    stage = dest_root.parent / f".{dest_root.name}.partial-{uuid.uuid4().hex[:8]}"
+    failures: list[dict] = []
+    downloaded: list[tuple[Path, Path]] = []
+    try:
+        for item, target, digest in plan:
+            if target.as_posix() in keep:
+                continue
+            staged = stage / target.relative_to(dest_root)
+            staged.parent.mkdir(parents=True, exist_ok=True)
+            name = str(item.get("filename") or target.name)
+            try:
+                response = client.get(f"{base_url}{item['content_path']}", headers=headers)
+            except httpx.HTTPError as exc:
+                failures.append({"file": name, "reason": f"CreoPDM could not be reached: {exc}"})
+                break
+            if response.status_code >= 400:
+                reason = f"CreoPDM returned {response.status_code}"
+                try:
+                    body = response.json()
+                    message = (body.get("error") or {}).get("message") or body.get("detail")
+                    if message:
+                        reason = str(message)
+                except ValueError:
+                    pass
+                failures.append({"file": name, "reason": reason})
+                continue
+            actual = hashlib.sha256(response.content).hexdigest()
+            if actual != digest:
+                failures.append(
+                    {
+                        "file": name,
+                        "reason": "downloaded content does not match the expected SHA-256 and was rejected",
+                    }
+                )
+                continue
+            staged.write_bytes(response.content)
+            downloaded.append((staged, target))
+        if failures:
+            raise BaselineWorkspaceError(
+                502,
+                f"The baseline was not installed: {len(failures)} file"
+                f"{'s' if len(failures) != 1 else ''} could not be provided exactly "
+                f"({'; '.join(f['file'] + ' — ' + f['reason'] for f in failures[:3])}).",
+                failures=failures,
+            )
+        # Everything verified: now (and only now) install.
+        for staged, target in downloaded:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if target.exists():
+                _set_writable(target)
+            os.replace(staged, target)
+        for _item, target, _digest in plan:
+            _set_read_only(target)
+        marker_path = dest_root / MARKER_NAME
+        if marker_path.exists():
+            _set_writable(marker_path)
+        dest_root.mkdir(parents=True, exist_ok=True)
+        marker_path.write_text(
+            json.dumps(
+                {
+                    "baseline": manifest.get("baseline"),
+                    "product": manifest.get("product"),
+                    "folder": folder,
+                    "installed_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                    "files": [
+                        {"path": target.relative_to(dest_root).as_posix(), "sha256": digest}
+                        for _item, target, digest in plan
+                    ],
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
+
+    expected = {target.relative_to(dest_root).as_posix() for _i, target, _d in plan}
+    return {
+        "path": str(dest_root),
+        "folder": folder,
+        "files_total": len(plan),
+        "downloaded": len(downloaded),
+        "kept": len(keep),
+        "replaced": len(conflicts),
+        "extras": _extras(dest_root, expected),
+        "read_only": True,
+    }
+
+
+def check(root: Path, product_key: str, folder: str) -> dict:
+    """Is the baseline folder still exactly the baseline? Missing, changed and extra files."""
+    dest_root = baseline_dir(root, product_key, folder)
+    marker = _marker(dest_root)
+    if marker is None:
+        return {"installed": False, "path": str(dest_root), "missing": [], "modified": [], "extras": []}
+    missing: list[str] = []
+    modified: list[str] = []
+    expected: set[str] = set()
+    for entry in marker.get("files") or []:
+        rel = str(entry.get("path") or "")
+        expected.add(rel)
+        path = dest_root / rel
+        if not path.is_file():
+            missing.append(rel)
+        elif sha256_file(path) != str(entry.get("sha256") or ""):
+            modified.append(rel)
+    return {
+        "installed": True,
+        "path": str(dest_root),
+        "missing": missing,
+        "modified": modified,
+        "extras": _extras(dest_root, expected),
+    }
+
+
+def remove(root: Path, product_key: str, folder: str) -> dict:
+    """Delete one baseline folder (only one this agent installed: it must carry the marker)."""
+    dest_root = baseline_dir(root, product_key, folder)
+    if not dest_root.is_dir():
+        return {"removed": False, "path": str(dest_root)}
+    if _marker(dest_root) is None:
+        raise BaselineWorkspaceError(
+            409, "That folder was not installed as a baseline, so it was not removed.", path=str(dest_root)
+        )
+    move_to_trash(dest_root)
+    return {"removed": True, "path": str(dest_root)}

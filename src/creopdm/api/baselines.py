@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from urllib.parse import quote
+
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session
 
 from creopdm.api.deps import (
@@ -15,6 +17,7 @@ from creopdm.api.deps import (
 from creopdm.auth_constants import PERMISSION_BASELINES_CREATE, PERMISSION_BASELINES_VIEW
 from creopdm.context import AppContext
 from creopdm.models.baseline import Baseline
+from creopdm.services.baseline_service import BaselineService
 from creopdm.models.product import Product
 from creopdm.schemas.common import (
     BaselineCompareResponse,
@@ -23,6 +26,7 @@ from creopdm.schemas.common import (
     BaselineGitCheckResponse,
     BaselineMemberResponse,
     BaselineResponse,
+    BaselineWorkspaceManifest,
 )
 from creopdm.utils.timefmt import as_utc
 
@@ -45,6 +49,7 @@ def baseline_to_response(
         unresolved_dependency_count=baseline.unresolved_dependency_count,
         structure_indexed=bool(baseline.structure_indexed),
         git_commit_sha=baseline.git_commit_sha,
+        workspace_folder=BaselineService.workspace_folder(baseline),
         git_tag_name=baseline.git_tag_name,
         git_tag_status=baseline.git_tag_status or "NONE",
         git_tag_error=baseline.git_tag_error,
@@ -133,6 +138,55 @@ def compare_baseline(
     if other is not None:
         require_product_access(request, ctx, db.get(Product, other.product_id))
     return BaselineCompareResponse(**ctx.baselines.compare(db, baseline, other, product))
+
+
+@router.get(
+    "/api/baselines/{baseline_uuid}/workspace-manifest", response_model=BaselineWorkspaceManifest
+)
+def baseline_workspace_manifest(
+    baseline_uuid: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> BaselineWorkspaceManifest:
+    """The exact versions (and SHA-256s) to rebuild this baseline on a workstation. Refused, with
+    every missing member named, when any exact content is unavailable: nothing is substituted."""
+    from creopdm.product_state import ensure_product_content_accessible
+
+    require_permission(request, ctx, PERMISSION_BASELINES_VIEW)
+    baseline = ctx.baselines.get(db, baseline_uuid)
+    product = db.get(Product, baseline.product_id)
+    require_product_access(request, ctx, product)
+    ensure_product_content_accessible(product, action="download files from this product")
+    return BaselineWorkspaceManifest(**ctx.baselines.workspace_manifest(db, baseline, product))
+
+
+@router.get("/api/baselines/{baseline_uuid}/versions/{version_uuid}/content")
+def baseline_member_content(
+    baseline_uuid: str,
+    version_uuid: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> Response:
+    """The exact bytes of one version captured by this baseline (hash-checked before sending)."""
+    from creopdm.product_state import ensure_product_content_accessible
+
+    require_permission(request, ctx, PERMISSION_BASELINES_VIEW)
+    baseline = ctx.baselines.get(db, baseline_uuid)
+    product = db.get(Product, baseline.product_id)
+    require_product_access(request, ctx, product)
+    ensure_product_content_accessible(product, action="download files from this product")
+    data, filename, digest = ctx.baselines.member_content(db, baseline, product, version_uuid)
+    return Response(
+        content=data,
+        media_type="application/octet-stream",
+        headers={
+            "X-Content-SHA256": digest,
+            "Cache-Control": "no-store",
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
+        },
+    )
 
 
 @router.get("/api/baselines/{baseline_uuid}/git-check", response_model=BaselineGitCheckResponse)

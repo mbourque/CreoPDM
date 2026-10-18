@@ -540,6 +540,211 @@ window.__creopdmModules.baselines = {
       input.value = suggestTag($("#baseline-name")?.value);
     });
 
+    // ---- exact, read-only copy of a baseline on this PC --------------------------------------
+
+    function formatSize(bytes) {
+      const mb = Number(bytes || 0) / (1024 * 1024);
+      return mb >= 10 ? `${Math.round(mb)} MB` : `${Math.round(mb * 10) / 10} MB`;
+    }
+
+    /** Ask the agent which product folder name it uses, then the agent does the rest. */
+    function agentBody(info, extra) {
+      return JSON.stringify({
+        pdm_url: window.location.origin,
+        product_id: info?.product_uuid || productId(),
+        vault_folder: shell.currentVaultFolder ? shell.currentVaultFolder() : "",
+        ...shell.agentPdmAuth(),
+        ...extra,
+      });
+    }
+
+    async function agentJson(path, info, extra) {
+      const response = await fetch(`${shell.agentBase()}${path}`, {
+        method: "POST",
+        headers: shell.agentAuthHeaders({ "Content-Type": "application/json" }),
+        body: agentBody(info, extra),
+      });
+      let body = null;
+      try {
+        body = await response.json();
+      } catch {
+        body = null;
+      }
+      return { ok: response.ok, status: response.status, body };
+    }
+
+    function agentMessage(result, fallback) {
+      const detail = result.body?.detail;
+      if (detail && typeof detail === "object") return detail.message || fallback;
+      return (typeof detail === "string" && detail) || fallback;
+    }
+
+    async function openAddToWorkspace() {
+      const dialog = $("#baseline-workspace-dialog");
+      const form = $("#baseline-workspace-form");
+      const uuid = openBaselineUuid;
+      if (!(dialog instanceof HTMLDialogElement) || !form || !uuid) return;
+      const start = $("#baseline-ws-start");
+      const cancel = $("#baseline-ws-cancel");
+      const error = $("#baseline-ws-error");
+      const resultBox = $("#baseline-ws-result");
+      const overwriteRow = $("#baseline-ws-overwrite-row");
+      const overwrite = $("#baseline-ws-overwrite");
+      const wd = $("#baseline-ws-wd");
+      const wdNote = $("#baseline-ws-wd-note");
+      showError(error, "");
+      if (resultBox) resultBox.hidden = true;
+      if (overwriteRow) overwriteRow.hidden = true;
+      if (overwrite) overwrite.checked = false;
+      if (start) {
+        start.disabled = true;
+        start.textContent = "Add to workspace";
+      }
+      $("#baseline-ws-name").textContent = $("#baseline-members-title")?.textContent || "";
+      $("#baseline-ws-files").textContent = "Checking the baseline…";
+      $("#baseline-ws-folder").textContent = "—";
+      // The checkbox only works inside Creo's browser with the agent running.
+      const canSetWd = shell.canSetCreoWorkingDirectory ? await shell.canSetCreoWorkingDirectory() : false;
+      if (wd) {
+        wd.checked = false;
+        wd.disabled = !canSetWd;
+      }
+      if (wdNote) {
+        wdNote.textContent = canSetWd ? "" : "(only available when this page is open inside Creo)";
+      }
+      if (!dialog.open) dialog.showModal();
+
+      let manifest = null;
+      try {
+        const response = await fetch(`/api/baselines/${encodeURIComponent(uuid)}/workspace-manifest`);
+        if (!response.ok) throw new Error(await readError(response));
+        manifest = await response.json();
+      } catch (err) {
+        $("#baseline-ws-files").textContent = "—";
+        showError(error, err?.message || "The baseline cannot be reconstructed.");
+      }
+      let info = null;
+      try {
+        const response = await fetch(`/api/baselines/${encodeURIComponent(uuid)}`);
+        info = response.ok ? await response.json() : null;
+      } catch {
+        info = null;
+      }
+      if (manifest) {
+        const total = manifest.files.reduce((sum, f) => sum + Number(f.size || 0), 0);
+        $("#baseline-ws-files").textContent =
+          `${manifest.files.length} file${manifest.files.length === 1 ? "" : "s"} · ${formatSize(total)}`;
+        $("#baseline-ws-folder").textContent = `…\\_baselines\\${
+          manifest.product?.vault_folder || manifest.product?.name || ""
+        }\\${manifest.folder}`;
+        const agent = await shell.probeCreoAgent();
+        if (!agent) {
+          showError(error, "Start creopdm-agent on this PC, then open this dialog again.");
+        } else if (start) {
+          start.disabled = false;
+        }
+      }
+
+      await new Promise((resolve) => {
+        const finish = () => {
+          form.removeEventListener("submit", onSubmit);
+          cancel?.removeEventListener("click", onCancel);
+          dialog.removeEventListener("close", onClose);
+          if (dialog.open) dialog.close();
+          resolve();
+        };
+        const onSubmit = async (event) => {
+          event.preventDefault();
+          if (!manifest || !start) return;
+          // After a successful install the same button just closes the dialog.
+          if (start.dataset.done === "1") {
+            start.dataset.done = "";
+            finish();
+            return;
+          }
+          start.disabled = true;
+          showError(error, "");
+          start.textContent = "Downloading…";
+          let result;
+          try {
+            result = await agentJson("/baseline-workspace", info, {
+              manifest,
+              overwrite: Boolean(overwrite?.checked),
+            });
+          } catch {
+            showError(error, "The agent did not answer. Is creopdm-agent running?");
+            start.disabled = false;
+            start.textContent = "Add to workspace";
+            return;
+          }
+          if (!result.ok) {
+            const conflicts = result.body?.detail?.conflicts;
+            showError(error, agentMessage(result, "The baseline could not be installed."));
+            if (Array.isArray(conflicts) && conflicts.length && overwriteRow) overwriteRow.hidden = false;
+            start.disabled = false;
+            start.textContent = "Add to workspace";
+            return;
+          }
+          const done = result.body || {};
+          const extra = Array.isArray(done.extras) && done.extras.length
+            ? ` ${done.extras.length} extra file${done.extras.length === 1 ? "" : "s"} in that folder ` +
+              `are not part of the baseline (${done.extras.slice(0, 3).join(", ")}${
+                done.extras.length > 3 ? ", …" : ""
+              }).`
+            : "";
+          if (resultBox) {
+            resultBox.hidden = false;
+            resultBox.textContent =
+              `Installed ${done.files_total} file${done.files_total === 1 ? "" : "s"} ` +
+              `(${done.downloaded} downloaded, ${done.kept} already correct), read-only, in ${done.path}.${extra}`;
+          }
+          $("#baseline-ws-folder").textContent = done.path || "";
+          if (wd?.checked && shell.setCreoWorkingDirectory) {
+            await shell.setCreoWorkingDirectory({
+              directory: done.path,
+              message: "Creo working directory set to the baseline folder.",
+            });
+          }
+          start.dataset.done = "1";
+          start.disabled = false;
+          start.textContent = "Done";
+          if (cancel) cancel.hidden = true;
+        };
+        const onCancel = () => finish();
+        const onClose = () => finish();
+        if (cancel) cancel.hidden = false;
+        form.addEventListener("submit", onSubmit);
+        cancel?.addEventListener("click", onCancel);
+        dialog.addEventListener("close", onClose);
+      });
+    }
+
+    async function removeFromWorkspace() {
+      const uuid = openBaselineUuid;
+      if (!uuid) return;
+      showError($("#baseline-members-error"), "");
+      try {
+        const response = await fetch(`/api/baselines/${encodeURIComponent(uuid)}`);
+        const info = response.ok ? await response.json() : null;
+        if (!info?.workspace_folder) throw new Error("The baseline folder name is not known.");
+        if (!window.confirm(
+          `Delete the folder for “${info.name}” on this PC? Nothing in CreoPDM changes, and you can add it again.`
+        )) return;
+        const result = await agentJson("/baseline-workspace/remove", info, { folder: info.workspace_folder });
+        if (!result.ok) throw new Error(agentMessage(result, "The folder could not be removed."));
+        shell.showOk(
+          result.body?.removed
+            ? `Removed the baseline folder from this PC (${result.body.path}).`
+            : "This baseline is not in your workspace."
+        );
+      } catch (err) {
+        showError($("#baseline-members-error"), err?.message || "Could not remove the baseline folder.");
+      }
+    }
+
+    $("#baseline-ws-add")?.addEventListener("click", () => void openAddToWorkspace());
+    $("#baseline-ws-remove")?.addEventListener("click", () => void removeFromWorkspace());
+
     mod.openBaselineMembers = openBaselineMembers;
     mod.loadBaselinesTab = loadBaselinesTab;
     mod.openCreateBaselineDialog = openCreateBaselineDialog;
