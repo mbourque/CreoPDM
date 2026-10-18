@@ -2395,6 +2395,7 @@ def admin_products_promote(
     confirm_password: str = Form(""),
     reopen_files: str = Form(""),
     release_baseline: str = Form(""),
+    release_tag: str = Form(""),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
@@ -2442,15 +2443,26 @@ def admin_products_promote(
             reopen_released_files=str(reopen_files or "").strip().lower() in {"1", "on", "true", "yes"},
             create_release_baseline=str(release_baseline or "").strip().lower()
             in {"1", "on", "true", "yes"},
+            create_release_tag=str(release_tag or "").strip().lower() in {"1", "on", "true", "yes"},
         )
         db.commit()
         release_note = ""
         if str(release_baseline or "").strip().lower() in {"1", "on", "true", "yes"} and parsed == "RELEASED":
             latest = ctx.baselines.list_releases(db, product)
             if latest:
-                release_note = f" Release {latest[0]['label']} created" + (
-                    f" with baseline {latest[0]['baseline_name']}." if latest[0]["baseline_uuid"] else " (no checked-in files to baseline)."
+                top = latest[0]
+                release_note = f" Release {top['label']} created" + (
+                    f" with baseline {top['baseline_name']}" if top["baseline_uuid"] else " (no checked-in files to baseline)"
                 )
+                if top["git_tag_name"] and top["git_tag_status"] == "CREATED":
+                    release_note += f" and Git tag {top['git_tag_name']}"
+                elif top["git_tag_name"]:
+                    release_note += (
+                        f". The Git tag {top['git_tag_name']} could not be created "
+                        f"({top['git_tag_error'] or 'see the log'}); the release is complete and the "
+                        "tag can be retried from the baseline"
+                    )
+                release_note += "."
         return _promote_products_response(
             request,
             ctx,

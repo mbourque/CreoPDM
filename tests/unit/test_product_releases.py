@@ -50,10 +50,12 @@ def _product(auth_client, name="Gearbox", files=("shaft.prt", "housing.prt")):
     return product
 
 
-def _promote(auth_client, product, state, *, baseline=True, reopen=False):
+def _promote(auth_client, product, state, *, baseline=True, reopen=False, tag=False):
     data = {"product_id": product["uuid"], "state": state, "confirm_password": "AdminPass1"}
     if baseline:
         data["release_baseline"] = "1"
+    if tag:
+        data["release_tag"] = "1"
     if reopen:
         data["reopen_files"] = "1"
     return auth_client.post("/admin/products/promote", data=data)
@@ -198,11 +200,95 @@ def test_releases_need_the_view_permission_and_cannot_be_modified(auth_client, a
         assert response.status_code in (404, 405)
 
 
+def _tag_target(auth_ctx, product, name):
+    return auth_ctx.git.tag_target(_vault(auth_ctx, product), name)
+
+
+def _vault(auth_ctx, product):
+    return Path(auth_ctx.config.workspace_root()) / product["vault_folder"]
+
+
+@requires_git
+def test_the_release_can_tag_the_repository_on_the_release_commit(auth_client, auth_ctx):
+    _signed_in(auth_client, auth_ctx)
+    product = _product(auth_client)
+    response = _promote(auth_client, product, "RELEASED", tag=True)
+    assert response.status_code == 200, response.text
+    assert "and Git tag release/R1" in response.text
+
+    release = _releases(auth_client, product)[0]
+    assert (release["git_tag_name"], release["git_tag_status"]) == ("release/R1", "CREATED")
+    baseline = auth_client.get(f"/api/baselines/{release['baseline_uuid']}").json()
+    assert baseline["git_tag_name"] == "release/R1" and baseline["git_tag_status"] == "CREATED"
+    # The tag points at the release baseline's stored commit (the commit stays the record).
+    assert _tag_target(auth_ctx, product, "release/R1") == baseline["git_commit_sha"]
+    check = auth_client.get(f"/api/baselines/{release['baseline_uuid']}/git-check").json()
+    assert check["state"] == "OK"
+
+    # Releasing again makes release/R2 and leaves release/R1 alone.
+    assert _promote(auth_client, product, "IN_WORK", baseline=False, reopen=True).status_code == 200
+    assert _promote(auth_client, product, "RELEASED", tag=True).status_code == 200
+    latest = _releases(auth_client, product)[0]
+    assert (latest["label"], latest["git_tag_name"], latest["git_tag_status"]) == ("R2", "release/R2", "CREATED")
+    assert _tag_target(auth_ctx, product, "release/R1") is not None
+
+
+@requires_git
+def test_no_tag_is_made_unless_asked_or_without_the_baseline(auth_client, auth_ctx):
+    _signed_in(auth_client, auth_ctx)
+    product = _product(auth_client)
+    assert _promote(auth_client, product, "RELEASED").status_code == 200  # baseline, no tag box
+    release = _releases(auth_client, product)[0]
+    assert release["git_tag_name"] is None and release["git_tag_status"] == "NONE"
+    assert _tag_target(auth_ctx, product, "release/R1") is None
+
+    other = _product(auth_client, "Other")
+    # The tag box without the baseline box does nothing: there is no baseline to tag.
+    assert _promote(auth_client, other, "RELEASED", baseline=False, tag=True).status_code == 200
+    assert _releases(auth_client, other) == []
+    assert _tag_target(auth_ctx, other, "release/R1") is None
+
+
+@requires_git
+def test_a_failed_release_tag_does_not_undo_the_release_and_can_be_retried(
+    auth_client, auth_ctx, monkeypatch
+):
+    from creopdm.exceptions import RepositoryError
+    from creopdm.services.git_service import GitService
+
+    _signed_in(auth_client, auth_ctx)
+    product = _product(auth_client)
+
+    def refuse(self, *_args, **_kwargs):
+        raise RepositoryError("fatal: unable to write ref")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(GitService, "create_tag", refuse)
+        response = _promote(auth_client, product, "RELEASED", tag=True)
+    assert response.status_code == 200, response.text
+    assert "could not be created" in response.text and "tag can be retried" in response.text
+    assert _state(auth_ctx, product) == "RELEASED"  # the release stands
+
+    release = _releases(auth_client, product)[0]
+    assert release["label"] == "R1" and release["baseline_uuid"]
+    assert (release["git_tag_name"], release["git_tag_status"]) == ("release/R1", "FAILED")
+    assert "unable to write ref" in release["git_tag_error"]
+
+    # Retry from the baseline (the repository works again).
+    retried = auth_client.post(f"/api/baselines/{release['baseline_uuid']}/git-tag")
+    assert retried.status_code == 200 and retried.json()["git_tag_status"] == "CREATED"
+    assert _tag_target(auth_ctx, product, "release/R1") is not None
+
+
 def test_promote_page_offers_the_release_baseline_ticked_by_default():
     template = (ROOT / "src" / "creopdm" / "templates" / "admin_products_promote.html").read_text(encoding="utf-8")
     assert 'name="release_baseline" id="promote-release" value="1" checked' in template
     assert 'id="promote-release-wrap" hidden' in template
+    # The tag option sits under the baseline option, ticked by default, hidden until it applies.
+    assert 'name="release_tag" id="promote-tag" value="1" checked' in template
+    assert 'id="promote-tag-wrap" hidden' in template
     script = (ROOT / "src" / "creopdm" / "static" / "js" / "admin.js").read_text(encoding="utf-8")
     assert "syncReleaseChoice" in script and 'stateSel.value === "RELEASED"' in script
+    assert "promote-tag-wrap" in script and "const showTag = show && Boolean(box?.checked);" in script
     module = (ROOT / "src" / "creopdm" / "static" / "js" / "baselines.js").read_text(encoding="utf-8")
     assert "release_label" in module and "baseline-release-badge" in module

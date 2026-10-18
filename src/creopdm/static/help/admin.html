@@ -552,7 +552,7 @@
           </article>
           <article class="tile">
             <h3>Release baseline</h3>
-            <p>When you promote to <strong>Released</strong>, <strong>Create a release baseline</strong> is ticked by default. It records release <strong>R1, R2, …</strong> and a baseline with the exact version of every released file, so that release can be rebuilt later (Files → Baselines → <em>Download baseline…</em>). It is strict: if a required dependency has no checked-in version, Where Used has not been built for a product with assemblies or drawings, or released content is missing, the promotion is refused with the reason and nothing changes. Untick the box to release without a baseline.</p>
+            <p>When you promote to <strong>Released</strong>, <strong>Create a release baseline</strong> is ticked by default. It records release <strong>R1, R2, …</strong> and a baseline with the exact version of every released file, so that release can be rebuilt later (Files → Baselines → <em>Download baseline…</em>). It is strict: if a required dependency has no checked-in version, Where Used has not been built for a product with assemblies or drawings, or released content is missing, the promotion is refused with the reason and nothing changes. Untick the box to release without a baseline. <strong>Also tag the repository</strong> (ticked by default) adds the Git tag <code>release/R1</code>, <code>release/R2</code>, … on the release’s commit, so the release can be found in the vault repository. If the tag cannot be created the release still stands and you can <em>Retry tag</em> from the baseline.</p>
           </article>
           <article class="tile">
             <h3>Checked-out files</h3>

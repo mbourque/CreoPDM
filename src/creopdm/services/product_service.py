@@ -480,6 +480,7 @@ class ProductService:
         state: str | None = None,
         reopen_released_files: bool = False,
         create_release_baseline: bool = False,
+        create_release_tag: bool = False,
     ) -> Product:
         """Update name/number/description/state. Never changes vault_folder.
 
@@ -575,7 +576,7 @@ class ProductService:
                         released = self._release_objects(session, product) if releasing else 0
                         reopened = self._reopen_objects(session, product) if reopening else 0
                         release = (
-                            self._record_release(session, product, user)
+                            self._record_release(session, product, user, create_release_tag)
                             if releasing and create_release_baseline
                             else None
                         )
@@ -611,7 +612,7 @@ class ProductService:
             released = self._release_objects(session, product) if releasing else 0
             reopened = self._reopen_objects(session, product) if reopening else 0
             release = (
-                self._record_release(session, product, user)
+                self._record_release(session, product, user, create_release_tag)
                 if releasing and create_release_baseline
                 else None
             )
@@ -631,9 +632,15 @@ class ProductService:
 
         logger.info("Updated product %s (%s)", product.uuid, new_name)
         session.commit()
+        if release is not None and create_release_tag and self.release_baselines is not None:
+            # After the commit: the release and its baseline are complete whatever happens to the
+            # tag (a failed tag is recorded on the baseline and can be retried).
+            self.release_baselines.apply_release_tag(session, product, release)
         return product
 
-    def _record_release(self, session: Session, product: Product, user) -> object | None:
+    def _record_release(
+        self, session: Session, product: Product, user, tag: bool = False
+    ) -> object | None:
         """Release R<n> with its strict Release baseline, in the promotion's own transaction.
 
         The files are already Released here, so the baseline captures them as released. Any
@@ -644,7 +651,7 @@ class ProductService:
         # Releasing the files was a bulk UPDATE: reload them so the baseline sees "Released".
         session.flush()
         session.expire_all()
-        return self.release_baselines.create_release(session, product, user.user_name)
+        return self.release_baselines.create_release(session, product, user.user_name, tag=tag)
 
     @staticmethod
     def _release_details(release) -> dict:

@@ -367,6 +367,10 @@ class ProductReleaseResponse(BaseModel):
     baseline_uuid: str | None = None
     baseline_name: str | None = None
     member_count: int = 0
+    # The release's Git tag (release/R2): NONE, PENDING, CREATED or FAILED (retry from the baseline).
+    git_tag_name: str | None = None
+    git_tag_status: str = "NONE"
+    git_tag_error: str | None = None
 
 
 class BaselineAdminItem(BaseModel):

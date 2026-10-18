@@ -895,7 +895,9 @@ class BaselineService:
 
     # ---- product releases ---------------------------------------------------------------
 
-    def create_release(self, session: Session, product: Product, user_name: str) -> ProductRelease:
+    def create_release(
+        self, session: Session, product: Product, user_name: str, *, tag: bool = False
+    ) -> ProductRelease:
         """Record release R<n> of ``product`` with its strict Release baseline.
 
         Called inside the Promote-to-Released transaction (nothing is committed here). A product
@@ -920,6 +922,8 @@ class BaselineService:
                     f"{product.name}-{label}",
                     f"Release {label} of {product.name}",
                     baseline_type=BASELINE_TYPE_RELEASE,
+                    # Each product has its own repository, so the release number is enough.
+                    git_tag=f"release/{label}" if tag else None,
                     commit=False,
                 )
         except BaselineEmptyError:
@@ -939,6 +943,20 @@ class BaselineService:
         session.add(release)
         session.flush()
         return release
+
+    def apply_release_tag(
+        self, session: Session, product: Product, release: ProductRelease
+    ) -> Baseline | None:
+        """Create the release's Git tag once the promotion has committed. Never raises: a failed
+        tag is recorded on the baseline (FAILED) and can be retried; the release stands."""
+        if release.baseline_id is None:
+            return None
+        baseline = session.get(Baseline, release.baseline_id)
+        if baseline is None or not baseline.git_tag_name:
+            return baseline
+        with self._locks.acquire(product.uuid):
+            self._apply_tag(session, product, baseline)
+        return baseline
 
     def release_labels(self, session: Session, baseline_ids: list[int]) -> dict[int, str]:
         """``{baseline id: "R2"}`` for the baselines that are a product release."""
@@ -969,6 +987,9 @@ class BaselineService:
                 "baseline_uuid": baseline.uuid if baseline is not None else None,
                 "baseline_name": baseline.name if baseline is not None else None,
                 "member_count": baseline.member_count if baseline is not None else 0,
+                "git_tag_name": baseline.git_tag_name if baseline is not None else None,
+                "git_tag_status": (baseline.git_tag_status if baseline is not None else "NONE"),
+                "git_tag_error": baseline.git_tag_error if baseline is not None else None,
             }
             for release, baseline in rows
         ]
