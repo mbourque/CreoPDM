@@ -16,6 +16,8 @@ from creopdm.exceptions import (
     BaselineNameConflictError,
     BaselineNotFoundError,
     BaselineStructureNotIndexedError,
+    BaselineValidationError,
+    RepositoryError,
     ValidationAppError,
 )
 from creopdm.logging_setup import get_logger
@@ -25,6 +27,12 @@ from creopdm.models.object import EngineeringObject
 from creopdm.models.version import ObjectVersion
 from creopdm.models.product import Product
 from creopdm.services.activity_service import ActivityService
+from creopdm.product_state import (
+    ensure_product_allows,
+    product_is_archived,
+    product_state_value,
+)
+from creopdm.services.git_service import GitService
 from creopdm.services.lock_manager import ProductLockManager
 from creopdm.utils.identity import CurrentUserProvider
 
@@ -74,10 +82,14 @@ class BaselineService:
         locks: ProductLockManager,
         activities: ActivityService,
         users: CurrentUserProvider,
+        git: GitService | None = None,
+        config=None,
     ) -> None:
         self._locks = locks
         self._activities = activities
         self._users = users
+        self._git = git
+        self._config = config
 
     # ---- reads -------------------------------------------------------------------------
 
@@ -220,6 +232,7 @@ class BaselineService:
             if replay is not None:
                 return replay
             self._require_unique_name(session, product, clean)
+            self._require_product_allows_baseline(product)
             objects = list(
                 session.scalars(
                     select(EngineeringObject)
@@ -234,6 +247,7 @@ class BaselineService:
                     f"{product.name} has no files with a checked-in version to baseline.",
                     details={"product": product.uuid},
                 )
+            self._validate_content(product, captured)
             structure_indexed = self._structure_indexed(session, product, captured)
             if not structure_indexed and not accept_missing_structure:
                 raise BaselineStructureNotIndexedError(
@@ -364,6 +378,100 @@ class BaselineService:
                     f'A baseline named "{existing}" already exists in {product.name}.',
                     details={"name": existing},
                 )
+
+    @staticmethod
+    def _require_product_allows_baseline(product: Product) -> None:
+        """A baseline only reads the configuration, so it is allowed in every state that lets the
+        product be viewed, except Archived."""
+        if product_is_archived(product):
+            raise BaselineValidationError(
+                f"{product.name} is Archived and cannot be baselined.",
+                details={"product": product.uuid, "state": product_state_value(product)},
+            )
+        ensure_product_allows(product, "view", action="create a baseline")
+
+    def _validate_content(self, product: Product, captured: list[EngineeringObject]) -> None:
+        """Every captured version must really exist in the vault, with the size that was stored.
+
+        One failing file refuses the whole baseline (nothing is created) and the answer names
+        every file that failed, so it can be repaired and the baseline retried.
+        """
+        problems: list[dict] = []
+        checkable: list[tuple[EngineeringObject, ObjectVersion, str]] = []
+        for obj in captured:
+            version = obj.current_version
+            name = version.filename or obj.filename
+            shown = f"{version.revision}.{version.iteration}"
+            if not (version.git_commit_hash or "").strip():
+                problems.append(self._problem(name, shown, "NO_STORED_COMMIT", "has no stored commit"))
+            elif not (version.content_hash or "").strip():
+                problems.append(self._problem(name, shown, "NO_CONTENT_HASH", "has no recorded content hash"))
+            else:
+                checkable.append((obj, version, name))
+        if checkable and self._git is not None and self._config is not None:
+            vault = self._config.workspace_for_product(
+                (product.vault_folder or "").strip() or product.uuid
+            )
+            # The stored path can differ from the current one (a rename), so every known name is
+            # tried, the same candidates a revert uses.
+            specs: list[str] = []
+            spans: list[tuple[int, int]] = []
+            for obj, version, _name in checkable:
+                names: list[str] = []
+                for raw in (version.relative_path, obj.relative_path, version.filename, obj.filename):
+                    text = str(raw or "").replace("\\", "/").strip().lstrip("/")
+                    if text and text not in names:
+                        names.append(text)
+                start = len(specs)
+                specs.extend(f"{version.git_commit_hash}:{text}" for text in names)
+                spans.append((start, len(specs)))
+            try:
+                sizes = self._git.blob_sizes(vault, specs)
+            except RepositoryError as exc:
+                raise BaselineValidationError(
+                    f"The vault for {product.name} could not be checked: {exc.message}",
+                    details={"product": product.uuid},
+                ) from exc
+            for (obj, version, name), (start, end) in zip(checkable, spans):
+                shown = f"{version.revision}.{version.iteration}"
+                size = next((value for value in sizes[start:end] if value is not None), None)
+                if size is None:
+                    problems.append(
+                        self._problem(name, shown, "CONTENT_MISSING", "is not in the vault")
+                    )
+                elif (
+                    version.file_size
+                    and self._size_is_exact(obj)
+                    and int(version.file_size) != size
+                ):
+                    problems.append(
+                        self._problem(
+                            name,
+                            shown,
+                            "CONTENT_SIZE_MISMATCH",
+                            f"is stored with {size} bytes but was recorded as {version.file_size}",
+                        )
+                    )
+        if not problems:
+            return
+        shown_names = "; ".join(f"{p['file']} {p['version']} {p['reason']}" for p in problems[:5])
+        more = f" and {len(problems) - 5} more" if len(problems) > 5 else ""
+        raise BaselineValidationError(
+            f"No baseline was created: {len(problems)} file{'s' if len(problems) != 1 else ''} "
+            f"failed validation ({shown_names}{more}).",
+            details={"product": product.uuid, "problems": problems[:50]},
+        )
+
+    @staticmethod
+    def _size_is_exact(obj: EngineeringObject) -> bool:
+        """Binary formats are stored byte for byte, so their size must match. Text formats can be
+        re-encoded by Git's line-ending settings, so only their presence is checked."""
+        kind = str(obj.object_type or "")
+        return kind.startswith("CREO_") or kind == "PDF"
+
+    @staticmethod
+    def _problem(file: str, version: str, code: str, reason: str) -> dict:
+        return {"file": file, "version": version, "code": code, "reason": reason}
 
     @staticmethod
     def _structure_indexed(

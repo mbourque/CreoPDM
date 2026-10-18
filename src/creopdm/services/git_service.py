@@ -489,6 +489,39 @@ class GitService:
     def restore_file(self, path: Path, relative_path: str, commit_hash: str) -> None:
         self._run(["checkout", commit_hash, "--", relative_path], cwd=path)
 
+    def blob_sizes(self, path: Path, specs: list[str]) -> list[int | None]:
+        """Size of each ``<commit>:<path>`` blob in one ``cat-file --batch-check`` call.
+
+        ``None`` for a spec that is missing (or not a blob). Reads object headers only, so it is
+        cheap even for large files and a long list.
+        """
+        if not specs:
+            return []
+        result = subprocess.run(
+            self._command(["cat-file", "--batch-check"], path),
+            cwd=str(path),
+            input="\n".join(specs) + "\n",
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            shell=False,
+        )
+        lines = (result.stdout or "").splitlines()
+        if len(lines) != len(specs):
+            raise RepositoryError(
+                (result.stderr or "Unable to check the stored versions.").strip(),
+                details={"path": str(path)},
+            )
+        sizes: list[int | None] = []
+        for line in lines:
+            parts = line.split()
+            if len(parts) == 3 and parts[1] == "blob" and parts[2].isdigit():
+                sizes.append(int(parts[2]))
+            else:
+                sizes.append(None)
+        return sizes
+
     def show_file(self, path: Path, relative_path: str, commit_hash: str) -> bytes:
         posix = relative_path.replace("\\", "/")
         result = subprocess.run(

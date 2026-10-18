@@ -1083,3 +1083,110 @@ def test_missing_structure_ui_is_wired():
     assert "baseline-no-structure" in module and "structure_indexed === false" in module
     template = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     assert 'id="baseline-accept-structure"' in template and 'id="baseline-no-structure"' in template
+
+
+# ---- Story 9: the configuration is validated before a baseline is finalized -------------------
+
+
+def _tamper(auth_ctx, object_uuid, **fields):
+    """Change the current version row directly (a stand-in for a damaged vault or database)."""
+    with auth_ctx.session_factory() as db:
+        obj = db.scalar(select(EngineeringObject).where(EngineeringObject.uuid == object_uuid))
+        version = obj.current_version
+        original = {name: getattr(version, name) for name in fields}
+        for name, value in fields.items():
+            setattr(version, name, value)
+        db.commit()
+    return original
+
+
+def _no_baselines(auth_ctx):
+    with auth_ctx.session_factory() as db:
+        assert db.scalar(select(func.count()).select_from(Baseline)) == 0
+        assert db.scalar(select(func.count()).select_from(BaselineMember)) == 0
+
+
+@requires_git
+def test_content_missing_from_the_vault_refuses_the_baseline_and_names_the_file(
+    auth_client, auth_ctx
+):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client)
+    original = _tamper(auth_ctx, objects["shaft.prt"]["uuid"], git_commit_hash="0" * 40)
+
+    refused = _create(auth_client, product)
+    assert refused.status_code == 409, refused.text
+    error = refused.json()["error"]
+    assert error["code"] == "BASELINE_VALIDATION_FAILED"
+    assert "shaft.prt" in error["message"] and "No baseline was created" in error["message"]
+    assert [p["code"] for p in error["details"]["problems"]] == ["CONTENT_MISSING"]
+    _no_baselines(auth_ctx)
+
+    # Repair it and the same request now succeeds.
+    _tamper(auth_ctx, objects["shaft.prt"]["uuid"], **original)
+    assert _create(auth_client, product).status_code == 201
+
+
+@requires_git
+def test_every_failing_file_is_reported_and_nothing_is_created(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client)
+    _tamper(auth_ctx, objects["shaft.prt"]["uuid"], git_commit_hash=None)
+    _tamper(auth_ctx, objects["housing.prt"]["uuid"], git_commit_hash="1" * 40)
+    with auth_ctx.session_factory() as db:
+        gear = db.scalar(
+            select(EngineeringObject).where(EngineeringObject.uuid == objects["gear.prt"]["uuid"])
+        )
+        recorded = gear.current_version.file_size
+    assert recorded
+    _tamper(auth_ctx, objects["gear.prt"]["uuid"], file_size=recorded + 5)
+
+    refused = _create(auth_client, product)
+    assert refused.status_code == 409, refused.text
+    problems = {p["file"]: p["code"] for p in refused.json()["error"]["details"]["problems"]}
+    assert problems == {
+        "shaft.prt": "NO_STORED_COMMIT",
+        "housing.prt": "CONTENT_MISSING",
+        "gear.prt": "CONTENT_SIZE_MISMATCH",
+    }
+    _no_baselines(auth_ctx)
+
+
+def test_an_archived_product_cannot_be_baselined_but_a_locked_one_can(auth_client, auth_ctx):
+    from creopdm.models.product import Product
+
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+
+    def set_state(value):
+        with auth_ctx.session_factory() as db:
+            db.scalar(select(Product).where(Product.uuid == product["uuid"])).state = value
+            db.commit()
+
+    set_state("ARCHIVED")
+    refused = _create(auth_client, product)
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["error"]["code"] == "BASELINE_VALIDATION_FAILED"
+    assert "Archived" in refused.json()["error"]["message"]
+    _no_baselines(auth_ctx)
+
+    # A baseline only reads the configuration, so a frozen product can still be baselined.
+    set_state("LOCKED")
+    assert _create(auth_client, product, "Locked snapshot").status_code == 201
+
+
+@requires_git
+def test_blob_sizes_checks_many_stored_files_in_one_call(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client)
+    with auth_ctx.session_factory() as db:
+        version = db.scalar(
+            select(EngineeringObject).where(EngineeringObject.uuid == objects["shaft.prt"]["uuid"])
+        ).current_version
+        commit, size = version.git_commit_hash, version.file_size
+    sizes = auth_ctx.git.blob_sizes(
+        _vault(auth_ctx, product),
+        [f"{commit}:shaft.prt", f"{commit}:not-there.prt", f"{'0' * 40}:shaft.prt"],
+    )
+    assert sizes == [size, None, None]
+    assert auth_ctx.git.blob_sizes(_vault(auth_ctx, product), []) == []

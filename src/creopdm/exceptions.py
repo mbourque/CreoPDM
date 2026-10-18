@@ -141,6 +141,13 @@ class BaselineStructureNotIndexedError(CreoPDMError):
     http_status = 409
 
 
+class BaselineValidationError(CreoPDMError):
+    """The configuration failed validation: no baseline is created."""
+
+    code = "BASELINE_VALIDATION_FAILED"
+    http_status = 409
+
+
 class BaselineEmptyError(CreoPDMError):
     """A product with no checked-in files has nothing to capture."""
 

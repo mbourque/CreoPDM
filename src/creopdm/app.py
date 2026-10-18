@@ -115,7 +115,7 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
     revisions = ReviseService(
         objects, checkouts, workspaces, version_store, locks, activities, identity
     )
-    baselines = BaselineService(locks, activities, identity)
+    baselines = BaselineService(locks, activities, identity, git, manager)
     metadata = MetadataService(objects, workspaces)
     thumbnails = ThumbnailService(workspaces)
     ai_snapshots = AiSnapshotService(objects)
