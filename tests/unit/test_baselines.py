@@ -1284,3 +1284,89 @@ def test_release_baseline_choice_is_in_the_dialog():
     # Check boxes use the shared "choice" row (box beside its label), not a stacked label.
     assert 'class="choice baseline-release-choice"' in template
     assert 'class="choice baseline-structure-confirm"' in template
+
+
+# ---- Story 11: baseline creation is all-or-nothing -------------------------------------------
+
+
+def _create_expecting_failure(auth_client, product, name="Design Review 01", **extra):
+    """The create request blows up part-way: either the test client re-raises it or it answers 5xx."""
+    try:
+        response = _create(auth_client, product, name, **extra)
+    except RuntimeError:
+        return
+    assert response.status_code >= 500, response.text
+
+
+def _nothing_left_behind(auth_ctx):
+    from creopdm.models.baseline import BaselineDependency
+
+    with auth_ctx.session_factory() as db:
+        for model in (Baseline, BaselineMember, BaselineDependency):
+            assert db.scalar(select(func.count()).select_from(model)) == 0, model.__name__
+        events = auth_ctx.activities.list_events(db, q="Design Review 01")
+        assert not [e for e in events if e.action == "BASELINE_CREATED"]
+
+
+@pytest.mark.parametrize("failing_step", ["members", "structure", "audit", "commit"])
+def test_a_failure_at_any_step_leaves_no_partial_baseline(
+    auth_client, auth_ctx, monkeypatch, failing_step
+):
+    from sqlalchemy.orm import Session
+
+    from creopdm.services.baseline_service import BaselineService
+
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _structure_product(auth_client, auth_ctx)
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError(f"injected failure at {failing_step}")
+
+    with monkeypatch.context() as patch:
+        if failing_step == "members":
+            patch.setattr(BaselineService, "_members", staticmethod(boom))
+        elif failing_step == "structure":
+            patch.setattr(BaselineService, "_dependencies", staticmethod(boom))
+        elif failing_step == "audit":
+            patch.setattr(auth_ctx.activities, "record", boom)
+        else:
+            real_commit = Session.commit
+
+            def failing_commit(self, *args, **kwargs):
+                # By commit time the rows are flushed, so look at what the session holds.
+                if any(isinstance(obj, Baseline) for obj in self.identity_map.values()):
+                    raise RuntimeError("injected failure at commit")
+                return real_commit(self, *args, **kwargs)
+
+            patch.setattr(Session, "commit", failing_commit)
+        _create_expecting_failure(auth_client, product, operation_id="op-fail-1")
+
+    # No draft or finalized baseline, no members, no structure rows, no audit entry.
+    _nothing_left_behind(auth_ctx)
+
+    # The product lock was released and the same request now works, exactly once.
+    retry = _create(auth_client, product, operation_id="op-fail-1")
+    assert retry.status_code == 201, retry.text
+    again = _create(auth_client, product, operation_id="op-fail-1")
+    assert again.json()["uuid"] == retry.json()["uuid"]
+    with auth_ctx.session_factory() as db:
+        assert db.scalar(select(func.count()).select_from(Baseline)) == 1
+        rows = list(db.scalars(select(Baseline)))
+        assert [b.status for b in rows] == ["FINALIZED"]
+        assert rows[0].member_count == len(rows[0].members) == 3
+
+
+def test_a_baseline_is_never_visible_as_a_draft(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+    for index in range(3):
+        assert _create(auth_client, product, f"Review {index}").status_code == 201
+    with auth_ctx.session_factory() as db:
+        statuses = set(db.scalars(select(Baseline.status)))
+        assert statuses == {"FINALIZED"}
+        assert all(
+            b.member_count == len(b.members) and b.finalized_at is not None
+            for b in db.scalars(select(Baseline))
+        )
+    listed = auth_client.get(f"/api/products/{product['uuid']}/baselines").json()
+    assert {row["status"] for row in listed} == {"FINALIZED"}
