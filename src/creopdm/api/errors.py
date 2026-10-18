@@ -27,11 +27,21 @@ def _json_safe(value: Any) -> Any:
 
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(CreoPDMError)
-    async def domain_error(_request: Request, exc: CreoPDMError) -> JSONResponse:
+    async def domain_error(request: Request, exc: CreoPDMError) -> JSONResponse:
         if exc.http_status >= 500:
             logger.exception("Application error %s: %s", exc.code, exc.message)
         else:
-            logger.info("Client error %s: %s", exc.code, exc.message)
+            # Which request and which account: without them a burst of refusals (a page polling
+            # without permission) cannot be traced. The path only, never the query string.
+            user = getattr(getattr(request.state, "auth_user", None), "username", None)
+            logger.info(
+                "Client error %s: %s [%s %s%s]",
+                exc.code,
+                exc.message,
+                request.method,
+                request.url.path,
+                f" user={user}" if user else "",
+            )
         return JSONResponse(status_code=exc.http_status, content=exc.to_payload())
 
     @app.exception_handler(RequestValidationError)

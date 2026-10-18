@@ -8000,6 +8000,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     ? (openWorkspaceBtn?.dataset.product || addForm?.dataset.product || "")
     : "";
   let watchStamp = null;
+  // A refused poll (403: this account may not view the product's files) is not retried every few
+  // seconds: the page stops polling until it is loaded again (a reload or a permission change).
+  let pollDenied = false;
   let watchReloadTimer = 0;
   let lastPendingCheckinCount = null;
   let lastUserActivityAt = Date.now();
@@ -8016,11 +8019,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   async function pollWorkspaceWatch() {
     // Soft-nav can leave this closure briefly; never poll without the Files table.
     if (!watchProductId || !document.querySelector("#object-table") || watchPaused()) return;
+    if (pollDenied) return;
     try {
       const [response, localPending] = await Promise.all([
         fetch(`/api/products/${watchProductId}/workspace-watch`),
         countLocalWorkspacePending(watchProductId),
       ]);
+      if (response.status === 403) {
+        pollDenied = true;
+        return;
+      }
       if (!response.ok) return;
       const data = await response.json();
       const localTotal = Number(localPending.localNew || 0) + Number(localPending.newerLocal || 0);
@@ -8132,7 +8140,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   ) {
     const LIFECYCLE_POLL_MS = 25_000;
     trackedInterval(() => {
-      if (document.hidden) return;
+      if (document.hidden || pollDenied) return;
       scheduleProductLifecycleReconcile();
     }, LIFECYCLE_POLL_MS);
   }
