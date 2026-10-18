@@ -207,6 +207,8 @@ def test_check_reports_modified_missing_and_extra_files_and_remove_deletes_only_
     (product_dir / "keep.prt").write_bytes(b"mine")
     removed = client.post("/baseline-workspace/remove", json=folder).json()
     assert removed["removed"] is True and not target.exists()
+    # Nothing is left behind: not the baseline folder, not the empty product folder, not _baselines.
+    assert not (root / "_baselines").exists()
     assert (product_dir / "keep.prt").read_bytes() == b"mine"
     assert client.post("/baseline-workspace/remove", json=folder).json()["removed"] is False
 
@@ -346,3 +348,43 @@ def test_nothing_is_locked_off_windows(agent, monkeypatch):
     response = _add(client, _manifest(FILES))
     assert response.status_code == 200 and response.json()["folder_locked"] is False
     assert calls == []
+
+
+def test_removing_one_baseline_keeps_the_others_and_their_parent_folders(agent):
+    client, root, served, _seen = agent
+    _serve(served, FILES)
+    other = _manifest(FILES)
+    other["folder"] = "Other_Baseline-11111111"
+    assert _add(client, _manifest(FILES)).status_code == 200
+    assert _add(client, other).status_code == 200
+    removed = client.post(
+        "/baseline-workspace/remove",
+        json={"product_id": "p1", "vault_folder": "gearbox", "folder": FOLDER},
+    ).json()
+    assert removed["removed"] is True and not _baseline_root(root).exists()
+    assert (root / "_baselines" / "gearbox" / "Other_Baseline-11111111" / "shaft.prt").is_file()
+
+
+def test_a_folder_held_open_by_creo_is_cleared_and_reported_then_finished_later(agent, monkeypatch):
+    """Creo as working directory (or Explorer) can hold the folder itself open: the files still go."""
+    client, root, served, _seen = agent
+    _serve(served, FILES)
+    assert _add(client, _manifest(FILES)).status_code == 200
+    target = _baseline_root(root)
+    folder = {"product_id": "p1", "vault_folder": "gearbox", "folder": FOLDER}
+
+    def locked_by_creo(_path):
+        raise OSError("WinError 32: the process cannot access the file")
+
+    monkeypatch.setattr("creopdm_agent.baseline_workspace.move_to_trash", locked_by_creo)
+    monkeypatch.setattr("creopdm_agent.baseline_workspace._remove_empty_dir", lambda _p: False)
+    monkeypatch.setattr("creopdm_agent.baseline_workspace.shutil.rmtree", lambda *a, **k: None)
+    first = client.post("/baseline-workspace/remove", json=folder)
+    assert first.status_code == 200, first.text
+    assert first.json()["removed"] is True and first.json()["folder_in_use"] is True
+    assert target.is_dir() and not any(p.is_file() for p in target.rglob("*"))  # files and marker gone
+
+    monkeypatch.undo()
+    again = client.post("/baseline-workspace/remove", json=folder).json()  # Creo has let go
+    assert again["removed"] is True and again["folder_in_use"] is False
+    assert not target.exists() and not (root / "_baselines").exists()

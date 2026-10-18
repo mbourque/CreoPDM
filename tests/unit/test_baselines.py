@@ -1991,6 +1991,7 @@ def test_workspace_ui_is_wired():
     assert "async function openAddToWorkspace" in module and "async function removeFromWorkspace" in module
     assert "canSetCreoWorkingDirectory" in module and "setCreoWorkingDirectory" in module
     assert "folder_locked" in module  # the user is told whether Creo can still save into the folder
+    assert "folder_in_use" in module  # a folder Creo or Explorer holds open is explained
     template = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     for needle in (
         'id="baseline-ws-add"',

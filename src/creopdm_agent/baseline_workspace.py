@@ -370,6 +370,37 @@ def check(root: Path, product_key: str, folder: str) -> dict:
     }
 
 
+def _remove_empty_dir(path: Path) -> bool:
+    """Remove an empty folder tree; False when something (Creo, Explorer) still holds it."""
+    for sub in sorted((p for p in path.rglob("*") if p.is_dir()), reverse=True):
+        try:
+            sub.rmdir()
+        except OSError:
+            pass
+    try:
+        path.rmdir()
+    except OSError:
+        return False
+    return True
+
+
+def _prune_empty_parents(root: Path, dest_root: Path) -> None:
+    """Drop ``_baselines/<product>`` and ``_baselines`` once nothing is left in them."""
+    stop = (root.resolve() / BASELINES_DIRNAME)
+    current = dest_root.parent
+    while current != stop.parent:
+        try:
+            if current.is_dir() and not any(current.iterdir()):
+                current.rmdir()
+            else:
+                break
+        except OSError:
+            break
+        if current == stop:
+            break
+        current = current.parent
+
+
 def remove(root: Path, product_key: str, folder: str) -> dict:
     """Delete one baseline folder (only one this agent installed: it must carry the marker)."""
     dest_root = baseline_dir(root, product_key, folder)
@@ -386,5 +417,20 @@ def remove(root: Path, product_key: str, folder: str) -> dict:
                 path=str(dest_root),
             )
     unlock_directories(dest_root)
-    move_to_trash(dest_root)
-    return {"removed": True, "path": str(dest_root)}
+    try:
+        move_to_trash(dest_root)
+    except OSError as exc:
+        # Creo (as its working directory) or Explorer can hold the folder itself open while its
+        # contents can still go: clear what we can and tell the user about the folder.
+        logger.warning("Could not remove %s as a whole (%s); clearing its contents", dest_root, exc)
+        from creopdm_agent.trash import clear_directory_contents
+
+        clear_directory_contents(dest_root)
+    if dest_root.exists():  # the Recycle Bin call can also leave an empty shell behind
+        shutil.rmtree(dest_root, ignore_errors=True)
+    if dest_root.exists():
+        _remove_empty_dir(dest_root)
+    in_use = dest_root.exists()
+    if not in_use:
+        _prune_empty_parents(root, dest_root)
+    return {"removed": True, "path": str(dest_root), "folder_in_use": in_use}

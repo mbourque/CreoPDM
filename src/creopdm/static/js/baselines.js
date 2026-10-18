@@ -735,11 +735,20 @@ window.__creopdmModules.baselines = {
         )) return;
         const result = await agentJson("/baseline-workspace/remove", info, { folder: info.workspace_folder });
         if (!result.ok) throw new Error(agentMessage(result, "The folder could not be removed."));
-        shell.showOk(
-          result.body?.removed
-            ? `Removed the baseline folder from this PC (${result.body.path}).`
-            : "This baseline is not in your workspace."
-        );
+        if (result.body?.removed && result.body.folder_in_use) {
+          // The files are gone but Windows will not delete a folder something has open.
+          shell.showOk(
+            `The baseline's files were removed, but the folder itself is still in use (${result.body.path}). ` +
+              "It is probably Creo's working directory or open in Explorer: switch away or close it, " +
+              "then press Remove from workspace again. The baseline itself is unchanged in CreoPDM."
+          );
+        } else {
+          shell.showOk(
+            result.body?.removed
+              ? `Removed the baseline folder from this PC (${result.body.path}). The baseline itself is unchanged in CreoPDM.`
+              : "This baseline is not in your workspace."
+          );
+        }
       } catch (err) {
         showError($("#baseline-members-error"), err?.message || "Could not remove the baseline folder.");
       }
