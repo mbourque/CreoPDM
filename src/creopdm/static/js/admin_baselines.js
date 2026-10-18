@@ -47,6 +47,7 @@ window.__creopdmModules.admin_baselines = {
   }
 
   let items = [];
+  let healthFilter = ""; // "", "WARNING" or "ERROR": from the last integrity check on this page
   const health = new Map(); // baseline uuid -> integrity report (this page view only)
   let currentReport = null;
 
@@ -71,14 +72,59 @@ window.__creopdmModules.admin_baselines = {
     $("#bstat-error").textContent = reports.length ? String(reports.filter((r) => r.status === "ERROR").length) : "—";
   }
 
+  /** The pills are filters: the active one is highlighted. */
+  function syncPills() {
+    const type = $("#baseline-admin-type")?.value || "";
+    const status = $("#baseline-admin-status")?.value || "";
+    const q = $("#baseline-admin-q")?.value.trim() || "";
+    let active = "";
+    if (healthFilter) active = healthFilter.toLowerCase();
+    else if (status === "FINALIZED" && !type) active = "finalized";
+    else if (status === "ARCHIVED" && !type) active = "archived";
+    else if (type === "RELEASE" && !status) active = "release";
+    else if (type === "MANUAL" && !status) active = "manual";
+    else if (!type && !status && !q) active = "total";
+    document.querySelectorAll(".baseline-pill").forEach((pill) => {
+      pill.classList.toggle("is-active", pill.getAttribute("data-pill") === active);
+    });
+  }
+
+  function applyPill(name) {
+    const type = $("#baseline-admin-type");
+    const status = $("#baseline-admin-status");
+    const search = $("#baseline-admin-q");
+    if (name === "warning" || name === "error") {
+      if (!health.size) {
+        showNote("Run the integrity check first: this shows the baselines whose last check found a " + name + ".");
+        return;
+      }
+      showNote("");
+      healthFilter = healthFilter === name.toUpperCase() ? "" : name.toUpperCase();
+      if (type) type.value = "";
+      if (status) status.value = "";
+      void load(); // all baselines again, then the health filter is applied on top
+      return;
+    }
+    healthFilter = "";
+    showNote("");
+    if (type) type.value = name === "release" ? "RELEASE" : name === "manual" ? "MANUAL" : "";
+    if (status) status.value = name === "finalized" ? "FINALIZED" : name === "archived" ? "ARCHIVED" : "";
+    if (name === "total" && search) search.value = "";
+    void load();
+  }
+
   function render() {
     const body = $("#baseline-admin-table tbody");
     if (!body) return;
-    if (!items.length) {
-      body.innerHTML = '<tr class="empty-row"><td colspan="9">No baselines match.</td></tr>';
+    const shown = healthFilter ? items.filter((i) => health.get(i.uuid)?.status === healthFilter) : items;
+    syncPills();
+    if (!shown.length) {
+      body.innerHTML = `<tr class="empty-row"><td colspan="9">${
+        healthFilter ? "No checked baseline has that result." : "No baselines match."
+      }</td></tr>`;
       return;
     }
-    body.innerHTML = items
+    body.innerHTML = shown
       .map((item) => {
         const archived = item.status === "ARCHIVED";
         const kind = `${titleCase(item.baseline_type)}${
@@ -265,6 +311,10 @@ window.__creopdmModules.admin_baselines = {
     if (report) showReport(report);
   });
 
+  $("#baseline-admin-stats")?.addEventListener("click", (event) => {
+    const pill = event.target instanceof Element ? event.target.closest("[data-pill]") : null;
+    if (pill) applyPill(pill.getAttribute("data-pill") || "total");
+  });
   $("#baseline-admin-check-all")?.addEventListener("click", () => void checkAll());
   let timer = 0;
   for (const id of ["#baseline-admin-q"]) {
@@ -274,7 +324,10 @@ window.__creopdmModules.admin_baselines = {
     });
   }
   for (const id of ["#baseline-admin-type", "#baseline-admin-status"]) {
-    $(id)?.addEventListener("change", () => void load());
+    $(id)?.addEventListener("change", () => {
+      healthFilter = "";
+      void load();
+    });
   }
     void load();
   },

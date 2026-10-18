@@ -396,6 +396,10 @@
     <section class="tab-panel" id="panel-baselines" data-product="{{ selected.uuid }}" hidden>
       <div class="baselines-head">
         <p class="muted small">A baseline is an exact, frozen snapshot of this product: the version of every file at the moment it was created. Later check-ins and revisions never change it.</p>
+        <label class="choice baselines-archived-toggle" title="Archived baselines are hidden by default. They stay readable and keep protecting their versions.">
+          <input type="checkbox" id="baselines-show-archived">
+          <span>Show archived</span>
+        </label>
         {% if can_create_baselines %}
         <button type="button" class="btn btn-primary" id="create-baseline-btn"
                 title="Capture the exact current version of every file in this product.">Create Baseline…</button>

@@ -126,8 +126,11 @@ def test_archive_hides_nothing_deletes_nothing_and_can_be_restored(auth_client, 
     archived = auth_client.post(f"/api/baselines/{baseline['uuid']}/archive")
     assert archived.status_code == 200, archived.text
     assert archived.json()["status"] == "ARCHIVED"
-    # Still searchable and readable, still holds the same members.
-    listed = auth_client.get(f"/api/products/{product['uuid']}/baselines").json()
+    # Hidden from the everyday list, but still there when asked for, readable, and unchanged.
+    assert auth_client.get(f"/api/products/{product['uuid']}/baselines").json() == []
+    listed = auth_client.get(
+        f"/api/products/{product['uuid']}/baselines", params={"include_archived": "true"}
+    ).json()
     assert [b["status"] for b in listed] == ["ARCHIVED"]
     assert auth_client.get(f"/api/baselines/{baseline['uuid']}").json()["status"] == "ARCHIVED"
     assert {n: m["version_uuid"] for n, m in _members(auth_client, baseline["uuid"]).items()} == before
@@ -260,6 +263,8 @@ def test_admin_baselines_page_is_wired():
         'id="baseline-admin-check-all"',
         'id="baseline-integrity-dialog"',
         'id="baseline-integrity-deep"',
+        'class="metric baseline-pill" data-pill="archived"',  # the counts are filters
+        'data-pill="error"',
         "no Delete",
     ):
         assert needle in template
@@ -283,5 +288,54 @@ def test_admin_baselines_page_is_wired():
     assert 'if ($("#admin-baselines-page"))' in boot and 'initJobModule("admin_baselines"' in boot
     assert "/api/admin/baselines" in script and "/integrity" in script
     assert "data-archive" in script and "data-restore" in script and "deep=" in script
+    assert "function applyPill" in script and "function syncPills" in script and "healthFilter" in script
     app_js = (ROOT / "src" / "creopdm" / "static" / "js" / "app.js").read_text(encoding="utf-8")
     assert 'window.location.hash === "#baselines"' in app_js  # the admin link opens the tab
+
+
+# ---- archived baselines are hidden from everyday use but stay readable and protected ----------
+
+
+@requires_git
+def test_archived_baselines_leave_the_product_tab_but_stay_readable_and_reserve_their_name(
+    auth_client, auth_ctx
+):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+    keep = _create(auth_client, product, "Keep").json()
+    hide = _create(auth_client, product, "Hide me").json()
+    base = f"/api/products/{product['uuid']}/baselines"
+
+    assert [b["name"] for b in auth_client.get(base).json()] == ["Hide me", "Keep"]
+    assert auth_client.post(f"/api/baselines/{hide['uuid']}/archive").status_code == 200
+
+    # Hidden by default, back with include_archived (what the "Show archived" box asks for).
+    assert [b["name"] for b in auth_client.get(base).json()] == ["Keep"]
+    shown = auth_client.get(base, params={"include_archived": "true"}).json()
+    assert [(b["name"], b["status"]) for b in shown] == [("Hide me", "ARCHIVED"), ("Keep", "FINALIZED")]
+
+    # The tab count and the product page ignore it: one baseline in everyday use.
+    with auth_ctx.session_factory() as db:
+        product_id = _baseline_row(db, keep["uuid"]).product_id
+        assert auth_ctx.baselines.count_for_product(db, product_id) == 1
+    assert "Baselines · 1" in auth_client.get(f"/?product={product['uuid']}").text
+
+    # Still readable, comparable and downloadable by its uuid, and it still reserves its name.
+    assert auth_client.get(f"/api/baselines/{hide['uuid']}").status_code == 200
+    assert len(_members(auth_client, hide["uuid"])) == 3
+    assert auth_client.get(f"/api/baselines/{hide['uuid']}/compare", params={"to": keep["uuid"]}).status_code == 200
+    assert auth_client.get(f"/api/baselines/{hide['uuid']}/workspace-manifest").status_code == 200
+    assert _create(auth_client, product, "Hide me").status_code == 409
+
+    # Restoring brings it back.
+    assert auth_client.post(f"/api/baselines/{hide['uuid']}/restore").status_code == 200
+    assert [b["name"] for b in auth_client.get(base).json()] == ["Hide me", "Keep"]
+
+
+def test_show_archived_toggle_is_wired():
+    template = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
+    assert 'id="baselines-show-archived"' in template
+    module = (ROOT / "src" / "creopdm" / "static" / "js" / "baselines.js").read_text(encoding="utf-8")
+    assert "?include_archived=true" in module and "baselines-show-archived" in module
+    # The tab and pill count only baselines in everyday use; comparing may use archived ones.
+    assert 'item.status !== "ARCHIVED"' in module and ", archived" in module

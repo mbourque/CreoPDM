@@ -74,12 +74,13 @@ def baseline_to_response(
 def list_baselines(
     product_id: str,
     request: Request,
+    include_archived: bool = False,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> list[BaselineResponse]:
     require_permission(request, ctx, PERMISSION_BASELINES_VIEW)
     product = load_accessible_product(request, ctx, db, product_id)
-    rows = ctx.baselines.list_for_product(db, product)
+    rows = ctx.baselines.list_for_product(db, product, include_archived=include_archived)
     labels = ctx.baselines.release_labels(db, [row.id for row in rows])
     return [
         baseline_to_response(row, product.uuid, product.name, labels.get(row.id)) for row in rows

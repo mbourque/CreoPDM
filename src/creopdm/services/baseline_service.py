@@ -129,19 +129,25 @@ class BaselineService:
 
     # ---- reads -------------------------------------------------------------------------
 
-    def list_for_product(self, session: Session, product: Product) -> list[Baseline]:
-        """Newest first."""
-        return list(
-            session.scalars(
-                select(Baseline)
-                .where(Baseline.product_id == product.id)
-                .order_by(Baseline.id.desc())
-            )
-        )
+    def list_for_product(
+        self, session: Session, product: Product, *, include_archived: bool = False
+    ) -> list[Baseline]:
+        """Newest first. Archived baselines are hidden from everyday use unless asked for."""
+        stmt = select(Baseline).where(Baseline.product_id == product.id)
+        if not include_archived:
+            stmt = stmt.where(Baseline.status != "ARCHIVED")
+        return list(session.scalars(stmt.order_by(Baseline.id.desc())))
 
     def count_for_product(self, session: Session, product_id: int) -> int:
+        """Baselines shown on the product (archived ones are not counted)."""
         return len(
-            list(session.scalars(select(Baseline.id).where(Baseline.product_id == product_id)))
+            list(
+                session.scalars(
+                    select(Baseline.id).where(
+                        Baseline.product_id == product_id, Baseline.status != "ARCHIVED"
+                    )
+                )
+            )
         )
 
     def get(self, session: Session, baseline_uuid: str) -> Baseline:

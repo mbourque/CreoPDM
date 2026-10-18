@@ -18,13 +18,13 @@
   <p class="muted">Every baseline of every product. A baseline is an exact, immutable snapshot, so there is no Delete: you can <strong>check its integrity</strong> and <strong>archive</strong> it (and restore it). Archived baselines still protect the versions they hold.</p>
 
   <div class="baseline-admin-stats" id="baseline-admin-stats" aria-live="polite">
-    <span class="metric"><strong id="bstat-total">—</strong> Baselines</span>
-    <span class="metric"><strong id="bstat-finalized">—</strong> Finalized</span>
-    <span class="metric"><strong id="bstat-archived">—</strong> Archived</span>
-    <span class="metric"><strong id="bstat-release">—</strong> Release</span>
-    <span class="metric"><strong id="bstat-manual">—</strong> Manual</span>
-    <span class="metric"><strong id="bstat-warning">—</strong> Integrity warnings</span>
-    <span class="metric"><strong id="bstat-error">—</strong> Integrity errors</span>
+    <button type="button" class="metric baseline-pill" data-pill="total" title="Show all baselines"><strong id="bstat-total">—</strong> Baselines</button>
+    <button type="button" class="metric baseline-pill" data-pill="finalized" title="Show only Finalized baselines"><strong id="bstat-finalized">—</strong> Finalized</button>
+    <button type="button" class="metric baseline-pill" data-pill="archived" title="Show only Archived baselines"><strong id="bstat-archived">—</strong> Archived</button>
+    <button type="button" class="metric baseline-pill" data-pill="release" title="Show only Release baselines"><strong id="bstat-release">—</strong> Release</button>
+    <button type="button" class="metric baseline-pill" data-pill="manual" title="Show only Manual baselines"><strong id="bstat-manual">—</strong> Manual</button>
+    <button type="button" class="metric baseline-pill" data-pill="warning" title="Show baselines whose last integrity check found a warning"><strong id="bstat-warning">—</strong> Integrity warnings</button>
+    <button type="button" class="metric baseline-pill" data-pill="error" title="Show baselines whose last integrity check found an error"><strong id="bstat-error">—</strong> Integrity errors</button>
   </div>
 
   <div class="baseline-admin-bar">

@@ -1487,8 +1487,13 @@ button.forgot-password-btn,
 #baseline-compare-table tr.compare-version_changed td { background: #fff8e8; }
 #baseline-compare-table tr.compare-added td { background: #eefaf0; }
 #baseline-compare-table tr.compare-removed td { background: #fff1f0; }
+.baselines-archived-toggle { margin: 0; font-size: 0.88rem; }
+#baselines-table tr.is-archived td { color: var(--muted, #5b6b7a); }
 .baseline-admin-stats { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.6rem 0; }
 .baseline-admin-stats .metric { background: white; border: 1px solid var(--line); border-radius: 999px; padding: 0.25rem 0.75rem; font-size: 0.85rem; }
+.baseline-admin-stats .baseline-pill { appearance: none; -webkit-appearance: none; font: inherit; font-size: 0.85rem; color: inherit; cursor: pointer; }
+.baseline-admin-stats .baseline-pill:hover { border-color: var(--accent-2, #2f6f8f); }
+.baseline-admin-stats .baseline-pill.is-active { background: #e8f1f7; border-color: #7fb0cc; font-weight: 600; }
 .baseline-admin-bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.8rem; margin: 0.4rem 0 0.6rem; }
 .baseline-admin-bar label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.85rem; font-weight: 600; }
 .baseline-admin-bar input, .baseline-admin-bar select {

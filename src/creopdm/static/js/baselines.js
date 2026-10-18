@@ -80,7 +80,7 @@ window.__creopdmModules.baselines = {
       body.innerHTML = items
         .map((item) => {
           const description = String(item.description || "").trim();
-          return `<tr class="baseline-row" data-baseline="${esc(item.uuid)}">
+          return `<tr class="baseline-row${item.status === "ARCHIVED" ? " is-archived" : ""}" data-baseline="${esc(item.uuid)}">
             <td class="baseline-name-cell"><button type="button" class="baseline-open" data-open-baseline="${esc(
               item.uuid
             )}" title="Show the exact versions in this baseline">${esc(item.name)}</button>${
@@ -103,12 +103,16 @@ window.__creopdmModules.baselines = {
       const body = $("#baselines-table tbody");
       if (!pid || !body) return;
       try {
-        const response = await fetch(`/api/products/${encodeURIComponent(pid)}/baselines`);
+        const showArchived = Boolean($("#baselines-show-archived")?.checked);
+        const response = await fetch(
+          `/api/products/${encodeURIComponent(pid)}/baselines${showArchived ? "?include_archived=true" : ""}`
+        );
         if (!response.ok) throw new Error(await readError(response));
         const items = await response.json();
         const list = Array.isArray(items) ? items : [];
         renderRows(list);
-        paintCounts(list.length);
+        // The tab and the pill count what is in everyday use, not archived baselines.
+        paintCounts(list.filter((item) => item.status !== "ARCHIVED").length);
       } catch (err) {
         body.innerHTML = `<tr class="empty-row"><td colspan="6">Could not load baselines (${esc(
           err?.message || "error"
@@ -149,13 +153,18 @@ window.__creopdmModules.baselines = {
       select.innerHTML = '<option value="current">Current product</option>';
       const pid = productId();
       try {
-        const response = pid ? await fetch(`/api/products/${encodeURIComponent(pid)}/baselines`) : null;
+        // Archived baselines are still readable, so they can be compared with.
+        const response = pid
+          ? await fetch(`/api/products/${encodeURIComponent(pid)}/baselines?include_archived=true`)
+          : null;
         const rows = response && response.ok ? await response.json() : [];
         for (const row of Array.isArray(rows) ? rows : []) {
           if (row.uuid === openBaselineUuid) continue;
           const option = document.createElement("option");
           option.value = row.uuid;
-          option.textContent = `${row.name} (${titleCase(row.baseline_type)})`;
+          option.textContent = `${row.name} (${titleCase(row.baseline_type)}${
+            row.status === "ARCHIVED" ? ", archived" : ""
+          })`;
           select.appendChild(option);
         }
       } catch {
@@ -872,6 +881,8 @@ window.__creopdmModules.baselines = {
       event.preventDefault();
       setBaselineView(button.getAttribute("data-baseline-view") || "files");
     });
+
+    $("#baselines-show-archived")?.addEventListener("change", () => void loadBaselinesTab());
 
     $("#create-baseline-btn")?.addEventListener("click", () => {
       void openCreateBaselineDialog();
