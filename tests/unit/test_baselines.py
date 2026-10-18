@@ -575,6 +575,11 @@ def test_baseline_contents_dialog_is_wired():
     # The page-wide click handler soft-navigates every <a href>; "#" is the current page, so a
     # link here reloaded the Files tab instead of opening the dialog.
     assert '<a href="#"' not in module
+    # Wording and font follow the Files list: "In Work" (not "In work"), sans-serif names.
+    assert "function stateLabel" in module and "stateLabel(m.lifecycle_state)" in module
+    assert "baseline-name-cell" in module and 'class="filename-cell"' not in module
+    css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    assert ".baseline-name-cell" in css
     assert 'class="baseline-open"' in module and "<button type=\"button\" class=\"baseline-open\"" in module
     page = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     assert 'id="baseline-members-dialog"' in page and 'id="baseline-members-table"' in page

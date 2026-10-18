@@ -38,6 +38,16 @@ window.__creopdmModules.baselines = {
       return text ? text.charAt(0).toUpperCase() + text.slice(1) : "—";
     }
 
+    /** IN_WORK → "In Work", RELEASED → "Released": the same wording as the Files list. */
+    function stateLabel(value) {
+      const words = String(value || "")
+        .toLowerCase()
+        .split(/[_\s]+/)
+        .filter(Boolean);
+      if (!words.length) return "—";
+      return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+    }
+
     function productId() {
       return $("#panel-baselines")?.dataset.product || currentProductId() || "";
     }
@@ -65,7 +75,7 @@ window.__creopdmModules.baselines = {
         .map((item) => {
           const description = String(item.description || "").trim();
           return `<tr class="baseline-row" data-baseline="${esc(item.uuid)}">
-            <td class="filename-cell"><button type="button" class="baseline-open" data-open-baseline="${esc(
+            <td class="baseline-name-cell"><button type="button" class="baseline-open" data-open-baseline="${esc(
               item.uuid
             )}" title="Show the exact versions in this baseline">${esc(item.name)}</button>${
               description ? `<div class="muted small">${esc(description)}</div>` : ""
@@ -133,13 +143,13 @@ window.__creopdmModules.baselines = {
               ? `Newer: ${esc(m.current_display_version || "—")}`
               : "Same version";
             return `<tr data-version="${esc(m.version_uuid)}" data-object="${esc(m.object_uuid)}">
-              <td class="filename-cell">${esc(m.filename)}${
+              <td class="baseline-name-cell">${esc(m.filename)}${
                 m.relative_path && m.relative_path !== m.filename
                   ? `<div class="muted small">${esc(m.relative_path)}</div>`
                   : ""
               }</td>
               <td>${esc(m.display_version)}</td>
-              <td>${esc(titleCase(String(m.lifecycle_state || "").replace(/_/g, " ")))}</td>
+              <td>${esc(stateLabel(m.lifecycle_state))}</td>
               <td>${esc(String(m.object_type || "").replace(/^CREO_/, "").toLowerCase() || "—")}</td>
               <td class="${newer ? "is-newer" : ""}">${now}</td>
             </tr>`;
