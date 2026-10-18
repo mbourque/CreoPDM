@@ -1439,9 +1439,9 @@ button.forgot-password-btn,
    two views of one dialog: the visible table takes all the leftover height and scrolls inside. */
 .baseline-members-dialog { width: min(60rem, 96vw); max-height: 94vh; overflow: hidden; border-radius: 12px; }
 .baseline-members-dialog[open] { display: flex; flex-direction: column; }
-.baseline-members-dialog form { flex: 1 1 auto; min-height: 0; }
+.baseline-members-dialog form { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .baseline-members-dialog form > :not(.table-wrap):not(.baseline-compare-pane) { flex: 0 0 auto; }
-.baseline-members-wrap, #baseline-structure-wrap { flex: 1 1 auto; min-height: 12rem; overflow: auto; }
+.baseline-members-wrap, #baseline-structure-wrap { flex: 1 1 0; min-height: 0; overflow: auto; }
 .baseline-view-tabs { display: flex; gap: 0.4rem; border-bottom: 1px solid var(--line); }
 .baseline-view-btn {
   appearance: none; -webkit-appearance: none; background: none; border: 0;
@@ -1468,14 +1468,14 @@ button.forgot-password-btn,
 #version-facts td:first-child, #version-identity td:first-child { width: 14rem; white-space: nowrap; font-weight: 600; }
 #version-facts td.filename-cell { overflow-wrap: anywhere; }
 .version-section-title { margin: 1rem 0 0.5rem; font-size: 1.1rem; }
-.baseline-compare-pane { display: flex; flex-direction: column; gap: 0.5rem; flex: 1 1 auto; min-height: 12rem; }
+.baseline-compare-pane { display: flex; flex-direction: column; gap: 0.5rem; flex: 1 1 0; min-height: 0; }
 .baseline-compare-pane[hidden] { display: none; }
 .baseline-compare-bar { display: flex; align-items: flex-end; gap: 1.2rem; flex-wrap: wrap; }
 .baseline-compare-bar select {
   min-width: 16rem; font: inherit; font-weight: 400; padding: 0.45rem 0.55rem;
   border: 1px solid var(--line); border-radius: 4px; background: white;
 }
-.baseline-compare-pane .baseline-members-wrap { flex: 1 1 auto; }
+.baseline-compare-pane .baseline-members-wrap { flex: 1 1 0; min-height: 0; }
 #baseline-compare-table tr.compare-version_changed td { background: #fff8e8; }
 #baseline-compare-table tr.compare-added td { background: #eefaf0; }
 #baseline-compare-table tr.compare-removed td { background: #fff1f0; }

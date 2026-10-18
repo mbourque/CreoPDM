@@ -1451,6 +1451,9 @@ def test_baseline_commit_is_shown_in_the_contents_dialog():
     assert "title?.focus({ preventScroll: true })" in module
     css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
     assert "max-height: 94vh; overflow: hidden; border-radius: 12px; }" in css
+    # The tables shrink to the window (no minimum height), so the button row never overlaps them.
+    assert ".baseline-members-wrap, #baseline-structure-wrap { flex: 1 1 0; min-height: 0; overflow: auto; }" in css
+    assert ".baseline-compare-pane { display: flex; flex-direction: column; gap: 0.5rem; flex: 1 1 0; min-height: 0; }" in css
     # Files and Structure are two views of one dialog so each table gets the full height.
     assert "function setBaselineView" in module and "data-baseline-view" in template
 
