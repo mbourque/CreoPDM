@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid as uuidlib
 from datetime import datetime, timezone
 
@@ -59,6 +60,35 @@ REQUIRED_DEPENDENCY_TYPES = frozenset(
 
 
 _STRUCTURE_OBJECT_TYPES = frozenset({"CREO_ASSEMBLY", "CREO_DRAWING"})
+
+TAG_NONE = "NONE"
+TAG_PENDING = "PENDING"
+TAG_CREATED = "CREATED"
+TAG_FAILED = "FAILED"
+TAG_NAME_MAX_LENGTH = 200
+_TAG_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
+
+
+def clean_tag_name(name: str | None) -> str | None:
+    """A safe Git tag name, or None when no tag was asked for. Stricter than Git on purpose."""
+    text = (name or "").strip()
+    if not text:
+        return None
+    if (
+        len(text) > TAG_NAME_MAX_LENGTH
+        or not _TAG_NAME_RE.match(text)
+        or ".." in text
+        or "//" in text
+        or "/." in text
+        or text.endswith(("/", ".", ".lock"))
+    ):
+        raise ValidationAppError(
+            "The Git tag name may use letters, digits, '.', '_', '-' and '/' (for example "
+            "baseline/design-review-01), must start with a letter or digit, and cannot contain "
+            "'..' or end with '/', '.' or '.lock'.",
+            details={"git_tag": text},
+        )
+    return text
 
 
 def clean_name(name: str | None) -> str:
@@ -217,6 +247,7 @@ class BaselineService:
         operation_id: str | None = None,
         accept_missing_structure: bool = False,
         baseline_type: str | None = None,
+        git_tag: str | None = None,
     ) -> Baseline:
         """Capture every file's current version as an immutable, FINALIZED baseline.
 
@@ -236,6 +267,7 @@ class BaselineService:
                 details={"baseline_type": baseline_type},
             )
         strict = kind == BASELINE_TYPE_RELEASE
+        tag_name = clean_tag_name(git_tag)
         user = self._users.get_current_user()
 
         with self._locks.acquire(product.uuid):
@@ -285,6 +317,8 @@ class BaselineService:
                 operation_id=op_id,
                 structure_indexed=structure_indexed,
                 git_commit_sha=commit_sha,
+                git_tag_name=tag_name,
+                git_tag_status=TAG_PENDING if tag_name else TAG_NONE,
             )
             try:
                 session.add(baseline)
@@ -315,6 +349,7 @@ class BaselineService:
                         "unresolved_dependency_count": baseline.unresolved_dependency_count,
                         "structure_indexed": baseline.structure_indexed,
                         "git_commit_sha": baseline.git_commit_sha,
+                        "git_tag_name": baseline.git_tag_name,
                     },
                     comment=note,
                 )
@@ -340,7 +375,106 @@ class BaselineService:
                 product.uuid,
             )
             session.refresh(baseline)
+            if baseline.git_tag_name:
+                # After the commit: the PDM snapshot is already complete and valid. Whatever
+                # happens to the tag can only change the tag's own status.
+                self._apply_tag(session, product, baseline)
             return baseline
+
+    # ---- optional Git tag -------------------------------------------------------------
+
+    def retry_tag(self, session: Session, baseline: Baseline, product: Product) -> Baseline:
+        """Try again to create a tag that is pending or failed. Never moves an existing tag."""
+        if not baseline.git_tag_name:
+            raise ValidationAppError("This baseline has no Git tag to create.")
+        if baseline.git_tag_status == TAG_CREATED:
+            return baseline
+        with self._locks.acquire(product.uuid):
+            session.refresh(baseline)
+            self._apply_tag(session, product, baseline)
+        return baseline
+
+    def _vault_path(self, product: Product):
+        return self._config.workspace_for_product(
+            (product.vault_folder or "").strip() or product.uuid
+        )
+
+    def _apply_tag(self, session: Session, product: Product, baseline: Baseline) -> None:
+        """Create the tag on the stored commit and record the outcome. Never raises: a failed tag
+        leaves the baseline FINALIZED with its commit intact and the tag retryable."""
+        status, error = TAG_FAILED, None
+        try:
+            if self._git is None or self._config is None or not baseline.git_commit_sha:
+                raise RepositoryError("The repository is not available for tagging.")
+            vault = self._vault_path(product)
+            existing = self._git.tag_target(vault, baseline.git_tag_name)
+            if existing is None:
+                self._git.create_tag(vault, baseline.git_tag_name, baseline.git_commit_sha)
+                status = TAG_CREATED
+            elif existing == baseline.git_commit_sha:
+                status = TAG_CREATED
+            else:
+                error = (
+                    f'The tag "{baseline.git_tag_name}" already exists and points at '
+                    f"{existing[:12]}. CreoPDM never moves a tag."
+                )
+        except Exception as exc:  # noqa: BLE001 - tagging must never undo a valid baseline
+            error = str(getattr(exc, "message", None) or exc)[:500] or "Tag creation failed."
+            logger.warning("Git tag %s failed for baseline %s: %s", baseline.git_tag_name, baseline.uuid, error)
+        try:
+            baseline.git_tag_status = status
+            baseline.git_tag_error = None if status == TAG_CREATED else error
+            session.commit()
+        except Exception:  # noqa: BLE001
+            session.rollback()
+            logger.exception("Could not record the tag status for baseline %s", baseline.uuid)
+        else:
+            session.refresh(baseline)
+
+    def check_tag(self, product: Product, baseline: Baseline) -> dict:
+        """Compare the tag in the repository with the stored commit (read only).
+
+        A moved tag is reported, never followed: the stored commit stays what it was.
+        """
+        out = {
+            "tag_name": baseline.git_tag_name,
+            "tag_status": baseline.git_tag_status,
+            "stored_commit": baseline.git_commit_sha,
+            "tag_points_at": None,
+            "state": "NO_TAG",
+            "warning": None,
+        }
+        if not baseline.git_tag_name:
+            return out
+        target = None
+        if self._git is not None and self._config is not None:
+            try:
+                target = self._git.tag_target(self._vault_path(product), baseline.git_tag_name)
+            except Exception:  # noqa: BLE001
+                target = None
+        out["tag_points_at"] = target
+        if target is not None and target == baseline.git_commit_sha:
+            out["state"] = "OK"
+        elif target is not None:
+            out["state"] = "MOVED"
+            out["warning"] = (
+                f'Integrity warning: the tag "{baseline.git_tag_name}" now points at '
+                f"{target[:12]}, but this baseline was made at {str(baseline.git_commit_sha)[:12]}. "
+                "The stored commit is unchanged and is still the record."
+            )
+            logger.warning(
+                "Baseline %s: tag %s moved from %s to %s",
+                baseline.uuid, baseline.git_tag_name, baseline.git_commit_sha, target,
+            )
+        elif baseline.git_tag_status == TAG_CREATED:
+            out["state"] = "MISSING"
+            out["warning"] = (
+                f'Integrity warning: the tag "{baseline.git_tag_name}" no longer exists in the '
+                "repository. The stored commit is unchanged."
+            )
+        else:
+            out["state"] = "NOT_CREATED"
+        return out
 
     # ---- membership is closed once finalized -------------------------------------------
     # A single choke point: these are the only ways code could try to change what a baseline

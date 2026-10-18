@@ -783,6 +783,7 @@ END</pre>
             <li>Before a baseline is made CreoPDM checks that every captured file really is in the vault. If any file is missing or damaged, <strong>no baseline is created</strong> and the message lists the files to fix. Archived products can't be baselined.</li>
             <li>Tick <strong>Release baseline</strong> for a strict snapshot: it is refused if any assembly or drawing needs a file with no checked-in version, or if Where Used hasn't been built. A normal baseline records those gaps instead of refusing.</li>
             <li>The contents window also shows the <strong>repository commit</strong> the baseline was made at, so the files can be traced in Git. It never changes afterwards.</li>
+            <li>You can tick <strong>Create a Git tag</strong> when creating a baseline (for example <code>baseline/design-review-01</code>) to find it in the repository. If the tag can't be created the baseline is still complete and you can <strong>Retry tag</strong> from its contents window. If someone later moves or deletes the tag, the contents window shows an <strong>Integrity warning</strong>; the baseline keeps its original commit.</li>
           </ol>
         </div>
         <div class="callout">

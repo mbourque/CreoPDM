@@ -155,7 +155,35 @@ window.__creopdmModules.baselines = {
         .join("");
     }
 
+    let openBaselineUuid = "";
+
+    /** The optional Git tag: a note when it is fine, a warning when it moved, a retry when it failed. */
+    function renderTag(info, check) {
+      const line = $("#baseline-tag-line");
+      const text = $("#baseline-tag-text");
+      const retry = $("#baseline-tag-retry");
+      const warning = $("#baseline-tag-warning");
+      if (warning) {
+        warning.hidden = !check?.warning;
+        warning.textContent = check?.warning || "";
+      }
+      const name = info?.git_tag_name;
+      if (line) line.hidden = !name;
+      if (!name || !text) return;
+      const state = check?.state;
+      if (state === "OK") text.textContent = `Git tag ${name} points at this commit.`;
+      else if (state === "MOVED" || state === "MISSING") text.textContent = `Git tag ${name}`;
+      else {
+        text.textContent =
+          `Git tag ${name} was not created` + (info.git_tag_error ? `: ${info.git_tag_error}` : ".") +
+          " The baseline itself is complete.";
+      }
+      // Only someone who may create baselines is offered the retry.
+      if (retry) retry.hidden = !(state === "NOT_CREATED" && $("#create-baseline-btn"));
+    }
+
     async function openBaselineMembers(baselineUuid) {
+      openBaselineUuid = baselineUuid;
       const dialog = $("#baseline-members-dialog");
       if (!(dialog instanceof HTMLDialogElement)) return;
       const body = $("#baseline-members-table tbody");
@@ -167,6 +195,7 @@ window.__creopdmModules.baselines = {
       if (title) title.textContent = row?.querySelector(".baseline-open")?.textContent || "Baseline";
       if (meta) meta.textContent = "";
       setBaselineView("files");
+      renderTag(null, null);
       const staleCommit = $("#baseline-commit-line");
       if (staleCommit) staleCommit.hidden = true;
       if (!dialog.open) dialog.showModal();
@@ -174,10 +203,11 @@ window.__creopdmModules.baselines = {
       dialog.scrollTop = 0;
       title?.focus({ preventScroll: true });
       try {
-        const [baselineResp, membersResp, structureResp] = await Promise.all([
+        const [baselineResp, membersResp, structureResp, checkResp] = await Promise.all([
           fetch(`/api/baselines/${encodeURIComponent(baselineUuid)}`),
           fetch(`/api/baselines/${encodeURIComponent(baselineUuid)}/members`),
           fetch(`/api/baselines/${encodeURIComponent(baselineUuid)}/dependencies`),
+          fetch(`/api/baselines/${encodeURIComponent(baselineUuid)}/git-check`),
         ]);
         if (!membersResp.ok) throw new Error(await readError(membersResp));
         const members = await membersResp.json();
@@ -203,6 +233,7 @@ window.__creopdmModules.baselines = {
             `created ${formatWhen(info.created_at)} by ${info.created_by}`;
         }
         renderStructure(structureResp.ok ? await structureResp.json() : []);
+        renderTag(info, checkResp.ok ? await checkResp.json() : null);
         const noStructure = $("#baseline-no-structure");
         if (noStructure) noStructure.hidden = !(info && info.structure_indexed === false);
         if (!body) return;
@@ -257,6 +288,12 @@ window.__creopdmModules.baselines = {
       if (acceptStructure) acceptStructure.checked = false;
       const releaseBox = $("#baseline-release");
       if (releaseBox) releaseBox.checked = false;
+      const tagOn = $("#baseline-tag-on");
+      const tagField = $("#baseline-tag-field");
+      const tagInput = $("#baseline-tag");
+      if (tagOn) tagOn.checked = false;
+      if (tagField) tagField.hidden = true;
+      if (tagInput) tagInput.value = "";
       const files = $("#metric-filters")?.dataset.productObjects;
       const count = $("#baseline-file-count");
       if (count) {
@@ -297,6 +334,9 @@ window.__creopdmModules.baselines = {
                 operation_id: operationId,
                 accept_missing_structure: Boolean(acceptBox?.checked),
                 baseline_type: $("#baseline-release")?.checked ? "RELEASE" : "MANUAL",
+                git_tag: $("#baseline-tag-on")?.checked
+                  ? String($("#baseline-tag")?.value || "").trim() || null
+                  : null,
               }),
             });
           } catch {
@@ -335,14 +375,38 @@ window.__creopdmModules.baselines = {
         name?.focus();
       });
       if (created) {
+        const tagNote =
+          created.git_tag_status === "FAILED"
+            ? ` The Git tag “${created.git_tag_name}” could not be created (${
+                created.git_tag_error || "see the log"
+              }); the baseline is complete — open it to retry the tag.`
+            : "";
         showOk(
           `Baseline “${created.name}” created: ${created.member_count} file${
             created.member_count === 1 ? "" : "s"
-          } captured at their exact current versions.`
+          } captured at their exact current versions.${tagNote}`
         );
         await loadBaselinesTab();
       }
     }
+
+    /** baseline/<name> as a safe tag: lowercase, letters digits . _ - only. */
+    function suggestTag(name) {
+      const slug = String(name || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9._-]+/g, "-")
+        .replace(/^[-.]+|[-.]+$/g, "");
+      return slug ? `baseline/${slug}` : "baseline/";
+    }
+
+    $("#baseline-tag-on")?.addEventListener("change", (event) => {
+      const on = event.currentTarget instanceof HTMLInputElement && event.currentTarget.checked;
+      const field = $("#baseline-tag-field");
+      const input = $("#baseline-tag");
+      if (field) field.hidden = !on;
+      if (on && input && !input.value) input.value = suggestTag($("#baseline-name")?.value);
+      if (on) input?.focus();
+    });
 
     mod.openBaselineMembers = openBaselineMembers;
     mod.loadBaselinesTab = loadBaselinesTab;
@@ -355,6 +419,24 @@ window.__creopdmModules.baselines = {
       if (!link) return;
       event.preventDefault();
       void openBaselineMembers(link.getAttribute("data-open-baseline") || "");
+    });
+
+    $("#baseline-tag-retry")?.addEventListener("click", async (event) => {
+      event.preventDefault();
+      const uuid = openBaselineUuid;
+      if (!uuid) return;
+      const button = event.currentTarget;
+      if (button instanceof HTMLButtonElement) button.disabled = true;
+      try {
+        const response = await fetch(`/api/baselines/${encodeURIComponent(uuid)}/git-tag`, {
+          method: "POST",
+        });
+        if (!response.ok) showError($("#baseline-members-error"), await readError(response));
+      } catch {
+        showError($("#baseline-members-error"), "The server did not answer. Try the tag again.");
+      }
+      if (button instanceof HTMLButtonElement) button.disabled = false;
+      await openBaselineMembers(uuid);
     });
 
     $("#baseline-members-dialog")?.addEventListener("click", (event) => {

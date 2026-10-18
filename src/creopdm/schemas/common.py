@@ -304,6 +304,8 @@ class BaselineCreateRequest(BaseModel):
     accept_missing_structure: bool = False
     # MANUAL (default, records unresolved links) or RELEASE (strict: unresolved required links block).
     baseline_type: str | None = Field(default=None, max_length=16)
+    # Optional Git tag to create on the baseline's commit (blank = no tag).
+    git_tag: str | None = Field(default=None, max_length=255)
 
 
 class BaselineResponse(BaseModel):
@@ -319,6 +321,9 @@ class BaselineResponse(BaseModel):
     structure_indexed: bool = True
     # Full SHA of the vault repository when the baseline was made (None for older baselines).
     git_commit_sha: str | None = None
+    git_tag_name: str | None = None
+    git_tag_status: str = "NONE"
+    git_tag_error: str | None = None
     created_by: str
     created_at: datetime | None = None
     finalized_at: datetime | None = None
@@ -345,6 +350,18 @@ class BaselineMemberResponse(BaseModel):
     current_display_version: str | None = None
     # SAME = the product still has this exact version; OUT_OF_DATE = it has a newer one.
     status: str
+
+
+class BaselineGitCheckResponse(BaseModel):
+    """The tag in the repository compared with the stored commit (read only)."""
+
+    tag_name: str | None = None
+    tag_status: str = "NONE"
+    stored_commit: str | None = None
+    tag_points_at: str | None = None
+    # NO_TAG, OK, MOVED, MISSING or NOT_CREATED
+    state: str = "NO_TAG"
+    warning: str | None = None
 
 
 class BaselineDependencyResponse(BaseModel):

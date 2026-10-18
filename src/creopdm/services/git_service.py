@@ -452,6 +452,21 @@ class GitService:
         logger.debug("commit finished")
         return self.get_head(path)
 
+    def tag_target(self, path: Path, name: str) -> str | None:
+        """The commit a tag points at (full SHA), or None when the tag does not exist."""
+        result = self._run(
+            ["rev-parse", "--verify", "--quiet", f"refs/tags/{name}^{{commit}}"],
+            cwd=path,
+            check=False,
+            quiet=True,
+        )
+        sha = (result.stdout or "").strip().lower()
+        return sha if result.returncode == 0 and sha else None
+
+    def create_tag(self, path: Path, name: str, commit: str) -> None:
+        """A lightweight tag on an explicit commit. Never moves an existing tag (no -f)."""
+        self._run(["tag", name, commit], cwd=path)
+
     def get_head(self, path: Path) -> str:
         result = self._run(["rev-parse", "HEAD"], cwd=path)
         return result.stdout.strip()

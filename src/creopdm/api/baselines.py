@@ -19,6 +19,7 @@ from creopdm.models.product import Product
 from creopdm.schemas.common import (
     BaselineCreateRequest,
     BaselineDependencyResponse,
+    BaselineGitCheckResponse,
     BaselineMemberResponse,
     BaselineResponse,
 )
@@ -40,6 +41,9 @@ def baseline_to_response(baseline: Baseline, product_uuid: str) -> BaselineRespo
         unresolved_dependency_count=baseline.unresolved_dependency_count,
         structure_indexed=bool(baseline.structure_indexed),
         git_commit_sha=baseline.git_commit_sha,
+        git_tag_name=baseline.git_tag_name,
+        git_tag_status=baseline.git_tag_status or "NONE",
+        git_tag_error=baseline.git_tag_error,
         created_by=baseline.created_by,
         created_at=as_utc(baseline.created_at),
         finalized_at=as_utc(baseline.finalized_at),
@@ -106,6 +110,37 @@ def list_baseline_dependencies(
     return [BaselineDependencyResponse(**row) for row in ctx.baselines.dependencies(db, baseline)]
 
 
+@router.get("/api/baselines/{baseline_uuid}/git-check", response_model=BaselineGitCheckResponse)
+def check_baseline_git_tag(
+    baseline_uuid: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> BaselineGitCheckResponse:
+    """Is the baseline's Git tag still on the stored commit? Reports; never changes anything."""
+    require_permission(request, ctx, PERMISSION_BASELINES_VIEW)
+    baseline = ctx.baselines.get(db, baseline_uuid)
+    product = db.get(Product, baseline.product_id)
+    require_product_access(request, ctx, product)
+    return BaselineGitCheckResponse(**ctx.baselines.check_tag(product, baseline))
+
+
+@router.post("/api/baselines/{baseline_uuid}/git-tag", response_model=BaselineResponse)
+def retry_baseline_git_tag(
+    baseline_uuid: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> BaselineResponse:
+    """Retry a tag that failed or is still pending. The baseline itself is not touched."""
+    require_permission(request, ctx, PERMISSION_BASELINES_CREATE)
+    baseline = ctx.baselines.get(db, baseline_uuid)
+    product = db.get(Product, baseline.product_id)
+    require_product_access(request, ctx, product)
+    baseline = ctx.baselines.retry_tag(db, baseline, product)
+    return baseline_to_response(baseline, product.uuid)
+
+
 @router.post("/api/products/{product_id}/baselines", response_model=BaselineResponse, status_code=201)
 def create_baseline(
     product_id: str,
@@ -125,5 +160,6 @@ def create_baseline(
         payload.operation_id,
         accept_missing_structure=payload.accept_missing_structure,
         baseline_type=payload.baseline_type,
+        git_tag=payload.git_tag,
     )
     return baseline_to_response(baseline, product.uuid)

@@ -40,6 +40,7 @@ _FROZEN_BASELINE_FIELDS = (
     "unresolved_dependency_count",
     "structure_indexed",
     "git_commit_sha",
+    "git_tag_name",
     "created_by",
     "finalized_by",
     "finalized_at",
@@ -67,6 +68,11 @@ class Baseline(Base):
     # The vault repository's HEAD (full SHA) when the baseline was made. It is a traceability
     # record only: PDM membership stays authoritative and the SHA is never an identity.
     git_commit_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Optional human-readable tag. The name is chosen once; the status is bookkeeping about the
+    # repository (NONE / PENDING / CREATED / FAILED) and may change, the stored commit never does.
+    git_tag_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    git_tag_status: Mapped[str] = mapped_column(String(16), nullable=False, default="NONE")
+    git_tag_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[str] = mapped_column(String(128), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finalized_by: Mapped[str | None] = mapped_column(String(128), nullable=True)

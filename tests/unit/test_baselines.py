@@ -1453,3 +1453,178 @@ def test_baseline_commit_is_shown_in_the_contents_dialog():
     assert "max-height: 94vh; overflow: hidden; border-radius: 12px; }" in css
     # Files and Structure are two views of one dialog so each table gets the full height.
     assert "function setBaselineView" in module and "data-baseline-view" in template
+
+
+# ---- Stories 14-16: optional Git tag, moved-tag detection, tag failure is harmless -------------
+
+
+def _tag_target(auth_ctx, product, name):
+    return auth_ctx.git.tag_target(_vault(auth_ctx, product), name)
+
+
+def _git_check(auth_client, baseline_uuid):
+    response = auth_client.get(f"/api/baselines/{baseline_uuid}/git-check")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+@requires_git
+def test_a_baseline_can_carry_an_optional_git_tag_on_its_commit(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+
+    plain = _create(auth_client, product, "No tag").json()
+    assert plain["git_tag_name"] is None and plain["git_tag_status"] == "NONE"
+    assert _git_check(auth_client, plain["uuid"])["state"] == "NO_TAG"
+
+    tagged = _create(auth_client, product, "Tagged", git_tag="baseline/design-review-01").json()
+    assert tagged["git_tag_name"] == "baseline/design-review-01"
+    assert tagged["git_tag_status"] == "CREATED" and tagged["git_tag_error"] is None
+    assert _tag_target(auth_ctx, product, "baseline/design-review-01") == tagged["git_commit_sha"]
+    check = _git_check(auth_client, tagged["uuid"])
+    assert check["state"] == "OK" and check["warning"] is None
+    assert check["tag_points_at"] == check["stored_commit"] == tagged["git_commit_sha"]
+    with auth_ctx.session_factory() as db:
+        events = auth_ctx.activities.list_events(db, q="Tagged")
+        entry = next(e for e in events if e.action == "BASELINE_CREATED")
+        assert (entry.details or {}).get("git_tag_name") == "baseline/design-review-01"
+
+
+@pytest.mark.parametrize(
+    "bad", ["bad name", "a..b", "-leading", "trailing/", "x.lock", "has~tilde", "a//b", "/abs"]
+)
+def test_unsafe_tag_names_are_refused_before_anything_is_created(auth_client, auth_ctx, bad):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+    refused = _create(auth_client, product, git_tag=bad)
+    assert 400 <= refused.status_code < 500, refused.text
+    _no_baselines(auth_ctx)
+
+
+@requires_git
+def test_a_moved_or_deleted_tag_is_reported_and_the_stored_commit_never_follows(
+    auth_client, auth_ctx
+):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client)
+    tagged = _create(auth_client, product, "Tagged", git_tag="baseline/r1").json()
+    original = tagged["git_commit_sha"]
+    _check_in(auth_client, auth_ctx, product, objects["shaft.prt"], b"shaft-v2")
+    newer = _head(auth_ctx, product)
+    assert newer != original
+
+    # Someone retags the repository (accidentally or not).
+    vault = _vault(auth_ctx, product)
+    auth_ctx.git._run(["tag", "-f", "baseline/r1", newer], cwd=vault)
+    check = _git_check(auth_client, tagged["uuid"])
+    assert check["state"] == "MOVED"
+    assert check["tag_points_at"] == newer and check["stored_commit"] == original
+    assert "Integrity warning" in check["warning"] and newer[:12] in check["warning"]
+    # CreoPDM reports it and does not silently adopt the new commit.
+    after = auth_client.get(f"/api/baselines/{tagged['uuid']}").json()
+    assert after["git_commit_sha"] == original and after["git_tag_status"] == "CREATED"
+
+    # Moving it back clears the warning; deleting it is reported as missing.
+    auth_ctx.git._run(["tag", "-f", "baseline/r1", original], cwd=vault)
+    assert _git_check(auth_client, tagged["uuid"])["state"] == "OK"
+    auth_ctx.git._run(["tag", "-d", "baseline/r1"], cwd=vault)
+    missing = _git_check(auth_client, tagged["uuid"])
+    assert missing["state"] == "MISSING" and "no longer exists" in missing["warning"]
+    assert auth_client.get(f"/api/baselines/{tagged['uuid']}").json()["git_commit_sha"] == original
+
+
+@requires_git
+def test_a_failed_tag_leaves_a_valid_baseline_and_can_be_retried(
+    auth_client, auth_ctx, monkeypatch
+):
+    from creopdm.exceptions import RepositoryError
+    from creopdm.services.git_service import GitService
+
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+
+    def refuse(self, *_args, **_kwargs):
+        raise RepositoryError("fatal: unable to write ref")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(GitService, "create_tag", refuse)
+        created = _create(auth_client, product, "Tag will fail", git_tag="baseline/will-fail")
+        assert created.status_code == 201, created.text  # the baseline is not affected
+        body = created.json()
+        assert body["status"] == "FINALIZED" and body["member_count"] == 3
+        assert body["git_commit_sha"] == _head(auth_ctx, product)
+        assert body["git_tag_status"] == "FAILED" and "unable to write ref" in body["git_tag_error"]
+        assert _git_check(auth_client, body["uuid"])["state"] == "NOT_CREATED"
+        # Reconstruction still works: the members come back exactly.
+        assert len(_members(auth_client, body["uuid"])) == 3
+
+    # The repository is healthy again: retry creates the tag on the stored commit.
+    retried = auth_client.post(f"/api/baselines/{body['uuid']}/git-tag")
+    assert retried.status_code == 200, retried.text
+    assert retried.json()["git_tag_status"] == "CREATED" and retried.json()["git_tag_error"] is None
+    assert _tag_target(auth_ctx, product, "baseline/will-fail") == body["git_commit_sha"]
+    assert _git_check(auth_client, body["uuid"])["state"] == "OK"
+    # Retrying a finished tag changes nothing.
+    again = auth_client.post(f"/api/baselines/{body['uuid']}/git-tag")
+    assert again.status_code == 200 and again.json()["git_tag_status"] == "CREATED"
+
+
+@requires_git
+def test_an_existing_tag_elsewhere_is_never_moved(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client)
+    old = _head(auth_ctx, product)
+    auth_ctx.git._run(["tag", "baseline/taken", old], cwd=_vault(auth_ctx, product))
+    _check_in(auth_client, auth_ctx, product, objects["shaft.prt"], b"shaft-v2")
+
+    created = _create(auth_client, product, "Wants taken tag", git_tag="baseline/taken").json()
+    assert created["status"] == "FINALIZED"
+    assert created["git_tag_status"] == "FAILED" and "never moves a tag" in created["git_tag_error"]
+    assert _tag_target(auth_ctx, product, "baseline/taken") == old  # untouched
+    retried = auth_client.post(f"/api/baselines/{created['uuid']}/git-tag").json()
+    assert retried["git_tag_status"] == "FAILED"
+    assert _tag_target(auth_ctx, product, "baseline/taken") == old
+
+
+def test_tag_retry_needs_a_tag_and_the_create_permission(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+    plain = _create(auth_client, product, "No tag").json()
+    refused = auth_client.post(f"/api/baselines/{plain['uuid']}/git-tag")
+    assert 400 <= refused.status_code < 500, refused.text
+
+    _login(auth_client, "view", "ViewPass1")
+    assert auth_client.get(f"/api/baselines/{plain['uuid']}/git-check").status_code == 200
+    assert auth_client.post(f"/api/baselines/{plain['uuid']}/git-tag").status_code == 403
+
+
+@requires_git
+def test_the_tag_name_is_frozen_but_its_status_is_bookkeeping(auth_client, auth_ctx):
+    from creopdm.exceptions import BaselineImmutableError
+
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+    created = _create(auth_client, product, "Tagged", git_tag="baseline/frozen").json()
+    with auth_ctx.session_factory() as db:
+        baseline = _baseline_row(db, created["uuid"])
+        baseline.git_tag_name = "baseline/other"
+        with pytest.raises(BaselineImmutableError):
+            db.flush()
+        db.rollback()
+        baseline = _baseline_row(db, created["uuid"])
+        baseline.git_tag_status = "FAILED"
+        db.commit()
+
+
+def test_git_tag_ui_is_wired():
+    module = (ROOT / "src" / "creopdm" / "static" / "js" / "baselines.js").read_text(encoding="utf-8")
+    assert "git_tag:" in module and "/git-check`" in module and "/git-tag`" in module
+    assert "function renderTag" in module and "function suggestTag" in module
+    template = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
+    for needle in (
+        'id="baseline-tag-on"',
+        'id="baseline-tag"',
+        'id="baseline-tag-retry"',
+        'id="baseline-tag-warning"',
+    ):
+        assert needle in template

@@ -749,6 +749,9 @@
   <form method="dialog" id="baseline-members-form">
     <h2 id="baseline-members-title" tabindex="-1">Baseline</h2>
     <p class="muted small" id="baseline-members-meta"></p>
+    <p class="muted small" id="baseline-tag-line" hidden><span id="baseline-tag-text"></span>
+      <button type="button" class="btn" id="baseline-tag-retry" hidden>Retry tag</button></p>
+    <p class="error" id="baseline-tag-warning" hidden></p>
     <p class="muted small" id="baseline-commit-line" hidden>Repository commit <code id="baseline-commit-sha" title="Full commit SHA"></code></p>
     <p class="baseline-frozen baseline-no-structure" id="baseline-no-structure" hidden>Structure was not captured: Where Used had not been built for this product when this baseline was made, so which parts each assembly and drawing used is not recorded.</p>
     <p class="baseline-frozen">Configuration snapshot — this baseline is immutable. Each row is the exact version captured, whatever the product holds today.</p>
@@ -795,6 +798,14 @@
     <label class="choice baseline-release-choice">
       <input type="checkbox" id="baseline-release" name="release">
       <span>Release baseline <span class="muted small">(strict: refused while a required file or link is unresolved)</span></span>
+    </label>
+    <label class="choice baseline-tag-choice">
+      <input type="checkbox" id="baseline-tag-on">
+      <span>Create a Git tag <span class="muted small">(optional; makes this baseline easy to find in the repository)</span></span>
+    </label>
+    <label id="baseline-tag-field" hidden>Git tag name
+      <input id="baseline-tag" name="git_tag" type="text" maxlength="200" autocomplete="off"
+             placeholder="baseline/design-review-01">
     </label>
     <dl class="revise-facts">
       <dt>Source</dt><dd>Current product configuration</dd>
