@@ -388,3 +388,20 @@ def test_a_folder_held_open_by_creo_is_cleared_and_reported_then_finished_later(
     again = client.post("/baseline-workspace/remove", json=folder).json()  # Creo has let go
     assert again["removed"] is True and again["folder_in_use"] is False
     assert not target.exists() and not (root / "_baselines").exists()
+
+
+def test_open_folder_shows_a_downloaded_copy_and_refuses_one_that_is_not_there(agent, monkeypatch):
+    client, root, served, _seen = agent
+    opened: list[Path] = []
+    monkeypatch.setattr("creopdm.utils.launch.open_windows_folder", lambda path: opened.append(Path(path)))
+    folder = {"product_id": "p1", "vault_folder": "gearbox", "folder": FOLDER}
+
+    missing = client.post("/baseline-workspace/open", json=folder)
+    assert missing.status_code == 404 and "not been downloaded" in missing.text and opened == []
+
+    _serve(served, FILES)
+    assert _add(client, _manifest(FILES)).status_code == 200
+    shown = client.post("/baseline-workspace/open", json=folder)
+    assert shown.status_code == 200, shown.text
+    assert shown.json()["opened"] is True
+    assert opened == [_baseline_root(root).resolve()]

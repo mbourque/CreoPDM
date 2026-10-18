@@ -384,6 +384,17 @@ def _remove_empty_dir(path: Path) -> bool:
     return True
 
 
+def open_folder(root: Path, product_key: str, folder: str, opener) -> dict:
+    """Show a downloaded baseline copy in Explorer (``opener`` is the platform's folder opener)."""
+    dest_root = baseline_dir(root, product_key, folder)
+    if not dest_root.is_dir():
+        raise BaselineWorkspaceError(
+            404, "This baseline has not been downloaded to this PC.", path=str(dest_root)
+        )
+    opener(dest_root)
+    return {"opened": True, "path": str(dest_root)}
+
+
 def _prune_empty_parents(root: Path, dest_root: Path) -> None:
     """Drop ``_baselines/<product>`` and ``_baselines`` once nothing is left in them."""
     stop = (root.resolve() / BASELINES_DIRNAME)

@@ -3249,6 +3249,19 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         key = _product_cache_key(payload.product_id, payload.vault_folder)
         return _baseline_call(bw.check, root, key, payload.folder)
 
+    @app.post("/baseline-workspace/open")
+    def baseline_workspace_open(payload: BaselineFolderRequest) -> dict[str, object]:
+        from creopdm.utils.launch import open_windows_folder
+        from creopdm_agent import baseline_workspace as bw
+
+        key = _product_cache_key(payload.product_id, payload.vault_folder)
+        try:
+            return _baseline_call(bw.open_folder, root, key, payload.folder, open_windows_folder)
+        except OSError as exc:
+            raise HTTPException(
+                status_code=500, detail=f"Could not open the baseline folder: {exc}"
+            ) from exc
+
     @app.post("/baseline-workspace/remove")
     def baseline_workspace_remove(payload: BaselineFolderRequest) -> dict[str, object]:
         from creopdm_agent import baseline_workspace as bw

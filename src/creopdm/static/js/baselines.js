@@ -297,6 +297,7 @@ window.__creopdmModules.baselines = {
       const row = $(`#baselines-table tr[data-baseline="${CSS.escape(baselineUuid)}"]`);
       if (title) title.textContent = row?.querySelector(".baseline-open")?.textContent || "Baseline";
       if (meta) meta.textContent = "";
+      resetCopyStatus();
       compareChoicesFor = "";
       compareResult = null;
       setBaselineView("files");
@@ -320,6 +321,7 @@ window.__creopdmModules.baselines = {
         const members = await membersResp.json();
         let info = null;
         if (baselineResp.ok) info = await baselineResp.json();
+        void refreshCopyStatus(info);
         const descLine = $("#baseline-members-desc");
         if (descLine) {
           descLine.hidden = !info?.description;
@@ -579,6 +581,63 @@ window.__creopdmModules.baselines = {
       return (typeof detail === "string" && detail) || fallback;
     }
 
+    function resetCopyStatus() {
+      for (const id of ["#baseline-copy-status", "#baseline-ws-open", "#baseline-ws-remove"]) {
+        const el = $(id);
+        if (el) el.hidden = true;
+      }
+      const add = $("#baseline-ws-add");
+      if (add) add.textContent = "Download baseline…";
+    }
+
+    /** Is this baseline already downloaded to this PC? Shows its state and the Open/Delete buttons. */
+    async function refreshCopyStatus(info) {
+      const uuid = info?.uuid;
+      resetCopyStatus();
+      if (!uuid || !info.workspace_folder) return;
+      const agent = await shell.probeCreoAgent();
+      if (!agent || openBaselineUuid !== uuid) return;
+      let result;
+      try {
+        result = await agentJson("/baseline-workspace/check", info, { folder: info.workspace_folder });
+      } catch {
+        return;
+      }
+      if (openBaselineUuid !== uuid || !result.ok || !result.body?.installed) return;
+      const body = result.body;
+      const changed = (body.missing?.length || 0) + (body.modified?.length || 0);
+      const extras = body.extras?.length || 0;
+      const status = $("#baseline-copy-status");
+      if (status) {
+        status.hidden = false;
+        status.textContent =
+          `Downloaded to this PC: ${body.path}` +
+          (changed ? ` — ${changed} file${changed === 1 ? "" : "s"} changed or missing` : "") +
+          (extras ? ` — ${extras} extra file${extras === 1 ? "" : "s"} not part of the baseline` : "");
+      }
+      for (const id of ["#baseline-ws-open", "#baseline-ws-remove"]) {
+        const el = $(id);
+        if (el) el.hidden = false;
+      }
+      const add = $("#baseline-ws-add");
+      if (add) add.textContent = "Download again…";
+    }
+
+    async function openCopyFolder() {
+      const uuid = openBaselineUuid;
+      if (!uuid) return;
+      showError($("#baseline-members-error"), "");
+      try {
+        const response = await fetch(`/api/baselines/${encodeURIComponent(uuid)}`);
+        const info = response.ok ? await response.json() : null;
+        if (!info?.workspace_folder) throw new Error("The baseline folder name is not known.");
+        const result = await agentJson("/baseline-workspace/open", info, { folder: info.workspace_folder });
+        if (!result.ok) throw new Error(agentMessage(result, "The folder could not be opened."));
+      } catch (err) {
+        showError($("#baseline-members-error"), err?.message || "Could not open the baseline folder.");
+      }
+    }
+
     async function openAddToWorkspace() {
       const dialog = $("#baseline-workspace-dialog");
       const form = $("#baseline-workspace-form");
@@ -600,7 +659,7 @@ window.__creopdmModules.baselines = {
       if (overwrite) overwrite.checked = false;
       if (start) {
         start.disabled = true;
-        start.textContent = "Add to workspace";
+        start.textContent = "Download";
       }
       $("#baseline-ws-name").textContent = $("#baseline-members-title")?.textContent || "";
       $("#baseline-ws-files").textContent = "Checking the baseline…";
@@ -676,7 +735,7 @@ window.__creopdmModules.baselines = {
           } catch {
             showError(error, "The agent did not answer. Is creopdm-agent running?");
             start.disabled = false;
-            start.textContent = "Add to workspace";
+            start.textContent = "Download";
             return;
           }
           if (!result.ok) {
@@ -684,7 +743,7 @@ window.__creopdmModules.baselines = {
             showError(error, agentMessage(result, "The baseline could not be installed."));
             if (Array.isArray(conflicts) && conflicts.length && overwriteRow) overwriteRow.hidden = false;
             start.disabled = false;
-            start.textContent = "Add to workspace";
+            start.textContent = "Download";
             return;
           }
           const done = result.body || {};
@@ -697,8 +756,8 @@ window.__creopdmModules.baselines = {
           if (resultBox) {
             resultBox.hidden = false;
             resultBox.textContent =
-              `Installed ${done.files_total} file${done.files_total === 1 ? "" : "s"} ` +
-              `(${done.downloaded} downloaded, ${done.kept} already correct), read-only, in ${done.path}.${extra}` +
+              `Downloaded ${done.files_total} file${done.files_total === 1 ? "" : "s"} ` +
+              `(${done.downloaded} new, ${done.kept} already correct), read-only, to ${done.path}.${extra}` +
               (done.folder_locked
                 ? " The folder is locked, so Creo cannot save new files into it."
                 : ` The folder could not be locked${done.lock_error ? ` (${done.lock_error})` : ""}, so Creo may still save new numbered files into it.`);
@@ -714,6 +773,7 @@ window.__creopdmModules.baselines = {
           // button that does nothing: take it away.
           if (wdRow) wdRow.hidden = true;
           if (overwriteRow) overwriteRow.hidden = true;
+          void refreshCopyStatus(info);
           start.dataset.done = "1";
           start.disabled = false;
           start.textContent = "Done";
@@ -737,22 +797,26 @@ window.__creopdmModules.baselines = {
         const info = response.ok ? await response.json() : null;
         if (!info?.workspace_folder) throw new Error("The baseline folder name is not known.");
         if (!window.confirm(
-          `Delete the folder for “${info.name}” on this PC? Nothing in CreoPDM changes, and you can add it again.`
+          `Delete the downloaded copy of “${info.name}” from this PC? Nothing in CreoPDM changes, and you can download it again.`
         )) return;
         const result = await agentJson("/baseline-workspace/remove", info, { folder: info.workspace_folder });
         if (!result.ok) throw new Error(agentMessage(result, "The folder could not be removed."));
+        await refreshCopyStatus(info);
         if (result.body?.removed && result.body.folder_in_use) {
+          // The folder is still there (something holds it): keep the button so it can be finished.
+          const again = $("#baseline-ws-remove");
+          if (again) again.hidden = false;
           // The files are gone but Windows will not delete a folder something has open.
           shell.showOk(
-            `The baseline's files were removed, but the folder itself is still in use (${result.body.path}). ` +
+            `The copy's files were deleted, but the folder itself is still in use (${result.body.path}). ` +
               "It is probably Creo's working directory or open in Explorer: switch away or close it, " +
-              "then press Remove from workspace again. The baseline itself is unchanged in CreoPDM."
+              "then press Delete downloaded copy again. The baseline itself is unchanged in CreoPDM."
           );
         } else {
           shell.showOk(
             result.body?.removed
-              ? `Removed the baseline folder from this PC (${result.body.path}). The baseline itself is unchanged in CreoPDM.`
-              : "This baseline is not in your workspace."
+              ? `Deleted the downloaded copy from this PC (${result.body.path}). The baseline itself is unchanged in CreoPDM.`
+              : "This baseline has not been downloaded to this PC."
           );
         }
       } catch (err) {
@@ -762,6 +826,7 @@ window.__creopdmModules.baselines = {
 
     $("#baseline-ws-add")?.addEventListener("click", () => void openAddToWorkspace());
     $("#baseline-ws-remove")?.addEventListener("click", () => void removeFromWorkspace());
+    $("#baseline-ws-open")?.addEventListener("click", () => void openCopyFolder());
 
     mod.openBaselineMembers = openBaselineMembers;
     mod.loadBaselinesTab = loadBaselinesTab;

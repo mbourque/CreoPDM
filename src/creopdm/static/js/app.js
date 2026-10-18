@@ -5434,7 +5434,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         );
         return false;
       }
-      // A caller (Add baseline to workspace) can name the folder; otherwise it is the product's.
+      // A caller (Download baseline) can name the folder; otherwise it is the product's.
       const directory =
         (options && options.directory) || (await agentWorkdir(currentProductId(), currentVaultFolder()));
       await whenCreoJSReady();
