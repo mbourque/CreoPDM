@@ -376,9 +376,15 @@ def remove(root: Path, product_key: str, folder: str) -> dict:
     if not dest_root.is_dir():
         return {"removed": False, "path": str(dest_root)}
     if _marker(dest_root) is None:
-        raise BaselineWorkspaceError(
-            409, "That folder was not installed as a baseline, so it was not removed.", path=str(dest_root)
-        )
+        # A leftover with no files in it (for example after an interrupted delete) is safe to clear.
+        has_files = any(p.is_file() for p in dest_root.rglob("*"))
+        if has_files:
+            raise BaselineWorkspaceError(
+                409,
+                f"The folder {dest_root} has files but was not installed as a baseline by CreoPDM "
+                f"(it has no {MARKER_NAME}), so it was not removed. Delete it yourself if you are sure.",
+                path=str(dest_root),
+            )
     unlock_directories(dest_root)
     move_to_trash(dest_root)
     return {"removed": True, "path": str(dest_root)}

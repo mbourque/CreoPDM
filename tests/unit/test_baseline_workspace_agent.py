@@ -221,7 +221,20 @@ def test_remove_refuses_a_folder_that_was_not_installed_as_a_baseline(agent):
         json={"product_id": "p1", "vault_folder": "gearbox", "folder": FOLDER},
     )
     assert refused.status_code == 409, refused.text
+    assert "important" not in refused.text and "no .creopdm-baseline.json" in refused.text
     assert (stray / "important.prt").exists()
+
+
+def test_an_empty_leftover_folder_is_cleared_by_remove(agent):
+    client, root, _served, _seen = agent
+    leftover = _baseline_root(root)
+    (leftover / "sub").mkdir(parents=True)  # no files, no marker: what an interrupted delete leaves
+    removed = client.post(
+        "/baseline-workspace/remove",
+        json={"product_id": "p1", "vault_folder": "gearbox", "folder": FOLDER},
+    )
+    assert removed.status_code == 200, removed.text
+    assert removed.json()["removed"] is True and not leftover.exists()
 
 
 def test_paths_cannot_escape_the_baseline_folder(agent):
