@@ -163,6 +163,7 @@ _PAGE_DEFAULTS = {
     "checkout_count": 0,
     "my_checkout_count": 0,
     "baseline_count": 0,
+    "baseline_total": 0,
     "checkoutable_count": 0,
     "checkin_queue": {"saves": [], "new_files": []},
     "email_notifications_enabled": False,
@@ -527,6 +528,8 @@ def home(
         )
         checkoutable_count = ctx.checkouts.count_checkoutable_for_product(db, product.id)
         baseline_count = ctx.baselines.count_for_product(db, product.id)
+        # Archived baselines still block a delete from this page, so the Delete dialog counts them.
+        baseline_total = ctx.baselines.count_for_product(db, product.id, include_archived=True)
         known = ctx.objects.list_path_index(db, product.id)
         product_object_count = len(known)
         watch = ctx.workspaces.watch_stamp(product, known)
@@ -579,6 +582,7 @@ def home(
             "checkout_count": checkout_count,
             "my_checkout_count": my_checkout_count,
             "baseline_count": baseline_count,
+            "baseline_total": baseline_total,
             "checkoutable_count": checkoutable_count,
             "pending_saves": pending_saves,
             "new_workspace_files": new_workspace_files,

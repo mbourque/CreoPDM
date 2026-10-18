@@ -307,7 +307,9 @@ def test_deleting_a_product_removes_its_baselines_and_members(auth_client, auth_
     assert _create(auth_client, keeper, "Keeper review").status_code == 201
 
     forgotten = auth_client.post(
-        f"/api/products/{product['uuid']}/forget", json={"confirm_password": "AdminPass1"}
+        "/admin/products/delete",
+        data={"product_id": product["uuid"], "confirm_password": "AdminPass1", "confirm": "1",
+              "confirm_baselines": "1"},
     )
     assert forgotten.status_code == 200, forgotten.text
     with auth_ctx.session_factory() as db:
@@ -998,7 +1000,9 @@ def test_structure_rows_need_permission_and_leave_with_the_product(auth_client, 
         assert response.status_code in (404, 405)
 
     removed = auth_client.post(
-        f"/api/products/{product['uuid']}/forget", json={"confirm_password": "AdminPass1"}
+        "/admin/products/delete",
+        data={"product_id": product["uuid"], "confirm_password": "AdminPass1", "confirm": "1",
+              "confirm_baselines": "1"},
     )
     assert removed.status_code == 200, removed.text
     with auth_ctx.session_factory() as db:

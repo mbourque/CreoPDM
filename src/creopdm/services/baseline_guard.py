@@ -75,6 +75,19 @@ def ensure_product_has_no_baselines(session: Session, product_id: int, *, action
         raise _referenced_error(names, action)
 
 
+def count_product_baselines(session: Session, product_id: int) -> tuple[int, int]:
+    """(baselines, releases) a product delete would erase: archived baselines count too."""
+    from sqlalchemy import func
+
+    baselines = session.scalar(
+        select(func.count()).select_from(Baseline).where(Baseline.product_id == product_id)
+    )
+    releases = session.scalar(
+        select(func.count()).select_from(ProductRelease).where(ProductRelease.product_id == product_id)
+    )
+    return int(baselines or 0), int(releases or 0)
+
+
 def delete_product_baselines(session: Session, product_id: int) -> int:
     """Product delete: remove its releases, baselines and members, before objects and versions."""
     session.execute(delete(ProductRelease).where(ProductRelease.product_id == product_id))

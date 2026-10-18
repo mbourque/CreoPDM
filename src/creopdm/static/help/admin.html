@@ -614,6 +614,7 @@
         <div class="panel">
           <h3>Delete products</h3>
           <p>Deletes the product’s CreoPDM <strong>vault</strong> (working copies and Git history) and unregisters the product from the database. Works for Archived and locked products. <strong>Original CAD folders</strong> you imported from are not deleted. The product’s rows in the Audit log are kept.</p>
+          <p><strong>Products with baselines.</strong> Baselines are permanent records, so nobody can delete such a product from the Files page — only an administrator, here. When you pick a product that has baselines or releases, a red warning names them and an extra box (“its baselines will be erased too”) must be ticked. They are then erased with the product, and the Audit log’s <em>Product deleted</em> row says how many.</p>
         </div>
         <div class="panel">
           <h3>Compact product vault history</h3>

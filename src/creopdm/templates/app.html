@@ -96,6 +96,7 @@
             <button type="button" class="product-settings-item is-danger" role="menuitem" id="delete-product-btn"
                     data-product="{{ selected.uuid }}"
                     data-name="{{ selected.name }}"
+                    data-baselines="{{ baseline_total|default(0) }}"
                     title="Delete the CreoPDM vault (working copies and Git) and unregister the product. Original files you imported from are not deleted.">Delete product</button>
             {% endif %}
           </div>
@@ -678,7 +679,7 @@
     <p class="error" id="delete-product-error" hidden></p>
     <div class="dialog-actions">
       <button type="button" class="btn" id="delete-product-cancel">Cancel</button>
-      <button type="submit" class="btn btn-danger">Delete product</button>
+      <button type="submit" class="btn btn-danger" id="delete-product-submit">Delete product</button>
     </div>
   </form>
 </dialog>

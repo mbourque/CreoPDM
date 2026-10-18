@@ -155,6 +155,13 @@ class BaselineReconstructionError(CreoPDMError):
     http_status = 409
 
 
+class ProductHasBaselinesError(CreoPDMError):
+    """A product that has baselines is deleted only by an administrator, with a warning."""
+
+    code = "PRODUCT_HAS_BASELINES"
+    http_status = 409
+
+
 class BaselineEmptyError(CreoPDMError):
     """A product with no checked-in files has nothing to capture."""
 

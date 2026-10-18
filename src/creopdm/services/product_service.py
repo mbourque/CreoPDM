@@ -43,7 +43,7 @@ from creopdm.models.parameter import Parameter
 from creopdm.models.product import Product
 from creopdm.models.remote import Remote
 from creopdm.models.revise_operation import ReviseOperation
-from creopdm.services.baseline_guard import delete_product_baselines
+from creopdm.services.baseline_guard import count_product_baselines, delete_product_baselines
 from creopdm.models.version import ObjectVersion
 from creopdm.services.activity_service import ActivityService
 from creopdm.services.git_service import GitService
@@ -816,6 +816,7 @@ class ProductService:
 
     def _delete_product_records(self, session: Session, product: Product) -> None:
         user = self._users.get_current_user()
+        baselines_erased, releases_erased = count_product_baselines(session, product.id)
         # Append-only audit: record delete, then detach FKs — never wipe history.
         self._activities.record(
             session,
@@ -826,6 +827,8 @@ class ProductService:
                 "uuid": product.uuid,
                 "name": product.name,
                 "vault_folder": product.vault_folder or product.uuid,
+                **({"baselines_erased": baselines_erased} if baselines_erased else {}),
+                **({"releases_erased": releases_erased} if releases_erased else {}),
             },
             product_uuid=product.uuid,
             product_name=product.name,

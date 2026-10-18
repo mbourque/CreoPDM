@@ -184,7 +184,9 @@ def test_deleting_a_product_removes_its_releases_and_baselines(auth_client, auth
     assert _promote(auth_client, product, "RELEASED").status_code == 200
     assert _counts(auth_ctx) == (1, 1)
     forgotten = auth_client.post(
-        f"/api/products/{product['uuid']}/forget", json={"confirm_password": "AdminPass1"}
+        "/admin/products/delete",
+        data={"product_id": product["uuid"], "confirm_password": "AdminPass1", "confirm": "1",
+              "confirm_baselines": "1"},
     )
     assert forgotten.status_code == 200, forgotten.text
     assert _counts(auth_ctx) == (0, 0)

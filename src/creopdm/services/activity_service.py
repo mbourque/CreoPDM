@@ -788,6 +788,9 @@ def _event_summary(
         name = details.get("name") or details.get("product_name")
         if name:
             parts.append(str(name))
+        erased = details.get("baselines_erased")
+        if isinstance(erased, int) and erased:
+            parts.append(f"{erased} baseline{'s' if erased != 1 else ''} erased")
     if action in {
         ActivityAction.BASELINE_ARCHIVED.value,
         ActivityAction.BASELINE_RESTORED.value,

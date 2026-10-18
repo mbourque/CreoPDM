@@ -173,6 +173,19 @@ window.__creopdmModules.admin = {
       if (deleteProductForm) deleteProductForm.reset();
       const deleteLocal = $("#delete-local-workspace");
       if (deleteLocal) deleteLocal.checked = true;
+      // A product that has baselines cannot be deleted from here (the server refuses too): say so
+      // before asking for a password, and point to the administrator's page that warns first.
+      const submit = $("#delete-product-submit");
+      const baselines = Number($("#delete-product-btn")?.dataset.baselines || 0);
+      if (submit) submit.disabled = baselines > 0;
+      if (baselines > 0) {
+        showError(
+          $("#delete-product-error"),
+          `This product has ${baselines} baseline${baselines === 1 ? "" : "s"}. Baselines are permanent ` +
+            "records, so it can't be deleted from here. An administrator can delete it under " +
+            "Administration → Manage products → Delete products, which lists what will be erased."
+        );
+      }
       deleteProductDialog?.showModal();
     };
 
@@ -1017,6 +1030,47 @@ window.__creopdmModules.admin = {
       });
     }
     bindPromoteProducts();
+
+    // ---- Administration -> Delete products: a product with baselines gets a warning that names
+    // them, and the delete needs one more tick box ("they are erased too").
+    function bindDeleteBaselineWarning() {
+      const form = $("#utilities-delete-products-form");
+      const select = form?.querySelector('select[name="product_id"]');
+      const warning = $("#delete-baselines-warning");
+      const wrap = $("#delete-baselines-confirm-wrap");
+      const box = $("#delete-baselines-confirm");
+      const boxText = $("#delete-baselines-confirm-text");
+      if (!form || !select || !warning || !wrap || !box) return;
+      const sync = () => {
+        const opt = select.selectedOptions?.[0];
+        const baselines = Number(opt?.dataset?.baselines || 0);
+        const releases = Number(opt?.dataset?.releases || 0);
+        const show = baselines > 0 || releases > 0;
+        warning.hidden = !show;
+        wrap.hidden = !show;
+        box.required = show;
+        if (!show) {
+          box.checked = false;
+          return;
+        }
+        const name = opt?.dataset?.name || "This product";
+        const names = opt?.dataset?.baselineNames || "";
+        const more = baselines > names.split(", ").filter(Boolean).length ? ", …" : "";
+        const what =
+          `${baselines} baseline${baselines === 1 ? "" : "s"}` +
+          (releases ? ` and ${releases} release${releases === 1 ? "" : "s"}` : "");
+        warning.textContent =
+          `Warning: ${name} has ${what}${names ? ` (${names}${more})` : ""}. Baselines are permanent ` +
+          "records of exact file versions and cannot be deleted any other way, so deleting this product " +
+          "erases them permanently. This cannot be undone.";
+        if (boxText) {
+          boxText.textContent = `I understand that its ${what} will be erased too`;
+        }
+      };
+      onPage(select, "change", sync);
+      sync();
+    }
+    bindDeleteBaselineWarning();
 
     // ---- Utilities -> Audit log: "(+N more)" opens the full file list of an event.
     // (Was an inline <script>; a soft navigation never runs those, so it only worked after a

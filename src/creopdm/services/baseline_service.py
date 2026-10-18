@@ -7,7 +7,7 @@ import re
 import uuid as uuidlib
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 
@@ -138,17 +138,55 @@ class BaselineService:
             stmt = stmt.where(Baseline.status != "ARCHIVED")
         return list(session.scalars(stmt.order_by(Baseline.id.desc())))
 
-    def count_for_product(self, session: Session, product_id: int) -> int:
-        """Baselines shown on the product (archived ones are not counted)."""
-        return len(
-            list(
-                session.scalars(
-                    select(Baseline.id).where(
-                        Baseline.product_id == product_id, Baseline.status != "ARCHIVED"
-                    )
-                )
+    def count_for_product(
+        self, session: Session, product_id: int, *, include_archived: bool = False
+    ) -> int:
+        """Baselines shown on the product (archived ones only when asked for)."""
+        stmt = select(Baseline.id).where(Baseline.product_id == product_id)
+        if not include_archived:
+            stmt = stmt.where(Baseline.status != "ARCHIVED")
+        return len(list(session.scalars(stmt)))
+
+    def delete_impact(self, session: Session, product_id: int) -> dict:
+        """What deleting this product would erase: every baseline (archived too) and release."""
+        rows = session.execute(
+            select(Baseline.name, Baseline.baseline_type)
+            .where(Baseline.product_id == product_id)
+            .order_by(Baseline.id.asc())
+        ).all()
+        releases = int(
+            session.scalar(
+                select(func.count())
+                .select_from(ProductRelease)
+                .where(ProductRelease.product_id == product_id)
             )
+            or 0
         )
+        return {
+            "baselines": len(rows),
+            "releases": releases,
+            "names": [str(name) for name, _kind in rows[:5]],
+        }
+
+    def delete_impact_by_product(self, session: Session) -> dict[str, dict]:
+        """``{product uuid: delete_impact}`` for the products that have any baseline."""
+        out: dict[str, dict] = {}
+        for product_id, product_uuid in session.execute(
+            select(Product.id, Product.uuid).where(
+                Product.id.in_(select(Baseline.product_id).distinct())
+            )
+        ):
+            out[str(product_uuid)] = self.delete_impact(session, int(product_id))
+        return out
+
+    @staticmethod
+    def delete_impact_text(name: str, impact: dict) -> str:
+        n, r = impact["baselines"], impact["releases"]
+        shown = ", ".join(impact["names"]) + (", …" if n > len(impact["names"]) else "")
+        parts = f"{n} baseline{'s' if n != 1 else ''}"
+        if r:
+            parts += f" and {r} release{'s' if r != 1 else ''}"
+        return f"{name} has {parts} ({shown})"
 
     def get(self, session: Session, baseline_uuid: str) -> Baseline:
         row = session.scalar(

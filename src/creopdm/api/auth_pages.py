@@ -32,7 +32,7 @@ from creopdm.constants import (
     ActivityAction,
 )
 from creopdm.context import AppContext
-from creopdm.exceptions import CreoPDMError
+from creopdm.exceptions import CreoPDMError, ValidationAppError
 from creopdm.models.user import User
 from creopdm.permissions import (
     can_open_administration,
@@ -2507,6 +2507,7 @@ def admin_products_delete(
     product_id: str = Form(""),
     confirm_password: str = Form(""),
     confirm: str = Form(""),
+    confirm_baselines: str = Form(""),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
@@ -2517,6 +2518,7 @@ def admin_products_delete(
         product_id=product_id,
         confirm_password=confirm_password,
         confirm=confirm,
+        confirm_baselines=confirm_baselines,
     )
 
 
@@ -3336,6 +3338,7 @@ def _utilities_delete_products_response(
         {
             **_base_ctx(request, ctx, current_user=manager),
             "delete_products": list_products_for_compact(db),
+            "delete_impact": ctx.baselines.delete_impact_by_product(db),
             "delete_product_id": delete_product_id,
             "error": error,
             "success": success,
@@ -3736,6 +3739,7 @@ def _delete_products_submit(
     product_id: str,
     confirm_password: str,
     confirm: str,
+    confirm_baselines: str = "",
 ):
     from creopdm.utils.danger_confirm import require_danger_password
 
@@ -3762,6 +3766,13 @@ def _delete_products_submit(
     try:
         require_danger_password(ctx, db, confirm_password, auth_user=manager)
         product = ctx.products.load_product_for_delete(db, pid)
+        impact = ctx.baselines.delete_impact(db, product.id)
+        if (impact["baselines"] or impact["releases"]) and confirm_baselines != "1":
+            raise ValidationAppError(
+                f"{ctx.baselines.delete_impact_text(product.name, impact)}. Deleting the product "
+                "erases them permanently (a baseline cannot be deleted any other way). Tick the "
+                "box that says you understand this, then delete again."
+            )
         workspace = ctx.workspaces.vault_for(product)
         result = ctx.products.forget_product(
             db,

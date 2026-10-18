@@ -32,9 +32,18 @@
         <select name="product_id" required>
           <option value="">Select a product…</option>
           {% for product in delete_products %}
-          <option value="{{ product.uuid }}" {% if delete_product_id == product.uuid %}selected{% endif %}>{{ product.name }}{% if product.state == 'ARCHIVED' %} (archived){% elif not product.active %} (inactive){% endif %}</option>
+          {% set impact = delete_impact.get(product.uuid) if delete_impact else none %}
+          <option value="{{ product.uuid }}"
+                  {% if impact %}data-baselines="{{ impact.baselines }}" data-releases="{{ impact.releases }}" data-baseline-names="{{ impact.names|join(', ') }}"{% endif %}
+                  data-name="{{ product.name }}"
+                  {% if delete_product_id == product.uuid %}selected{% endif %}>{{ product.name }}{% if product.state == 'ARCHIVED' %} (archived){% elif not product.active %} (inactive){% endif %}</option>
           {% endfor %}
         </select>
+      </label>
+      <div class="callout is-danger" id="delete-baselines-warning" role="alert" hidden></div>
+      <label class="choice" id="delete-baselines-confirm-wrap" hidden>
+        <input type="checkbox" name="confirm_baselines" id="delete-baselines-confirm" value="1">
+        <span id="delete-baselines-confirm-text">I understand its baselines will be erased too</span>
       </label>
       <label>Enter your password to confirm
         <input name="confirm_password" type="password" required autocomplete="current-password" maxlength="256">

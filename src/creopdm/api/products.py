@@ -263,8 +263,22 @@ def forget_product(
 ) -> ForgetProductResponse:
     from creopdm.utils.danger_confirm import require_danger_password
 
+    from creopdm.exceptions import ProductHasBaselinesError
+
     require_permission(request, ctx, PERMISSION_PRODUCTS_DELETE)
     product = load_accessible_product_for_delete(request, ctx, db, product_id)
+    # Baselines are permanent records of exact versions: a product that has them cannot be
+    # deleted from here (the Files page). An administrator can, from Administration, after a
+    # warning that lists what will be erased.
+    impact = ctx.baselines.delete_impact(db, product.id)
+    if impact["baselines"] or impact["releases"]:
+        raise ProductHasBaselinesError(
+            f"{ctx.baselines.delete_impact_text(product.name, impact)} and cannot be deleted from "
+            "here. Baselines are permanent records, so only an administrator can delete a product "
+            "that has them: Administration → Manage products → Delete products, which lists what "
+            "will be erased.",
+            details={"product": product.uuid, **impact},
+        )
     require_danger_password(
         ctx,
         db,
