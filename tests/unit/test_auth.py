@@ -3173,6 +3173,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
     from creopdm.auth_constants import (
         BUILTIN_PERMISSIONS,
         PERMISSION_BASELINES_CREATE,
+        PERMISSION_BASELINES_ADMIN,
         PERMISSION_BASELINES_VIEW,
         PERMISSION_EMAIL_MANAGE,
         PERMISSION_OBJECTS_ADD,
@@ -3456,6 +3457,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             PERMISSION_OBJECTS_REVISE: auth_client.get(
                 f"/api/objects/{object_id}/revise-eligibility"
             ),
+            PERMISSION_BASELINES_ADMIN: auth_client.get("/api/admin/baselines"),
             PERMISSION_BASELINES_VIEW: auth_client.get(f"/api/products/{product_id}/baselines"),
             PERMISSION_BASELINES_CREATE: auth_client.post(
                 f"/api/products/{product_id}/baselines",

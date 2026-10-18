@@ -121,9 +121,12 @@ def test_quiet_browse_does_not_eager_load_heavy_modules():
     app = APP_JS.read_text(encoding="utf-8")
     boot_tail = app.split("window.__creopdmShell = {", 1)[1]
     boot_tail = boot_tail.split("restoreStoredFilters();", 1)[1]
-    # Only admin chrome + modifications (Details) are initialised eagerly at boot.
+    # Only admin chrome + modifications (Details) are initialised eagerly at boot. admin_baselines is
+    # admin chrome too: it starts only when its own page is on screen (a soft navigation never runs
+    # <script> tags, so app.js has to start it), and it is a small module.
     eager = re.findall(r'void initJobModule\("(\w+)"', boot_tail.split("} finally {", 1)[0])
-    assert set(eager) <= {"admin", "modifications"}, eager
+    assert set(eager) <= {"admin", "admin_baselines", "modifications"}, eager
+    assert 'if ($("#admin-baselines-page"))' in boot_tail  # gated on the page, never at quiet browse
     # Collect resume is gated on stored state; open/add/checkout/checkin/creo_workspace load on use.
     assert "const state = loadMetadataCollectState();" in app
     assert 'if (!state || state.status !== "running")' in app
