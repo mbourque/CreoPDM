@@ -1469,8 +1469,7 @@ button.forgot-password-btn,
 #version-facts td.filename-cell { overflow-wrap: anywhere; }
 .version-section-title { margin: 1rem 0 0.5rem; font-size: 1.1rem; }
 .baseline-desc { margin: 0; white-space: pre-wrap; }
-.baseline-version-link { color: inherit; text-decoration: underline dotted; }
-.baseline-version-link:hover { text-decoration: underline; }
+/* .baseline-version-link uses the site's normal link style (accent colour, underline on hover). */
 .baseline-structure-title { margin: 14px 0 6px; font-size: 1rem; }
 .baseline-unresolved { color: #b42318; font-weight: 700; }
 #baseline-structure-table tr.is-unresolved td { background: #fff4f2; }
