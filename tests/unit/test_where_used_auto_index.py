@@ -171,10 +171,10 @@ def test_add_runs_where_used_under_busy_overlay_then_reloads_once():
     )[0]
     assert "indexWhereUsedUnderBusy(productId)" in add_tail
     assert "canGatherCreoMetadata()" in add_tail
-    assert "pushCreoMetadataForItems(metadataTargetsFromResult(out))" in add_tail
+    assert "pushCreoMetadataForItems(metadataTargetsFromResult(out), { audit: true })" in add_tail
     # Where Used first; metadata only when Creo.JS is hosted (any count).
     assert add_tail.index("indexWhereUsedUnderBusy(productId)") < add_tail.index(
-        "pushCreoMetadataForItems(metadataTargetsFromResult(out))"
+        "pushCreoMetadataForItems(metadataTargetsFromResult(out), { audit: true })"
     )
     assert "okN <= 50" not in add_tail
     assert "reloadPage({ keepBusy: true" in add_tail
@@ -186,9 +186,9 @@ def test_add_runs_where_used_under_busy_overlay_then_reloads_once():
     )[0]
     assert "indexWhereUsedUnderBusy(productId)" in zip_submit
     assert "canGatherCreoMetadata()" in zip_submit
-    assert "pushCreoMetadataForItems(metadataTargetsFromResult(result))" in zip_submit
+    assert "pushCreoMetadataForItems(metadataTargetsFromResult(result), { audit: true })" in zip_submit
     assert zip_submit.index("indexWhereUsedUnderBusy(productId)") < zip_submit.index(
-        "pushCreoMetadataForItems(metadataTargetsFromResult(result))"
+        "pushCreoMetadataForItems(metadataTargetsFromResult(result), { audit: true })"
     )
     assert "import-zip" in zip_submit
     assert "pollZipImportJob" in zip_submit
