@@ -516,6 +516,7 @@ def home(
     checkout_count = 0
     my_checkout_count = 0
     baseline_count = 0
+    baseline_total = 0
     checkoutable_count = 0
     pending_saves = 0
     new_workspace_files = 0

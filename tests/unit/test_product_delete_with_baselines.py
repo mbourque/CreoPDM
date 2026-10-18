@@ -166,3 +166,13 @@ def test_the_delete_dialogs_are_wired_to_the_warning():
     assert 'dataset.baselines || 0' in admin and "submit.disabled = baselines > 0;" in admin
     app = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     assert 'data-baselines="{{ baseline_total|default(0) }}"' in app and 'id="delete-product-submit"' in app
+
+
+@requires_git
+def test_the_files_page_still_opens_after_every_product_is_deleted(auth_client, auth_ctx):
+    """Regression: with no product selected the Files page used to fail with INTERNAL_ERROR."""
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client, "Plain")
+    assert _admin_delete(auth_client, product).status_code == 200
+    assert auth_client.get("/").status_code == 200
+    assert auth_client.get("/", params={"product": product["uuid"]}).status_code in (200, 303, 404)
