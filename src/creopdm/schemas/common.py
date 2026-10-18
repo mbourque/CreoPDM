@@ -310,6 +310,8 @@ class BaselineResponse(BaseModel):
     baseline_type: str
     status: str
     member_count: int
+    dependency_count: int = 0
+    unresolved_dependency_count: int = 0
     created_by: str
     created_at: datetime | None = None
     finalized_at: datetime | None = None
@@ -336,6 +338,22 @@ class BaselineMemberResponse(BaseModel):
     current_display_version: str | None = None
     # SAME = the product still has this exact version; OUT_OF_DATE = it has a newer one.
     status: str
+
+
+class BaselineDependencyResponse(BaseModel):
+    """One structure edge (parent uses child) as captured, with the exact versions on each end."""
+
+    parent_filename: str
+    parent_version_uuid: str
+    parent_display_version: str
+    child_filename: str
+    child_version_uuid: str | None = None
+    child_display_version: str | None = None
+    dependency_type: str
+    quantity: float = 1.0
+    required: bool = True
+    # False = the child had no captured version: kept as an unresolved edge, never dropped.
+    resolved: bool = True
 
 
 class ReviseRequest(BaseModel):

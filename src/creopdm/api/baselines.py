@@ -18,6 +18,7 @@ from creopdm.models.baseline import Baseline
 from creopdm.models.product import Product
 from creopdm.schemas.common import (
     BaselineCreateRequest,
+    BaselineDependencyResponse,
     BaselineMemberResponse,
     BaselineResponse,
 )
@@ -35,6 +36,8 @@ def baseline_to_response(baseline: Baseline, product_uuid: str) -> BaselineRespo
         baseline_type=baseline.baseline_type,
         status=baseline.status,
         member_count=baseline.member_count,
+        dependency_count=baseline.dependency_count,
+        unresolved_dependency_count=baseline.unresolved_dependency_count,
         created_by=baseline.created_by,
         created_at=as_utc(baseline.created_at),
         finalized_at=as_utc(baseline.finalized_at),
@@ -83,6 +86,22 @@ def list_baseline_members(
     baseline = ctx.baselines.get(db, baseline_uuid)
     require_product_access(request, ctx, db.get(Product, baseline.product_id))
     return [BaselineMemberResponse(**row) for row in ctx.baselines.members(db, baseline)]
+
+
+@router.get(
+    "/api/baselines/{baseline_uuid}/dependencies", response_model=list[BaselineDependencyResponse]
+)
+def list_baseline_dependencies(
+    baseline_uuid: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> list[BaselineDependencyResponse]:
+    """The structure captured with the baseline (stored edges, never recomputed)."""
+    require_permission(request, ctx, PERMISSION_BASELINES_VIEW)
+    baseline = ctx.baselines.get(db, baseline_uuid)
+    require_product_access(request, ctx, db.get(Product, baseline.product_id))
+    return [BaselineDependencyResponse(**row) for row in ctx.baselines.dependencies(db, baseline)]
 
 
 @router.post("/api/products/{product_id}/baselines", response_model=BaselineResponse, status_code=201)

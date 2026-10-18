@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -34,6 +36,8 @@ _FROZEN_BASELINE_FIELDS = (
     "product_id",
     "baseline_type",
     "member_count",
+    "dependency_count",
+    "unresolved_dependency_count",
     "created_by",
     "finalized_by",
     "finalized_at",
@@ -53,6 +57,8 @@ class Baseline(Base):
     baseline_type: Mapped[str] = mapped_column(String(16), nullable=False, default="MANUAL")
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="FINALIZED")
     member_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    dependency_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    unresolved_dependency_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_by: Mapped[str] = mapped_column(String(128), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finalized_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -115,6 +121,43 @@ class BaselineMember(Base):
     baseline: Mapped[Baseline] = relationship(back_populates="members")
 
 
+class BaselineDependency(Base):
+    """One structure edge as it was when the baseline was made (parent uses child).
+
+    Stored, never recomputed: the parent and child versions are the exact ones the baseline
+    captured, so later check-ins, revisions or a re-scan cannot change the structure. A child
+    with no captured version is kept as an UNRESOLVED edge (``child_object_version_id`` empty)
+    rather than being silently dropped.
+    """
+
+    __tablename__ = "baseline_dependencies"
+    __table_args__ = (
+        UniqueConstraint(
+            "baseline_id",
+            "parent_object_id",
+            "child_object_id",
+            "dependency_type",
+            name="uq_baseline_dependencies_edge",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    baseline_id: Mapped[int] = mapped_column(ForeignKey("baselines.id"), index=True)
+    parent_object_id: Mapped[int] = mapped_column(ForeignKey("objects.id"), index=True)
+    parent_object_version_id: Mapped[int] = mapped_column(ForeignKey("object_versions.id"))
+    child_object_id: Mapped[int] = mapped_column(ForeignKey("objects.id"), index=True)
+    child_object_version_id: Mapped[int | None] = mapped_column(
+        ForeignKey("object_versions.id"), nullable=True
+    )
+    child_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    dependency_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    # Required edges (assembly members, drawing models, skeletons, merges) must be resolved for a
+    # strict (release) baseline; plain references need not be.
+    required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    resolved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
 def _parent_is_finalized(connection, baseline_id: int) -> bool:
     status = connection.execute(
         select(Baseline.__table__.c.status).where(Baseline.__table__.c.id == baseline_id)
@@ -122,7 +165,7 @@ def _parent_is_finalized(connection, baseline_id: int) -> bool:
     return status in (STATUS_FINALIZED, STATUS_ARCHIVED)
 
 
-def _guard_member(_mapper, connection, target: BaselineMember) -> None:
+def _guard_member(_mapper, connection, target: "BaselineMember | BaselineDependency") -> None:
     """Members may be written only while the baseline is being captured (DRAFT, inside the one
     transaction that finalizes it). After that: no add, no remove, no replaced version."""
     if _parent_is_finalized(connection, target.baseline_id):
@@ -132,3 +175,5 @@ def _guard_member(_mapper, connection, target: BaselineMember) -> None:
 event.listen(BaselineMember, "before_insert", _guard_member)
 event.listen(BaselineMember, "before_update", _guard_member)
 event.listen(BaselineMember, "before_delete", _guard_member)
+for _hook in ("before_insert", "before_update", "before_delete"):
+    event.listen(BaselineDependency, _hook, _guard_member)

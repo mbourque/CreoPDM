@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 
-from creopdm.constants import ActivityAction, LifecycleState
+from creopdm.constants import ActivityAction, DependencyType, LifecycleState
 from creopdm.exceptions import (
     BaselineEmptyError,
     BaselineImmutableError,
@@ -18,7 +18,8 @@ from creopdm.exceptions import (
     ValidationAppError,
 )
 from creopdm.logging_setup import get_logger
-from creopdm.models.baseline import Baseline, BaselineMember
+from creopdm.models.baseline import Baseline, BaselineDependency, BaselineMember
+from creopdm.models.dependency import Dependency
 from creopdm.models.object import EngineeringObject
 from creopdm.models.version import ObjectVersion
 from creopdm.models.product import Product
@@ -33,6 +34,16 @@ DESCRIPTION_MAX_LENGTH = 2000
 BASELINE_TYPE_MANUAL = "MANUAL"
 STATUS_DRAFT = "DRAFT"
 STATUS_FINALIZED = "FINALIZED"
+# Edges whose absence would make the configuration impossible to rebuild; a plain REFERENCE or an
+# UNKNOWN link is recorded but is not required.
+REQUIRED_DEPENDENCY_TYPES = frozenset(
+    {
+        DependencyType.ASSEMBLY_MEMBER.value,
+        DependencyType.DRAWING_MODEL.value,
+        DependencyType.SKELETON.value,
+        DependencyType.MERGE.value,
+    }
+)
 
 
 def clean_name(name: str | None) -> str:
@@ -133,6 +144,49 @@ class BaselineService:
             )
         return out
 
+    def dependencies(self, session: Session, baseline: Baseline) -> list[dict]:
+        """The structure captured with the baseline, read from the STORED rows only.
+
+        Parent and child versions come from the stored version ids. Nothing is recomputed from
+        the live dependency table or from the objects' latest versions.
+        """
+        parent_version = aliased(ObjectVersion)
+        child_version = aliased(ObjectVersion)
+        parent_member = aliased(BaselineMember)
+        rows = session.execute(
+            select(BaselineDependency, parent_version, child_version, parent_member)
+            .join(parent_version, parent_version.id == BaselineDependency.parent_object_version_id)
+            .outerjoin(
+                child_version, child_version.id == BaselineDependency.child_object_version_id
+            )
+            .join(
+                parent_member,
+                (parent_member.baseline_id == BaselineDependency.baseline_id)
+                & (parent_member.object_id == BaselineDependency.parent_object_id),
+            )
+            .where(BaselineDependency.baseline_id == baseline.id)
+            .order_by(parent_member.relative_path.asc(), BaselineDependency.child_filename.asc())
+        ).all()
+        out: list[dict] = []
+        for edge, parent, child, member in rows:
+            out.append(
+                {
+                    "parent_filename": member.filename,
+                    "parent_version_uuid": parent.uuid,
+                    "parent_display_version": f"{parent.revision}.{parent.iteration}",
+                    "child_filename": edge.child_filename,
+                    "child_version_uuid": child.uuid if child is not None else None,
+                    "child_display_version": (
+                        f"{child.revision}.{child.iteration}" if child is not None else None
+                    ),
+                    "dependency_type": edge.dependency_type,
+                    "quantity": edge.quantity,
+                    "required": bool(edge.required),
+                    "resolved": bool(edge.resolved),
+                }
+            )
+        return out
+
     # ---- create ------------------------------------------------------------------------
 
     def create(
@@ -194,6 +248,11 @@ class BaselineService:
                 session.flush()
                 session.add_all(self._members(baseline, captured))
                 session.flush()
+                edges = self._dependencies(session, baseline, product, captured)
+                session.add_all(edges)
+                session.flush()
+                baseline.dependency_count = len(edges)
+                baseline.unresolved_dependency_count = sum(1 for e in edges if not e.resolved)
                 baseline.status = STATUS_FINALIZED
                 baseline.member_count = len(captured)
                 baseline.finalized_by = user.user_name
@@ -209,6 +268,8 @@ class BaselineService:
                         "baseline_name": baseline.name,
                         "baseline_type": baseline.baseline_type,
                         "member_count": baseline.member_count,
+                        "dependency_count": baseline.dependency_count,
+                        "unresolved_dependency_count": baseline.unresolved_dependency_count,
                     },
                     comment=note,
                 )
@@ -288,6 +349,56 @@ class BaselineService:
                     f'A baseline named "{existing}" already exists in {product.name}.',
                     details={"name": existing},
                 )
+
+    @staticmethod
+    def _dependencies(
+        session: Session,
+        baseline: Baseline,
+        product: Product,
+        captured: list[EngineeringObject],
+    ) -> list[BaselineDependency]:
+        """Freeze the product's structure edges against the versions being captured.
+
+        Both ends are resolved through the captured members: the parent and child versions are
+        the exact ones in this baseline. A child with no captured version stays in the baseline
+        as an unresolved edge (never dropped, never replaced by "latest").
+        """
+        by_object = {obj.id: obj for obj in captured}
+        edges = session.scalars(
+            select(Dependency)
+            .where(Dependency.product_id == product.id)
+            .order_by(Dependency.id.asc())
+        )
+        child_names: dict[int, str] = {}
+        out: list[BaselineDependency] = []
+        for edge in edges:
+            parent = by_object.get(edge.parent_object_id)
+            if parent is None:
+                continue  # the parent is not in the configuration, so the edge is not either
+            child = by_object.get(edge.child_object_id)
+            if child is not None:
+                child_name = child.current_version.filename or child.filename
+            else:
+                if edge.child_object_id not in child_names:
+                    other = session.get(EngineeringObject, edge.child_object_id)
+                    child_names[edge.child_object_id] = other.filename if other else "(unknown)"
+                child_name = child_names[edge.child_object_id]
+            kind = edge.dependency_type or DependencyType.UNKNOWN.value
+            out.append(
+                BaselineDependency(
+                    baseline_id=baseline.id,
+                    parent_object_id=parent.id,
+                    parent_object_version_id=parent.current_version.id,
+                    child_object_id=edge.child_object_id,
+                    child_object_version_id=child.current_version.id if child is not None else None,
+                    child_filename=child_name,
+                    dependency_type=kind,
+                    quantity=edge.quantity if edge.quantity is not None else 1.0,
+                    required=kind in REQUIRED_DEPENDENCY_TYPES,
+                    resolved=child is not None,
+                )
+            )
+        return out
 
     @staticmethod
     def _members(baseline: Baseline, objects: list[EngineeringObject]) -> list[BaselineMember]:

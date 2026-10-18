@@ -849,3 +849,166 @@ def test_a_new_revision_leaves_an_existing_baseline_unchanged(auth_client, auth_
         )
         assert version is not None and (version.revision, version.iteration) == ("A", 1)
         assert version.lifecycle_state == "RELEASED"
+
+
+# ---- Story 7: the exact structure is captured with the baseline ---------------------------
+
+
+def _edge(db, product_row, parent, child_id, kind="ASSEMBLY_MEMBER", qty=1.0):
+    from creopdm.models.dependency import Dependency
+
+    db.add(
+        Dependency(
+            product_id=product_row.id,
+            parent_object_id=parent.id,
+            child_object_id=child_id,
+            dependency_type=kind,
+            quantity=qty,
+        )
+    )
+
+
+def _structure_product(auth_client, auth_ctx):
+    """gear.prt uses shaft.prt (x2, required), housing.prt (reference) and ghost.prt (no version)."""
+    from creopdm.models.product import Product
+
+    product, objects = _product(auth_client)
+    with auth_ctx.session_factory() as db:
+        row = db.scalar(select(Product).where(Product.uuid == product["uuid"]))
+        by_name = {
+            o.filename: o
+            for o in db.scalars(select(EngineeringObject).where(EngineeringObject.product_id == row.id))
+        }
+        ghost = EngineeringObject(
+            uuid="00000000-0000-4000-8000-00000000abcd",
+            product_id=row.id,
+            name="ghost",
+            filename="ghost.prt",
+            extension=".prt",
+            relative_path="ghost.prt",
+        )
+        db.add(ghost)
+        db.flush()
+        gear = by_name["gear.prt"]
+        _edge(db, row, gear, by_name["shaft.prt"].id, "ASSEMBLY_MEMBER", 2.0)
+        _edge(db, row, gear, by_name["housing.prt"].id, "REFERENCE")
+        _edge(db, row, gear, ghost.id, "ASSEMBLY_MEMBER")
+        db.commit()
+    return product, objects
+
+
+def _dependencies(auth_client, baseline_uuid):
+    response = auth_client.get(f"/api/baselines/{baseline_uuid}/dependencies")
+    assert response.status_code == 200, response.text
+    return {row["child_filename"]: row for row in response.json()}
+
+
+def test_a_baseline_captures_the_structure_with_exact_versions(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _structure_product(auth_client, auth_ctx)
+    created = _create(auth_client, product).json()
+    assert created["dependency_count"] == 3
+    assert created["unresolved_dependency_count"] == 1
+
+    members = _members(auth_client, created["uuid"])
+    edges = _dependencies(auth_client, created["uuid"])
+    assert set(edges) == {"shaft.prt", "housing.prt", "ghost.prt"}
+
+    shaft = edges["shaft.prt"]
+    assert shaft["parent_filename"] == "gear.prt"
+    assert shaft["parent_version_uuid"] == members["gear.prt"]["version_uuid"]
+    assert shaft["child_version_uuid"] == members["shaft.prt"]["version_uuid"]
+    assert shaft["child_display_version"] == "A.1" and shaft["quantity"] == 2.0
+    assert shaft["required"] is True and shaft["resolved"] is True
+    # A plain reference is recorded but not required.
+    assert edges["housing.prt"]["required"] is False and edges["housing.prt"]["resolved"] is True
+    # A child with no captured version is kept as an unresolved edge, not dropped or guessed.
+    ghost = edges["ghost.prt"]
+    assert ghost["resolved"] is False and ghost["required"] is True
+    assert ghost["child_version_uuid"] is None and ghost["child_display_version"] is None
+
+
+@requires_git
+def test_the_captured_structure_is_not_recomputed_from_latest_versions(auth_client, auth_ctx):
+    from creopdm.models.dependency import Dependency
+
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _structure_product(auth_client, auth_ctx)
+    created = _create(auth_client, product).json()
+    before = _dependencies(auth_client, created["uuid"])
+
+    # The product moves on: shaft gets a new version and the live edge is deleted.
+    _check_in(auth_client, auth_ctx, product, objects["shaft.prt"], b"shaft-v2")
+    with auth_ctx.session_factory() as db:
+        for edge in db.scalars(select(Dependency)):
+            db.delete(edge)
+        db.commit()
+
+    after = _dependencies(auth_client, created["uuid"])
+    assert after == before
+    assert after["shaft.prt"]["child_display_version"] == "A.1"
+    assert auth_client.get(f"/api/baselines/{created['uuid']}").json()["dependency_count"] == 3
+
+
+def test_a_product_without_structure_has_no_dependencies(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+    created = _create(auth_client, product).json()
+    assert created["dependency_count"] == 0 and created["unresolved_dependency_count"] == 0
+    assert _dependencies(auth_client, created["uuid"]) == {}
+
+
+def test_the_captured_structure_is_immutable_and_cannot_be_unpinned(auth_client, auth_ctx):
+    from creopdm.exceptions import BaselineImmutableError
+    from creopdm.models.baseline import BaselineDependency
+    from creopdm.services.baseline_guard import baseline_names_pinning
+
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _structure_product(auth_client, auth_ctx)
+    created = _create(auth_client, product).json()
+    with auth_ctx.session_factory() as db:
+        edge = db.scalar(select(BaselineDependency))
+        edge.quantity = 99
+        with pytest.raises(BaselineImmutableError):
+            db.flush()
+        db.rollback()
+        edge = db.scalar(select(BaselineDependency))
+        db.delete(edge)
+        with pytest.raises(BaselineImmutableError):
+            db.flush()
+        db.rollback()
+        assert db.scalar(select(func.count()).select_from(BaselineDependency)) == 3
+        # The unresolved child is not a member, but an edge still points at it: it stays pinned.
+        ghost = db.scalar(select(EngineeringObject).where(EngineeringObject.filename == "ghost.prt"))
+        assert baseline_names_pinning(db, [ghost.id]) == ["Design Review 01"]
+    assert created["dependency_count"] == 3
+
+
+def test_structure_rows_need_permission_and_leave_with_the_product(auth_client, auth_ctx):
+    from creopdm.models.baseline import BaselineDependency
+
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _structure_product(auth_client, auth_ctx)
+    created = _create(auth_client, product).json()
+    assert auth_client.get(f"/api/baselines/{created['uuid']}/dependencies").status_code == 200
+    for method in ("post", "put", "patch", "delete"):
+        response = auth_client.request(
+            method.upper(), f"/api/baselines/{created['uuid']}/dependencies", json={}
+        )
+        assert response.status_code in (404, 405)
+
+    removed = auth_client.post(
+        f"/api/products/{product['uuid']}/forget", json={"confirm_password": "AdminPass1"}
+    )
+    assert removed.status_code == 200, removed.text
+    with auth_ctx.session_factory() as db:
+        assert db.scalar(select(func.count()).select_from(BaselineDependency)) == 0
+        assert db.scalar(select(func.count()).select_from(Baseline)) == 0
+
+
+def test_baseline_structure_ui_is_wired():
+    module = (ROOT / "src" / "creopdm" / "static" / "js" / "baselines.js").read_text(encoding="utf-8")
+    assert "/dependencies`" in module and "function renderStructure" in module
+    assert "baseline-unresolved" in module and "unresolved_dependency_count" in module
+    template = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
+    assert 'id="baseline-structure-table"' in template

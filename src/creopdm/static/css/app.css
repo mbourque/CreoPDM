@@ -1447,6 +1447,9 @@ button.forgot-password-btn,
   white-space: normal; overflow-wrap: anywhere;
 }
 .baseline-name-cell .muted.small { display: block; }
+.baseline-structure-title { margin: 14px 0 6px; font-size: 1rem; }
+.baseline-unresolved { color: #b42318; font-weight: 700; }
+#baseline-structure-table tr.is-unresolved td { background: #fff4f2; }
 .baseline-open {
   appearance: none;
   -webkit-appearance: none;

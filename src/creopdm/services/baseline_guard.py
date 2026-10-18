@@ -11,7 +11,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from creopdm.exceptions import BaselineReferencedError
-from creopdm.models.baseline import Baseline, BaselineMember
+from creopdm.models.baseline import Baseline, BaselineDependency, BaselineMember
 
 _NAMES_SHOWN = 5
 
@@ -33,6 +33,17 @@ def baseline_names_pinning(session: Session, object_ids: Iterable[int]) -> list[
             .distinct()
         )
         names.update(rows)
+        # An edge also points at its child (even an unresolved one that is not a member).
+        edge_rows = session.scalars(
+            select(Baseline.name)
+            .join(BaselineDependency, BaselineDependency.baseline_id == Baseline.id)
+            .where(
+                (BaselineDependency.child_object_id.in_(chunk))
+                | (BaselineDependency.parent_object_id.in_(chunk))
+            )
+            .distinct()
+        )
+        names.update(edge_rows)
     return sorted(names, key=str.casefold)
 
 
@@ -67,6 +78,9 @@ def delete_product_baselines(session: Session, product_id: int) -> int:
     """Product delete: remove its baselines and members, before objects and versions."""
     ids = list(session.scalars(select(Baseline.id).where(Baseline.product_id == product_id)))
     for chunk in _chunks(ids):
+        session.execute(
+            delete(BaselineDependency).where(BaselineDependency.baseline_id.in_(chunk))
+        )
         session.execute(delete(BaselineMember).where(BaselineMember.baseline_id.in_(chunk)))
         session.execute(delete(Baseline).where(Baseline.id.in_(chunk)))
     return len(ids)

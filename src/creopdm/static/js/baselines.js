@@ -115,6 +115,34 @@ window.__creopdmModules.baselines = {
     }
 
     /** The exact versions captured, read through the stored version ids (not the current ones). */
+    /** The captured structure: each parent version, the exact child version it uses, or "Unresolved". */
+    function renderStructure(edges) {
+      const title = $("#baseline-structure-title");
+      const wrap = $("#baseline-structure-wrap");
+      const body = $("#baseline-structure-table tbody");
+      const list = Array.isArray(edges) ? edges : [];
+      if (title) title.hidden = !list.length;
+      if (wrap) wrap.hidden = !list.length;
+      if (!body) return;
+      body.innerHTML = list
+        .map((e) => {
+          const uses = e.resolved
+            ? `${esc(e.child_filename)} <span class="muted">${esc(e.child_display_version || "")}</span>`
+            : `${esc(e.child_filename)} <span class="baseline-unresolved">Unresolved</span>`;
+          const kind = String(e.dependency_type || "").replace(/_/g, " ").toLowerCase();
+          return `<tr${e.resolved ? "" : ' class="is-unresolved"'}>
+            <td class="baseline-name-cell">${esc(e.parent_filename)} <span class="muted">${esc(
+              e.parent_display_version
+            )}</span></td>
+            <td class="baseline-name-cell">${uses}</td>
+            <td>${esc(kind || "—")}${e.required ? "" : ' <span class="muted small">(optional)</span>'}</td>
+            <td>${esc(e.quantity)}</td>
+            <td>${e.resolved ? "Yes" : "No"}</td>
+          </tr>`;
+        })
+        .join("");
+    }
+
     async function openBaselineMembers(baselineUuid) {
       const dialog = $("#baseline-members-dialog");
       if (!(dialog instanceof HTMLDialogElement)) return;
@@ -128,9 +156,10 @@ window.__creopdmModules.baselines = {
       if (meta) meta.textContent = "";
       if (!dialog.open) dialog.showModal();
       try {
-        const [baselineResp, membersResp] = await Promise.all([
+        const [baselineResp, membersResp, structureResp] = await Promise.all([
           fetch(`/api/baselines/${encodeURIComponent(baselineUuid)}`),
           fetch(`/api/baselines/${encodeURIComponent(baselineUuid)}/members`),
+          fetch(`/api/baselines/${encodeURIComponent(baselineUuid)}/dependencies`),
         ]);
         if (!membersResp.ok) throw new Error(await readError(membersResp));
         const members = await membersResp.json();
@@ -139,8 +168,14 @@ window.__creopdmModules.baselines = {
           meta.textContent =
             `${titleCase(info.status)} · ${titleCase(info.baseline_type)} · ` +
             `${info.member_count} member${info.member_count === 1 ? "" : "s"} · ` +
+            `${info.dependency_count || 0} link${info.dependency_count === 1 ? "" : "s"}` +
+            (info.unresolved_dependency_count
+              ? ` (${info.unresolved_dependency_count} unresolved)`
+              : "") +
+            " · " +
             `created ${formatWhen(info.created_at)} by ${info.created_by}`;
         }
+        renderStructure(structureResp.ok ? await structureResp.json() : []);
         if (!body) return;
         body.innerHTML = (Array.isArray(members) ? members : [])
           .map((m) => {
