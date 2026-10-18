@@ -262,7 +262,15 @@ def test_admin_baselines_page_is_wired():
         "no Delete",
     ):
         assert needle in template
+    # The app swaps only <main.shell> on a soft navigation and never runs <script> tags in it, so the
+    # page must be a lazy module that app.js starts after every swap (not a <script> in the page).
+    assert "<script" not in template
     script = (ROOT / "src" / "creopdm" / "static" / "js" / "admin_baselines.js").read_text(encoding="utf-8")
+    assert "window.__creopdmModules.admin_baselines" in script and "init() {" in script
+    app_py = (ROOT / "src" / "creopdm" / "app.py").read_text(encoding="utf-8")
+    assert '"admin_baselines"' in app_py
+    boot = (ROOT / "src" / "creopdm" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    assert 'if ($("#admin-baselines-page"))' in boot and 'initJobModule("admin_baselines"' in boot
     assert "/api/admin/baselines" in script and "/integrity" in script
     assert "data-archive" in script and "data-restore" in script and "deep=" in script
     hub = (ROOT / "src" / "creopdm" / "templates" / "admin.html").read_text(encoding="utf-8")

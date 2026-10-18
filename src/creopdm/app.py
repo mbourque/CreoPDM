@@ -235,6 +235,7 @@ def create_app(context: AppContext | None = None) -> FastAPI:
             "modifications",
             "creo_workspace",
             "baselines",
+            "admin_baselines",
         }
     )
 

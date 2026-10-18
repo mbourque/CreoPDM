@@ -1,8 +1,14 @@
-/* Administration -> Baselines: global list, integrity check, archive / restore. */
-(function () {
-  "use strict";
-  const page = document.getElementById("admin-baselines-page");
-  if (!page) return;
+/* Administration -> Baselines: global list, integrity check, archive / restore.
+ *
+ * A lazy client module (like baselines.js): the app swaps only <main.shell> on a soft navigation
+ * and never runs <script> tags in it, so app.js starts this module after every page swap
+ * (init runs once per page view, on the fresh DOM).
+ */
+window.__creopdmModules = window.__creopdmModules || {};
+window.__creopdmModules.admin_baselines = {
+  init() {
+    const page = document.getElementById("admin-baselines-page");
+    if (!page) return;
 
   const $ = (sel) => document.querySelector(sel);
   const esc = (v) =>
@@ -263,5 +269,6 @@
   for (const id of ["#baseline-admin-type", "#baseline-admin-status"]) {
     $(id)?.addEventListener("change", () => void load());
   }
-  void load();
-})();
+    void load();
+  },
+};

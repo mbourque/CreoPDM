@@ -8384,6 +8384,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   restoreStoredFilters();
   syncToolbar();
+  // Administration -> Baselines: a soft navigation never runs <script> tags, so the page's own
+  // module is started here, after every page swap.
+  if ($("#admin-baselines-page")) {
+    void initJobModule("admin_baselines", window.__creopdmShell);
+  }
   if (
     $("#settings-form")
     || $("#type-labels-form")
