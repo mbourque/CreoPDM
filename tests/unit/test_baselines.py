@@ -1992,6 +1992,8 @@ def test_workspace_ui_is_wired():
     assert "canSetCreoWorkingDirectory" in module and "setCreoWorkingDirectory" in module
     assert "folder_locked" in module  # the user is told whether Creo can still save into the folder
     assert "folder_in_use" in module  # a folder Creo or Explorer holds open is explained
+    # After the install the working-directory box is hidden (it only acts during the install).
+    assert "if (wdRow) wdRow.hidden = true;" in module and "if (wdRow) wdRow.hidden = false;" in module
     template = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     for needle in (
         'id="baseline-ws-add"',

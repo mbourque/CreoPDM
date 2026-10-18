@@ -591,7 +591,9 @@ window.__creopdmModules.baselines = {
       const overwriteRow = $("#baseline-ws-overwrite-row");
       const overwrite = $("#baseline-ws-overwrite");
       const wd = $("#baseline-ws-wd");
+      const wdRow = $("#baseline-ws-wd-row");
       const wdNote = $("#baseline-ws-wd-note");
+      if (wdRow) wdRow.hidden = false;
       showError(error, "");
       if (resultBox) resultBox.hidden = true;
       if (overwriteRow) overwriteRow.hidden = true;
@@ -708,6 +710,10 @@ window.__creopdmModules.baselines = {
               message: "Creo working directory set to the baseline folder.",
             });
           }
+          // The working directory is only applied during the install, so the box would now be a
+          // button that does nothing: take it away.
+          if (wdRow) wdRow.hidden = true;
+          if (overwriteRow) overwriteRow.hidden = true;
           start.dataset.done = "1";
           start.disabled = false;
           start.textContent = "Done";
