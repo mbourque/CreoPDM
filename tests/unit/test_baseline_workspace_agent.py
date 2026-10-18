@@ -258,8 +258,11 @@ class _Run:
         self.calls = calls
         self.returncode = returncode
 
-    def __call__(self, command, **_kwargs):
+    def __call__(self, command, **kwargs):
         self.calls.append(list(command))
+        # The tray runs without a console: a missing stdin makes Windows fail with "the handle is
+        # invalid", so every icacls/whoami call must pass an explicit stdin.
+        assert kwargs.get("stdin") is not None, "subprocess needs an explicit stdin under pythonw"
 
         class _Result:
             stdout = ""
@@ -317,6 +320,7 @@ def test_a_failed_lock_does_not_fail_the_install_but_is_reported(agent, monkeypa
     response = _add(client, _manifest(FILES))
     assert response.status_code == 200, response.text
     assert response.json()["folder_locked"] is False
+    assert "Access is denied" in response.json()["lock_error"]  # the user is told why
     assert (_baseline_root(root) / "shaft.prt").read_bytes() == b"shaft-B.2"
 
 

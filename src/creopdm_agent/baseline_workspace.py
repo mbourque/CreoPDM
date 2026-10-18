@@ -72,7 +72,10 @@ def _windows_user() -> str:
     try:
         out = subprocess.run(
             ["whoami"], capture_output=True, text=True, check=False,
-            creationflags=0x08000000,  # CREATE_NO_WINDOW: no console flash from the tray
+            # The tray has no console: without an explicit stdin Windows reports "the handle is
+            # invalid" and the call fails. CREATE_NO_WINDOW avoids a console flash.
+            stdin=subprocess.DEVNULL,
+            creationflags=0x08000000,
         )
         name = (out.stdout or "").strip()
         if name:
@@ -84,17 +87,25 @@ def _windows_user() -> str:
     return f"{domain}{chr(92)}{user}" if domain and user else user
 
 
+_last_lock_error = ""
+
+
 def _icacls(*args: str) -> bool:
+    global _last_lock_error
     try:
         result = subprocess.run(
             ["icacls", *args], capture_output=True, text=True, check=False,
+            stdin=subprocess.DEVNULL,
             creationflags=0x08000000,
         )
     except OSError as exc:
         logger.warning("icacls could not run: %s", exc)
+        _last_lock_error = f"icacls could not run: {exc}"
         return False
     if result.returncode != 0:
-        logger.warning("icacls %s failed: %s", " ".join(args), (result.stderr or result.stdout).strip())
+        message = (result.stderr or result.stdout or "").strip()
+        logger.warning("icacls %s failed: %s", " ".join(args), message)
+        _last_lock_error = message or f"icacls exited with {result.returncode}"
     return result.returncode == 0
 
 
@@ -113,10 +124,14 @@ def lock_directories(dest_root: Path) -> bool:
     still be read and opened. Returns True when every folder was locked (always False off
     Windows, where the read-only flags are all there is).
     """
+    global _last_lock_error
+    _last_lock_error = ""
     if not _is_windows():
         return False
     user = _windows_user()
     ok = bool(user)
+    if not ok:
+        _last_lock_error = "could not determine the Windows user"
     for directory in _directories(dest_root):
         ok = _icacls(str(directory), "/deny", f"{user}:(WD,AD)") and ok
     return ok
@@ -324,6 +339,8 @@ def reconstruct(
         "extras": _extras(dest_root, expected),
         "read_only": True,
         "folder_locked": locked,
+        # Why the lock failed (empty when it worked or is not applicable off Windows).
+        "lock_error": "" if locked else _last_lock_error,
     }
 
 

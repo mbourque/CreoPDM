@@ -699,7 +699,7 @@ window.__creopdmModules.baselines = {
               `(${done.downloaded} downloaded, ${done.kept} already correct), read-only, in ${done.path}.${extra}` +
               (done.folder_locked
                 ? " The folder is locked, so Creo cannot save new files into it."
-                : " The folder could not be locked, so Creo may still save new numbered files into it.");
+                : ` The folder could not be locked${done.lock_error ? ` (${done.lock_error})` : ""}, so Creo may still save new numbered files into it.`);
           }
           $("#baseline-ws-folder").textContent = done.path || "";
           if (wd?.checked && shell.setCreoWorkingDirectory) {
