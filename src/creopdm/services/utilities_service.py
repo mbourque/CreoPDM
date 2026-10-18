@@ -48,6 +48,7 @@ from creopdm.models.object import EngineeringObject
 from creopdm.models.parameter import Parameter
 from creopdm.models.product import Product
 from creopdm.models.revise_operation import ReviseOperation
+from creopdm.services.baseline_guard import ensure_product_has_no_baselines
 from creopdm.models.user import User
 from creopdm.models.version import ObjectVersion
 from creopdm.schemas.common import (
@@ -789,6 +790,8 @@ def compact_product_vault_history(
             f"Release all checkouts first ({active_checkouts} active).",
             details={"active_checkouts": active_checkouts},
         )
+    # Compact destroys every older version: refuse while a baseline keeps them.
+    ensure_product_has_no_baselines(db, product.id, action="compact the vault history")
 
     vault = ctx.workspaces.vault_for(product)
     git_dir = vault / ".git"
@@ -1192,6 +1195,8 @@ def rebuild_product_database_from_vault(
             f"Release all checkouts first ({active_checkouts} active).",
             details={"active_checkouts": active_checkouts},
         )
+    # Rebuilding the file list replaces object and version rows: refuse while baselines pin them.
+    ensure_product_has_no_baselines(db, product.id, action="rebuild the file list")
 
     # Read-only path resolve — do not create a missing vault via ensure_vault.
     folder = _product_vault_folder_name(product)

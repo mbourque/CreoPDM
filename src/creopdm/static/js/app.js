@@ -7776,6 +7776,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (name === "changes") loadChangesTab();
       else if (name === "modified") void loadModifiedTab();
       else if (name === "checked-out") void loadCheckedOutTab();
+      else if (name === "baselines") {
+        void initJobModule("baselines", window.__creopdmShell).then((m) => m.loadBaselinesTab?.());
+      }
       else if (name === "where-used") void loadWhereUsedTab();
       else if (name === "snapshot" || name === "compare-revisions") {
         void initJobModule("modifications", window.__creopdmShell).then((m) =>
@@ -7790,6 +7793,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         persistListTabState(name);
       }
     });
+  });
+
+  // The "N Baselines" pill (not a file filter) opens the Baselines tab.
+  document.querySelector("#metric-filters")?.addEventListener("click", (event) => {
+    const link = eventEl(event)?.closest("[data-tab-link]");
+    if (!link) return;
+    document
+      .querySelector(`.tabs .tab[data-tab="${link.getAttribute("data-tab-link")}"]`)
+      ?.click();
   });
 
   /* Modifications snapshot UI → static/js/modifications.js */

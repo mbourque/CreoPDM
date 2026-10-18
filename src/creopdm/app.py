@@ -14,6 +14,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from creopdm.api import (
     auth_pages,
+    baselines,
     checkout,
     creo,
     embed,
@@ -44,6 +45,7 @@ from creopdm.permissions import apply_caps, empty_caps, caps_for_user, test_auth
 from creopdm.services.activity_service import ActivityService
 from creopdm.services.checkin_service import CheckinService
 from creopdm.services.checkout_service import CheckoutService
+from creopdm.services.baseline_service import BaselineService
 from creopdm.services.revise_service import ReviseService
 from creopdm.services.creo_service import CreoService
 from creopdm.services.email_service import EmailService
@@ -113,6 +115,7 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
     revisions = ReviseService(
         objects, checkouts, workspaces, version_store, locks, activities, identity
     )
+    baselines = BaselineService(locks, activities, identity)
     metadata = MetadataService(objects, workspaces)
     thumbnails = ThumbnailService(workspaces)
     ai_snapshots = AiSnapshotService(objects)
@@ -141,6 +144,7 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
         checkouts=checkouts,
         checkins=checkins,
         revisions=revisions,
+        baselines=baselines,
         creo_service=CreoService(
             creo_connector, objects, checkouts, workspaces, metadata=metadata
         ),
@@ -200,6 +204,7 @@ def create_app(context: AppContext | None = None) -> FastAPI:
     app.include_router(settings.router)
     app.include_router(products.router)
     app.include_router(objects.router)
+    app.include_router(baselines.router)
     app.include_router(checkout.router)
     app.include_router(creo.router)
     app.include_router(embed.router)
@@ -227,6 +232,7 @@ def create_app(context: AppContext | None = None) -> FastAPI:
             "metadata",
             "modifications",
             "creo_workspace",
+            "baselines",
         }
     )
 

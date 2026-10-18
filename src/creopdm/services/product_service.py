@@ -43,6 +43,7 @@ from creopdm.models.parameter import Parameter
 from creopdm.models.product import Product
 from creopdm.models.remote import Remote
 from creopdm.models.revise_operation import ReviseOperation
+from creopdm.services.baseline_guard import delete_product_baselines
 from creopdm.models.version import ObjectVersion
 from creopdm.services.activity_service import ActivityService
 from creopdm.services.git_service import GitService
@@ -790,6 +791,8 @@ class ProductService:
         )
         self._activities.detach_product_activities(session, product.id)
 
+        # Baselines point at this product's objects and versions: they go first.
+        delete_product_baselines(session, product.id)
         objects = list(
             session.scalars(select(EngineeringObject).where(EngineeringObject.product_id == product.id))
         )

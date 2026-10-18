@@ -52,6 +52,7 @@ ACTION_LABELS: dict[str, str] = {
     ActivityAction.VERSION_RESTORED.value: "Version restored",
     ActivityAction.REVISION_CREATED.value: "Revision created",
     ActivityAction.CHANGES_DISCARDED.value: "Changes discarded",
+    ActivityAction.BASELINE_CREATED.value: "Baseline created",
     ActivityAction.VAULT_HISTORY_COMPACTED.value: "Vault history compacted",
     ActivityAction.PRODUCT_DB_REBUILT.value: "Product DB rebuilt",
     ActivityAction.USER_CREATED.value: "User created",
@@ -90,6 +91,7 @@ AUDIT_ACTION_FILTER_CHOICES: list[tuple[str, str]] = [
     (ActivityAction.WORKSPACE_CLEARED.value, "Workspace cleared"),
     (ActivityAction.VERSION_RESTORED.value, "Version restored"),
     (ActivityAction.REVISION_CREATED.value, "Revision created"),
+    (ActivityAction.BASELINE_CREATED.value, "Baseline created"),
     (ActivityAction.USER_CREATED.value, "User created"),
     (ActivityAction.ROLE_CHANGED.value, "Role changed"),
     (ActivityAction.MEMBERSHIP_CHANGED.value, "Membership changed"),
@@ -723,6 +725,13 @@ def _event_summary(
         name = details.get("name") or details.get("product_name")
         if name:
             parts.append(str(name))
+    if action in {ActivityAction.BASELINE_CREATED.value, "BASELINE_CREATED"}:
+        name = details.get("baseline_name")
+        count = details.get("member_count")
+        if name:
+            parts.append(str(name))
+        if isinstance(count, int):
+            parts.append(f"{count} member{'s' if count != 1 else ''}")
     if action in {ActivityAction.VERSION_RESTORED.value, "VERSION_RESTORED"}:
         # "Restored A.2 as A.5": which version came back and the new version it became.
         source = details.get("from_display")

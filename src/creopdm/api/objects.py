@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from creopdm.api.checkout import present_object
 from creopdm.api.deps import get_context, get_db, load_accessible_product, require_permission, require_product_access
 from creopdm.api.serializers import version_to_response
+from creopdm.services.baseline_guard import ensure_objects_not_pinned
 from creopdm.auth_constants import (
     PERMISSION_OBJECTS_ADD,
     PERMISSION_OBJECTS_CHECKOUT,
@@ -278,6 +279,10 @@ def remove_batch(
 
             # Gate before purge/release so a locked product does not drop checkouts on failure.
             ensure_product_allows(group[0].product, "remove", action="remove files")
+            # Versions a baseline pins are never destroyed: refuse before anything is purged.
+            ensure_objects_not_pinned(
+                db, [obj.id for obj in group], action="remove these files from the product"
+            )
             ctx.workspaces.purge_local_many(group[0].product, group, ignore_locked=True)
             ctx.checkouts.release_mine_many(db, group)
             ctx.objects.delete_objects(db, group)
@@ -888,6 +893,9 @@ def delete_object(
     require_permission(request, ctx, PERMISSION_OBJECTS_REMOVE)
     obj = ctx.objects.get_object(db, object_id)
     require_product_access(request, ctx, obj.product)
+    ensure_objects_not_pinned(
+        db, [obj.id], action=f"remove {obj.filename} from the product"
+    )
     _purge_and_release(ctx, db, obj, ignore_locked=True)
     ctx.objects.delete_object(db, object_id)
     # See batch/remove — commit before 204 so a follow-up soft reload sees the delete.

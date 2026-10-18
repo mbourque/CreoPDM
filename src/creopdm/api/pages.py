@@ -162,6 +162,7 @@ _PAGE_DEFAULTS = {
     "new_workspace_files": 0,
     "checkout_count": 0,
     "my_checkout_count": 0,
+    "baseline_count": 0,
     "checkoutable_count": 0,
     "checkin_queue": {"saves": [], "new_files": []},
     "email_notifications_enabled": False,
@@ -513,6 +514,7 @@ def home(
     list_entries: list = []
     checkout_count = 0
     my_checkout_count = 0
+    baseline_count = 0
     checkoutable_count = 0
     pending_saves = 0
     new_workspace_files = 0
@@ -524,6 +526,7 @@ def home(
             db, product.id, ctx.users.get_current_user().user_name
         )
         checkoutable_count = ctx.checkouts.count_checkoutable_for_product(db, product.id)
+        baseline_count = ctx.baselines.count_for_product(db, product.id)
         known = ctx.objects.list_path_index(db, product.id)
         product_object_count = len(known)
         watch = ctx.workspaces.watch_stamp(product, known)
@@ -575,6 +578,7 @@ def home(
             "checkin_queue": checkin_queue,
             "checkout_count": checkout_count,
             "my_checkout_count": my_checkout_count,
+            "baseline_count": baseline_count,
             "checkoutable_count": checkoutable_count,
             "pending_saves": pending_saves,
             "new_workspace_files": new_workspace_files,

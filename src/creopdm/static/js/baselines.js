@@ -1,0 +1,199 @@
+window.__creopdmModules = window.__creopdmModules || {};
+window.__creopdmModules.baselines = {
+  /**
+   * Baselines tab on the Files page: list the product's baselines and create a new one.
+   * Loaded lazily (ensureModule("baselines")) the first time the Baselines tab is opened.
+   * A baseline is an exact, frozen snapshot: the server resolves the configuration itself, the
+   * client only sends a name, a description and one retry id per dialog open.
+   */
+  init(shell) {
+    const mod = window.__creopdmModules.baselines;
+    const $ = shell.$;
+    const showError = shell.showError;
+    const showOk = shell.showOk;
+    const readError = shell.readError;
+    const currentProductId = shell.currentProductId;
+
+    function esc(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function formatWhen(value) {
+      if (!value) return "—";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "—";
+      const pad = (n) => String(n).padStart(2, "0");
+      return (
+        `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+        `${pad(date.getHours())}:${pad(date.getMinutes())}`
+      );
+    }
+
+    function titleCase(value) {
+      const text = String(value || "").toLowerCase();
+      return text ? text.charAt(0).toUpperCase() + text.slice(1) : "—";
+    }
+
+    function productId() {
+      return $("#panel-baselines")?.dataset.product || currentProductId() || "";
+    }
+
+    /** Tab label and the header pill follow the number of baselines. */
+    function paintCounts(count) {
+      const n = Number(count) || 0;
+      const tab = $("#baselines-tab");
+      if (tab) tab.textContent = n ? `Baselines · ${n}` : "Baselines";
+      const pill = $("#baselines-pill-item");
+      if (pill) pill.hidden = n === 0;
+      const strong = $("#baselines-pill-count");
+      if (strong) strong.textContent = String(n);
+    }
+
+    function renderRows(items) {
+      const body = $("#baselines-table tbody");
+      if (!body) return;
+      if (!items.length) {
+        body.innerHTML =
+          '<tr class="empty-row"><td colspan="6">No baselines yet. Create one to freeze this product’s current configuration.</td></tr>';
+        return;
+      }
+      body.innerHTML = items
+        .map((item) => {
+          const description = String(item.description || "").trim();
+          return `<tr class="baseline-row" data-baseline="${esc(item.uuid)}">
+            <td class="filename-cell"><strong>${esc(item.name)}</strong>${
+              description ? `<div class="muted small">${esc(description)}</div>` : ""
+            }</td>
+            <td>${esc(titleCase(item.baseline_type))}</td>
+            <td>${esc(titleCase(item.status))}</td>
+            <td>${esc(item.member_count)}</td>
+            <td title="${esc(item.created_at || "")}">${esc(formatWhen(item.created_at))}</td>
+            <td>${esc(item.created_by)}</td>
+          </tr>`;
+        })
+        .join("");
+    }
+
+    async function loadBaselinesTab() {
+      const pid = productId();
+      const body = $("#baselines-table tbody");
+      if (!pid || !body) return;
+      try {
+        const response = await fetch(`/api/products/${encodeURIComponent(pid)}/baselines`);
+        if (!response.ok) throw new Error(await readError(response));
+        const items = await response.json();
+        const list = Array.isArray(items) ? items : [];
+        renderRows(list);
+        paintCounts(list.length);
+      } catch (err) {
+        body.innerHTML = `<tr class="empty-row"><td colspan="6">Could not load baselines (${esc(
+          err?.message || "error"
+        )}).</td></tr>`;
+      }
+    }
+
+    function newOperationId() {
+      return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `op-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    async function openCreateBaselineDialog() {
+      const dialog = $("#baseline-dialog");
+      const form = $("#baseline-form");
+      if (!(dialog instanceof HTMLDialogElement) || !form) return;
+      const pid = productId();
+      if (!pid) return;
+      const name = $("#baseline-name");
+      const description = $("#baseline-description");
+      const confirm = $("#baseline-confirm");
+      const cancel = $("#baseline-cancel");
+      if (name) name.value = "";
+      if (description) description.value = "";
+      if (confirm) confirm.disabled = false;
+      showError($("#baseline-error"), "");
+      const files = $("#metric-filters")?.dataset.productObjects;
+      const count = $("#baseline-file-count");
+      if (count) {
+        count.textContent =
+          files != null && files !== "" ? `${files} file${Number(files) === 1 ? "" : "s"}` : "—";
+      }
+      // One id per dialog open: pressing Create again after a lost answer returns the same
+      // baseline instead of an error or a second copy.
+      const operationId = newOperationId();
+      let created = null;
+      await new Promise((resolve) => {
+        const finish = () => {
+          form.removeEventListener("submit", onSubmit);
+          cancel?.removeEventListener("click", onCancel);
+          dialog.removeEventListener("close", onClose);
+          if (dialog.open) dialog.close();
+          resolve();
+        };
+        const onSubmit = async (event) => {
+          event.preventDefault();
+          const text = String(name?.value || "").trim();
+          if (!text) {
+            showError($("#baseline-error"), "Enter a name for the baseline.");
+            name?.focus();
+            return;
+          }
+          showError($("#baseline-error"), "");
+          if (confirm) confirm.disabled = true;
+          let response;
+          try {
+            response = await fetch(`/api/products/${encodeURIComponent(pid)}/baselines`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: text,
+                description: String(description?.value || "").trim() || null,
+                operation_id: operationId,
+              }),
+            });
+          } catch {
+            showError(
+              $("#baseline-error"),
+              "The server did not answer. Press Create again — it will not make a second baseline."
+            );
+            if (confirm) confirm.disabled = false;
+            return;
+          }
+          if (!response.ok) {
+            showError($("#baseline-error"), await readError(response));
+            if (confirm) confirm.disabled = false;
+            return;
+          }
+          created = await response.json();
+          finish();
+        };
+        const onCancel = () => finish();
+        const onClose = () => finish();
+        form.addEventListener("submit", onSubmit);
+        cancel?.addEventListener("click", onCancel);
+        dialog.addEventListener("close", onClose);
+        dialog.showModal();
+        name?.focus();
+      });
+      if (created) {
+        showOk(
+          `Baseline “${created.name}” created: ${created.member_count} file${
+            created.member_count === 1 ? "" : "s"
+          } captured at their exact current versions.`
+        );
+        await loadBaselinesTab();
+      }
+    }
+
+    mod.loadBaselinesTab = loadBaselinesTab;
+    mod.openCreateBaselineDialog = openCreateBaselineDialog;
+
+    $("#create-baseline-btn")?.addEventListener("click", () => {
+      void openCreateBaselineDialog();
+    });
+  },
+};

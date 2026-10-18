@@ -349,6 +349,7 @@
         <a href="#checkout">Checkout</a>
         <a href="#checkin">Check In</a>
         <a href="#revise">Revise</a>
+        <a href="#baselines">Baselines</a>
         <a href="#remove">Remove &amp; cleanup</a>
         <a href="#watch">Watch &amp; email</a>
         <a href="#details">Details &amp; history</a>
@@ -753,6 +754,33 @@ END</pre>
           <li>Moving the product back to <strong>Under Change</strong> or <strong>In Work</strong> leaves its files Released; each one needs a Revise before it can be edited.</li>
           <li>Administrators can choose <strong>Also set the Released files back to In Work (undo the release)</strong> when promoting to In Work or Pre-Work, for example after a release by mistake.</li>
         </ul>
+      </section>
+
+      <section id="baselines">
+        <h2>Baselines</h2>
+        <p>A <strong>baseline</strong> is an exact, frozen snapshot of a product: the version of <em>every</em> file at the moment you create it. Use it for a design review, a customer build or any configuration you must be able to name again later.</p>
+        <div class="grid-2">
+          <article class="tile">
+            <h3>It never changes</h3>
+            <p>Check-ins and new revisions do not alter a baseline. If <code>shaft.prt</code> was A.2 when you created it, the baseline still says A.2 after A.3 or B.1 exist.</p>
+          </article>
+          <article class="tile">
+            <h3>It keeps its versions</h3>
+            <p>While a baseline holds a file, <strong>Remove from Product</strong> is refused, and so are Compact vault history and Rebuild file list. The message names the baselines.</p>
+          </article>
+        </div>
+        <h3>Create a baseline</h3>
+        <div class="panel">
+          <ol class="steps">
+            <li>Open the product and choose the <strong>Baselines</strong> tab (or click the <strong>N Baselines</strong> chip).</li>
+            <li>Choose <strong>Create Baseline…</strong>. You need the Create baseline permission; everyone with access can view the list.</li>
+            <li>Enter a <strong>name</strong> (unique in the product) and an optional description, then <strong>Create Baseline</strong>.</li>
+            <li>It appears in the list as <strong>Finalized</strong> with how many files it holds.</li>
+          </ol>
+        </div>
+        <div class="callout">
+          A baseline records each file’s last <em>checked-in</em> version. A file that is checked out or modified on your PC is captured as it was before your edits.
+        </div>
       </section>
 
       <section id="remove">

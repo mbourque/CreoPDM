@@ -45,6 +45,7 @@ from creopdm.models.object import EngineeringObject
 from creopdm.models.parameter import Parameter
 from creopdm.models.product import Product
 from creopdm.models.revise_operation import ReviseOperation
+from creopdm.services.baseline_guard import ensure_objects_not_pinned
 from creopdm.models.version import ObjectVersion
 from creopdm.product_state import ensure_product_allows
 from creopdm.services.activity_service import ActivityService
@@ -293,6 +294,9 @@ class ObjectService:
         if product is not None:
             session.refresh(product)
         ensure_product_allows(product, "remove", action="remove files")
+        # Versions a baseline pins are never destroyed (VERSION_REFERENCED_BY_BASELINE); refuse
+        # before anything is untracked so the message reaches the user unchanged.
+        ensure_objects_not_pinned(session, [obj.id], action=f"remove {obj.filename}")
         user = self._users.get_current_user()
         filename = obj.filename
         relative = obj.relative_path
@@ -363,6 +367,9 @@ class ObjectService:
     ) -> list[dict[str, str]]:
         product = objects[0].product
         ensure_product_allows(product, "remove", action="remove files")
+        ensure_objects_not_pinned(
+            session, [obj.id for obj in objects], action="remove these files"
+        )
         user = self._users.get_current_user()
         relatives = [obj.relative_path.replace("\\", "/") for obj in objects]
         repo = self._vault(product)

@@ -2167,10 +2167,14 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
                 for p in db.scalars(select(Permission)).all()
                 if p.id in perm_ids
             }
+    # Viewers browse products and files, and may see (not create) baselines.
     assert keys_by_role[BuiltinRole.VIEWER.value] == {
         PERMISSION_PRODUCTS_VIEW,
         PERMISSION_OBJECTS_VIEW,
+        "baselines.view",
     }
+    assert "baselines.create" not in keys_by_role[BuiltinRole.VIEWER.value]
+    assert "baselines.create" in keys_by_role[BuiltinRole.ENGINEER.value]
     assert PERMISSION_PRODUCTS_VIEW in keys_by_role[BuiltinRole.ENGINEER.value]
     assert PERMISSION_OBJECTS_VIEW in keys_by_role[BuiltinRole.ENGINEER.value]
     assert PERMISSION_OBJECTS_CHECKOUT in keys_by_role[BuiltinRole.ENGINEER.value]
@@ -3168,6 +3172,8 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
 
     from creopdm.auth_constants import (
         BUILTIN_PERMISSIONS,
+        PERMISSION_BASELINES_CREATE,
+        PERMISSION_BASELINES_VIEW,
         PERMISSION_EMAIL_MANAGE,
         PERMISSION_OBJECTS_ADD,
         PERMISSION_OBJECTS_CHECKIN,
@@ -3449,6 +3455,11 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             ),
             PERMISSION_OBJECTS_REVISE: auth_client.get(
                 f"/api/objects/{object_id}/revise-eligibility"
+            ),
+            PERMISSION_BASELINES_VIEW: auth_client.get(f"/api/products/{product_id}/baselines"),
+            PERMISSION_BASELINES_CREATE: auth_client.post(
+                f"/api/products/{product_id}/baselines",
+                json={"name": f"Probe {username}"},
             ),
             PERMISSION_OBJECTS_METADATA: auth_client.post(
                 f"/api/objects/{object_id}/creo-metadata",

@@ -132,6 +132,9 @@
       <li><button type="button" class="metric" data-filter="other" data-mode="off" title="Filter to files that are not Creo models and select them. Click again to clear."><strong>{{ status.other }}</strong> Other</button></li>
       <li><button type="button" class="metric" data-filter="modified" data-mode="off" title="Filter to modified files in the current group and select them. Click again to clear."><strong>{{ status.modified | default(0) }}</strong> Modified</button></li>
       <li><button type="button" class="metric" data-filter="checked_out" data-mode="off" title="Filter to checked out files in the current group and select them. Click again to clear."><strong>{{ status.checked_out }}</strong> Checked out</button></li>
+      {% if can_view_baselines %}
+      <li id="baselines-pill-item"{% if not baseline_count|default(0) %} hidden{% endif %}><button type="button" class="metric-link" data-tab-link="baselines" title="Open the Baselines tab: exact snapshots of this product."><strong id="baselines-pill-count">{{ baseline_count|default(0) }}</strong> Baselines</button></li>
+      {% endif %}
     </ul>
     {% endif %}
     <p class="muted small" id="selection-summary">&nbsp;</p>
@@ -141,6 +144,9 @@
       <button type="button" class="tab" data-tab="checked-out">{% if checkout_count|default(0) %}Checked out · {{ checkout_count }}{% else %}Checked out{% endif %}</button>
       <button type="button" class="tab" data-tab="modified">{% if pending_saves|default(0) %}Modified · {{ pending_saves }}{% else %}Modified{% endif %}</button>
       <button type="button" class="tab" data-tab="changes">{% if new_workspace_files|default(0) %}New files · {{ new_workspace_files }}{% else %}New files{% endif %}</button>
+      {% if can_view_baselines %}
+      <button type="button" class="tab" data-tab="baselines" id="baselines-tab">{% if baseline_count|default(0) %}Baselines · {{ baseline_count }}{% else %}Baselines{% endif %}</button>
+      {% endif %}
     </div>
 
     <section class="tab-panel" id="panel-files" data-folder="{{ current_folder }}">
@@ -385,6 +391,35 @@
         </table>
       </div>
     </section>
+
+    {% if can_view_baselines %}
+    <section class="tab-panel" id="panel-baselines" data-product="{{ selected.uuid }}" hidden>
+      <div class="baselines-head">
+        <p class="muted small">A baseline is an exact, frozen snapshot of this product: the version of every file at the moment it was created. Later check-ins and revisions never change it.</p>
+        {% if can_create_baselines %}
+        <button type="button" class="btn btn-primary" id="create-baseline-btn"
+                title="Capture the exact current version of every file in this product.">Create Baseline…</button>
+        {% endif %}
+      </div>
+      <div class="table-wrap">
+        <table class="grid" id="baselines-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Members</th>
+              <th>Created</th>
+              <th>Created by</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="empty-row"><td colspan="6">Open this tab to load baselines.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
     {% else %}
     <div class="hero">
       <h1>{{ app_name }}</h1>
@@ -708,6 +743,33 @@
     </div>
   </form>
 </dialog>
+
+{% if can_create_baselines and selected %}
+<dialog id="baseline-dialog" class="dialog">
+  <form method="dialog" id="baseline-form">
+    <h2>Create Baseline</h2>
+    <label>Name
+      <input id="baseline-name" name="name" type="text" required maxlength="255" autocomplete="off"
+             placeholder="Design Review 01">
+    </label>
+    <label>Description <span class="muted small">(optional)</span>
+      <textarea id="baseline-description" name="description" rows="3" maxlength="2000"
+                placeholder="Configuration used for the October design review."></textarea>
+    </label>
+    <dl class="revise-facts">
+      <dt>Source</dt><dd>Current product configuration</dd>
+      <dt>Product</dt><dd>{{ selected.name }}</dd>
+      <dt>Files</dt><dd id="baseline-file-count">—</dd>
+    </dl>
+    <p class="muted small">Each file is captured at its exact current checked-in version. Files that are checked out or modified are recorded at their last checked-in version. A baseline cannot be changed afterwards.</p>
+    <p class="error" id="baseline-error" hidden></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn" id="baseline-cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" id="baseline-confirm">Create Baseline</button>
+    </div>
+  </form>
+</dialog>
+{% endif %}
 
 <dialog id="checkin-dialog" class="dialog">
   <form method="dialog" id="checkin-form">

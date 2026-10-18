@@ -293,6 +293,28 @@ class ReviseEligibilityResponse(BaseModel):
     lifecycle_state: str
 
 
+class BaselineCreateRequest(BaseModel):
+    """Name and description only: the server resolves the exact configuration itself."""
+
+    name: str = ""
+    description: str | None = None
+    # Client-made id for one logical create. A retry with the same id returns the same baseline.
+    operation_id: str | None = Field(default=None, max_length=64)
+
+
+class BaselineResponse(BaseModel):
+    uuid: str
+    product_uuid: str
+    name: str
+    description: str | None = None
+    baseline_type: str
+    status: str
+    member_count: int
+    created_by: str
+    created_at: datetime | None = None
+    finalized_at: datetime | None = None
+
+
 class ReviseRequest(BaseModel):
     """Only the reason comes from the client; the server chooses the source and the revision."""
 

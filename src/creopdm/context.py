@@ -11,6 +11,7 @@ from creopdm.config import AppSettings, ConfigManager
 from creopdm.creo.base import CreoConnector
 from creopdm.services.activity_service import ActivityService
 from creopdm.services.ai_snapshot_service import AiSnapshotService
+from creopdm.services.baseline_service import BaselineService
 from creopdm.services.checkin_service import CheckinService
 from creopdm.services.checkout_service import CheckoutService
 from creopdm.services.creo_service import CreoService
@@ -51,6 +52,7 @@ class AppContext:
     checkouts: CheckoutService
     checkins: CheckinService
     revisions: ReviseService
+    baselines: BaselineService
     creo_service: CreoService
     metadata: MetadataService
     ai_snapshots: AiSnapshotService

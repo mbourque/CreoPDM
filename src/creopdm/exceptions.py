@@ -117,6 +117,30 @@ class ReviseRevisionSchemeError(CreoPDMError):
     http_status = 409
 
 
+class BaselineNotFoundError(CreoPDMError):
+    code = "BASELINE_NOT_FOUND"
+    http_status = 404
+
+
+class BaselineNameConflictError(CreoPDMError):
+    code = "BASELINE_NAME_CONFLICT"
+    http_status = 409
+
+
+class BaselineEmptyError(CreoPDMError):
+    """A product with no checked-in files has nothing to capture."""
+
+    code = "BASELINE_EMPTY"
+    http_status = 409
+
+
+class BaselineReferencedError(CreoPDMError):
+    """An exact version (or the history holding it) is kept by a baseline."""
+
+    code = "VERSION_REFERENCED_BY_BASELINE"
+    http_status = 409
+
+
 class WorkspaceConflictError(CreoPDMError):
     code = "WORKSPACE_CONFLICT"
     http_status = 409

@@ -11,6 +11,7 @@ Feature bodies live under ``static/js/`` and load via ``ensureModule(name)``:
 - ``open.js`` — Open chooser, prepare, File > Open trail
 - ``checkout.js`` — Checkout / Undo / Force Undo
 - ``checkin.js`` — Check In / Add selected dialog + submit
+- ``baselines.js`` — Baselines tab list + Create Baseline dialog
 
 Folder list, selection, ``syncToolbar``, and metrics stay in ``app.js``
 (too coupled for a ``files.js`` split).
@@ -36,6 +37,7 @@ CREO_WORKSPACE_JS = JS_DIR / "creo_workspace.js"
 OPEN_JS = JS_DIR / "open.js"
 CHECKOUT_JS = JS_DIR / "checkout.js"
 CHECKIN_JS = JS_DIR / "checkin.js"
+BASELINES_JS = JS_DIR / "baselines.js"
 
 # app.js first so `_between` start markers keep resolving to the shell wrappers
 # unless the marker only exists in a feature module.
@@ -49,6 +51,7 @@ CLIENT_JS_FILES = (
     OPEN_JS,
     CHECKOUT_JS,
     CHECKIN_JS,
+    BASELINES_JS,
 )
 
 

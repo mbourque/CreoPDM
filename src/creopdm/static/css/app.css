@@ -1426,6 +1426,20 @@ button.forgot-password-btn,
 }
 .dialog form { display: flex; flex-direction: column; gap: 0.7rem; padding: 1.1rem; }
 .dialog h2 { margin: 0; }
+.metric-link {
+  appearance: none;
+  -webkit-appearance: none;
+  background: white; border: 1px solid var(--line); border-radius: 999px;
+  padding: 0.28rem 0.7rem; box-shadow: var(--shadow); font-size: 0.82rem;
+  cursor: pointer; color: inherit; user-select: none; position: relative; z-index: 2;
+}
+.metric-link * { pointer-events: none; }
+.metric-link:hover { border-color: var(--accent-2); }
+.baselines-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  margin: 0.2rem 0 0.6rem;
+}
+.baselines-head p { margin: 0; max-width: 46rem; }
 .revision-group-row th { text-align: left; background: #eef2f6; color: #3f4d5a; font-size: 0.82rem; padding: 0.35rem 0.75rem; }
 .revise-warning { margin: 0; padding: 0.5rem 0.7rem; border-radius: 6px; background: #fff7e0; border: 1px solid #e8cf85; color: #6b5200; font-size: 0.88rem; }
 .revise-warning[hidden] { display: none; }
