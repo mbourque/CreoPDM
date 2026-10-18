@@ -304,7 +304,7 @@ def test_admin_baselines_page_is_wired():
     admin_hub = (ROOT / "src" / "creopdm" / "templates" / "admin.html").read_text(encoding="utf-8")
     assert 'href="/admin/baselines"' not in admin_hub and "can_admin_baselines or" in admin_hub
     script = (ROOT / "src" / "creopdm" / "static" / "js" / "admin_baselines.js").read_text(encoding="utf-8")
-    assert "window.__creopdmModules.admin_baselines" in script and "init() {" in script
+    assert "window.__creopdmModules.admin_baselines" in script and "init(shell) {" in script
     app_py = (ROOT / "src" / "creopdm" / "app.py").read_text(encoding="utf-8")
     assert '"admin_baselines"' in app_py
     boot = (ROOT / "src" / "creopdm" / "static" / "js" / "app.js").read_text(encoding="utf-8")

@@ -508,6 +508,7 @@ class ProductService:
         old_name = product.name
         state_changed = new_state is not None and new_state != old_state
         releasing = state_changed and new_state == ProductState.RELEASED.value
+        release = None  # set below when this promotion records a release (R1, R2, ...)
         reopening = bool(
             reopen_released_files
             and state_changed
