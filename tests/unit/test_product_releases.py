@@ -287,6 +287,9 @@ def test_promote_page_offers_the_release_baseline_ticked_by_default():
     # The tag option sits under the baseline option, ticked by default, hidden until it applies.
     assert 'name="release_tag" id="promote-tag" value="1" checked' in template
     assert 'id="promote-tag-wrap" hidden' in template
+    # The two release tick boxes sit close together (the form's row spacing is too loose for them).
+    css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    assert "#promote-tag-wrap { margin-top: -0.75rem; }" in css
     script = (ROOT / "src" / "creopdm" / "static" / "js" / "admin.js").read_text(encoding="utf-8")
     assert "syncReleaseChoice" in script and 'stateSel.value === "RELEASED"' in script
     assert "promote-tag-wrap" in script and "const showTag = show && Boolean(box?.checked);" in script

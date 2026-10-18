@@ -1487,6 +1487,10 @@ button.forgot-password-btn,
 #baseline-compare-table tr.compare-version_changed td { background: #fff8e8; }
 #baseline-compare-table tr.compare-added td { background: #eefaf0; }
 #baseline-compare-table tr.compare-removed td { background: #fff1f0; }
+/* The release options on Promote Products sit together: the form's own row spacing (gap + label
+   margin) is too loose for two tick boxes that belong to one choice. */
+#promote-release-wrap { margin-top: 0; }
+#promote-tag-wrap { margin-top: -0.75rem; }
 .baselines-archived-toggle { margin: 0; font-size: 0.88rem; }
 #baselines-table tr.is-archived td { color: var(--muted, #5b6b7a); }
 .baseline-admin-stats { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.6rem 0; }
