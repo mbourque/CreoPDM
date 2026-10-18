@@ -289,6 +289,8 @@ def test_admin_baselines_page_is_wired():
     assert "/api/admin/baselines" in script and "/integrity" in script
     assert "data-archive" in script and "data-restore" in script and "deep=" in script
     assert "function applyPill" in script and "function syncPills" in script and "healthFilter" in script
+    # Clicking the active pill again switches it off (and keeps the search text).
+    assert "const switchingOff = name !== \"total\" && name === activePill();" in script
     app_js = (ROOT / "src" / "creopdm" / "static" / "js" / "app.js").read_text(encoding="utf-8")
     assert 'window.location.hash === "#baselines"' in app_js  # the admin link opens the tab
 

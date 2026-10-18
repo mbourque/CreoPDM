@@ -72,45 +72,51 @@ window.__creopdmModules.admin_baselines = {
     $("#bstat-error").textContent = reports.length ? String(reports.filter((r) => r.status === "ERROR").length) : "—";
   }
 
-  /** The pills are filters: the active one is highlighted. */
-  function syncPills() {
+  /** Which pill matches the current filters ("" when the combination matches none of them). */
+  function activePill() {
     const type = $("#baseline-admin-type")?.value || "";
     const status = $("#baseline-admin-status")?.value || "";
     const q = $("#baseline-admin-q")?.value.trim() || "";
-    let active = "";
-    if (healthFilter) active = healthFilter.toLowerCase();
-    else if (status === "FINALIZED" && !type) active = "finalized";
-    else if (status === "ARCHIVED" && !type) active = "archived";
-    else if (type === "RELEASE" && !status) active = "release";
-    else if (type === "MANUAL" && !status) active = "manual";
-    else if (!type && !status && !q) active = "total";
+    if (healthFilter) return healthFilter.toLowerCase();
+    if (status === "FINALIZED" && !type) return "finalized";
+    if (status === "ARCHIVED" && !type) return "archived";
+    if (type === "RELEASE" && !status) return "release";
+    if (type === "MANUAL" && !status) return "manual";
+    if (!type && !status && !q) return "total";
+    return "";
+  }
+
+  /** The pills are filters: the active one is highlighted. */
+  function syncPills() {
+    const active = activePill();
     document.querySelectorAll(".baseline-pill").forEach((pill) => {
       pill.classList.toggle("is-active", pill.getAttribute("data-pill") === active);
     });
   }
 
+  /** Click a pill to filter; click the active one again to switch it off (the search text stays). */
   function applyPill(name) {
     const type = $("#baseline-admin-type");
     const status = $("#baseline-admin-status");
     const search = $("#baseline-admin-q");
-    if (name === "warning" || name === "error") {
-      if (!health.size) {
-        showNote("Run the integrity check first: this shows the baselines whose last check found a " + name + ".");
-        return;
-      }
-      showNote("");
-      healthFilter = healthFilter === name.toUpperCase() ? "" : name.toUpperCase();
-      if (type) type.value = "";
-      if (status) status.value = "";
-      void load(); // all baselines again, then the health filter is applied on top
+    const switchingOff = name !== "total" && name === activePill();
+    if ((name === "warning" || name === "error") && !switchingOff && !health.size) {
+      showNote("Run the integrity check first: this shows the baselines whose last check found a " + name + ".");
       return;
     }
-    healthFilter = "";
     showNote("");
-    if (type) type.value = name === "release" ? "RELEASE" : name === "manual" ? "MANUAL" : "";
-    if (status) status.value = name === "finalized" ? "FINALIZED" : name === "archived" ? "ARCHIVED" : "";
+    healthFilter = "";
+    if (type) type.value = "";
+    if (status) status.value = "";
     if (name === "total" && search) search.value = "";
-    void load();
+    if (!switchingOff && name !== "total") {
+      if (name === "warning" || name === "error") healthFilter = name.toUpperCase();
+      else if (name === "release") type.value = "RELEASE";
+      else if (name === "manual") type.value = "MANUAL";
+      else if (name === "finalized") status.value = "FINALIZED";
+      else if (name === "archived") status.value = "ARCHIVED";
+    }
+    void load(); // all matching baselines again, then the health filter is applied on top
   }
 
   function render() {
