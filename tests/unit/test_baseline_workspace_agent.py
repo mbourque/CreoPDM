@@ -245,3 +245,87 @@ def test_an_empty_or_malformed_manifest_is_refused(agent):
     no_hash = _manifest({"a.prt": b"x"})
     no_hash["files"][0]["sha256"] = ""
     assert _add(client, no_hash).status_code == 400
+
+
+# ---- Creo's Save writes a NEW numbered file, so the folders are locked too (Windows) ----------
+
+
+USER = "PC" + chr(92) + "engineer"
+
+
+class _Run:
+    def __init__(self, calls, returncode=0):
+        self.calls = calls
+        self.returncode = returncode
+
+    def __call__(self, command, **_kwargs):
+        self.calls.append(list(command))
+
+        class _Result:
+            stdout = ""
+            stderr = "" if self.returncode == 0 else "Access is denied."
+
+        _Result.returncode = self.returncode
+        return _Result()
+
+
+def _windows(monkeypatch, calls, returncode=0):
+    monkeypatch.setattr("creopdm_agent.baseline_workspace._is_windows", lambda: True)
+    monkeypatch.setattr("creopdm_agent.baseline_workspace._windows_user", lambda: USER)
+    monkeypatch.setattr("creopdm_agent.baseline_workspace.subprocess.run", _Run(calls, returncode))
+
+
+def test_folders_are_locked_so_creo_cannot_save_a_new_numbered_file(agent, monkeypatch):
+    client, root, served, _seen = agent
+    calls: list[list[str]] = []
+    _windows(monkeypatch, calls)
+    files = {"shaft.prt": b"shaft", "sub/pin.prt": b"pin"}
+    _serve(served, files)
+
+    response = _add(client, _manifest(files))
+    assert response.status_code == 200, response.text
+    assert response.json()["folder_locked"] is True
+    denies = [c for c in calls if "/deny" in c]
+    locked = {Path(c[1]).relative_to(_baseline_root(root).resolve()).as_posix() for c in denies}
+    assert locked == {".", "sub"}  # the baseline folder and its subfolder
+    assert all(c[-1] == f"{USER}:(WD,AD)" for c in denies)
+    # Installing again opens the folders only while files are written, then locks them again.
+    calls.clear()
+    assert _add(client, _manifest(files)).status_code == 200
+    kinds = ["deny" if "/deny" in c else "remove" for c in calls]
+    assert kinds[0] == "remove" and kinds[-1] == "deny"
+
+
+def test_removing_a_baseline_unlocks_its_folders_first(agent, monkeypatch):
+    client, root, served, _seen = agent
+    calls: list[list[str]] = []
+    _windows(monkeypatch, calls)
+    _serve(served, FILES)
+    assert _add(client, _manifest(FILES)).status_code == 200
+    calls.clear()
+    folder = {"product_id": "p1", "vault_folder": "gearbox", "folder": FOLDER}
+    assert client.post("/baseline-workspace/remove", json=folder).json()["removed"] is True
+    assert calls and all("/remove:d" in c for c in calls)
+    assert not _baseline_root(root).exists()
+
+
+def test_a_failed_lock_does_not_fail_the_install_but_is_reported(agent, monkeypatch):
+    client, root, served, _seen = agent
+    calls: list[list[str]] = []
+    _windows(monkeypatch, calls, returncode=5)
+    _serve(served, FILES)
+    response = _add(client, _manifest(FILES))
+    assert response.status_code == 200, response.text
+    assert response.json()["folder_locked"] is False
+    assert (_baseline_root(root) / "shaft.prt").read_bytes() == b"shaft-B.2"
+
+
+def test_nothing_is_locked_off_windows(agent, monkeypatch):
+    client, _root, served, _seen = agent
+    calls: list[list[str]] = []
+    monkeypatch.setattr("creopdm_agent.baseline_workspace._is_windows", lambda: False)
+    monkeypatch.setattr("creopdm_agent.baseline_workspace.subprocess.run", _Run(calls))
+    _serve(served, FILES)
+    response = _add(client, _manifest(FILES))
+    assert response.status_code == 200 and response.json()["folder_locked"] is False
+    assert calls == []

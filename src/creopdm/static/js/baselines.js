@@ -696,7 +696,10 @@ window.__creopdmModules.baselines = {
             resultBox.hidden = false;
             resultBox.textContent =
               `Installed ${done.files_total} file${done.files_total === 1 ? "" : "s"} ` +
-              `(${done.downloaded} downloaded, ${done.kept} already correct), read-only, in ${done.path}.${extra}`;
+              `(${done.downloaded} downloaded, ${done.kept} already correct), read-only, in ${done.path}.${extra}` +
+              (done.folder_locked
+                ? " The folder is locked, so Creo cannot save new files into it."
+                : " The folder could not be locked, so Creo may still save new numbered files into it.");
           }
           $("#baseline-ws-folder").textContent = done.path || "";
           if (wd?.checked && shell.setCreoWorkingDirectory) {

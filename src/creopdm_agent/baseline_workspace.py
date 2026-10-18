@@ -14,6 +14,7 @@ import logging
 import os
 import shutil
 import stat
+import subprocess
 import time
 import uuid
 from pathlib import Path
@@ -61,6 +62,73 @@ def _set_writable(path: Path) -> None:
         os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
     except OSError:
         pass
+
+
+def _is_windows() -> bool:
+    return os.name == "nt"
+
+
+def _windows_user() -> str:
+    try:
+        out = subprocess.run(
+            ["whoami"], capture_output=True, text=True, check=False,
+            creationflags=0x08000000,  # CREATE_NO_WINDOW: no console flash from the tray
+        )
+        name = (out.stdout or "").strip()
+        if name:
+            return name
+    except OSError:
+        pass
+    domain = os.environ.get("USERDOMAIN", "")
+    user = os.environ.get("USERNAME", "")
+    return f"{domain}{chr(92)}{user}" if domain and user else user
+
+
+def _icacls(*args: str) -> bool:
+    try:
+        result = subprocess.run(
+            ["icacls", *args], capture_output=True, text=True, check=False,
+            creationflags=0x08000000,
+        )
+    except OSError as exc:
+        logger.warning("icacls could not run: %s", exc)
+        return False
+    if result.returncode != 0:
+        logger.warning("icacls %s failed: %s", " ".join(args), (result.stderr or result.stdout).strip())
+    return result.returncode == 0
+
+
+def _directories(dest_root: Path) -> list[Path]:
+    if not dest_root.is_dir():
+        return []
+    return [dest_root, *sorted(p for p in dest_root.rglob("*") if p.is_dir())]
+
+
+def lock_directories(dest_root: Path) -> bool:
+    """Stop NEW files being created in the baseline folder (Windows).
+
+    A read-only file is not enough: Creo's Save never overwrites, it writes a new numbered
+    version (``shaft.prt.2``) beside the original, and a read-only file does not stop that. So the
+    folders themselves refuse "add file" and "add subfolder" for this user. Existing files can
+    still be read and opened. Returns True when every folder was locked (always False off
+    Windows, where the read-only flags are all there is).
+    """
+    if not _is_windows():
+        return False
+    user = _windows_user()
+    ok = bool(user)
+    for directory in _directories(dest_root):
+        ok = _icacls(str(directory), "/deny", f"{user}:(WD,AD)") and ok
+    return ok
+
+
+def unlock_directories(dest_root: Path) -> None:
+    """Lift the folder lock (before replacing files or deleting the folder)."""
+    if not _is_windows():
+        return
+    user = _windows_user()
+    for directory in _directories(dest_root):
+        _icacls(str(directory), "/remove:d", user)
 
 
 def baseline_dir(root: Path, product_key: str, folder: str) -> Path:
@@ -211,7 +279,8 @@ def reconstruct(
                 f"({'; '.join(f['file'] + ' — ' + f['reason'] for f in failures[:3])}).",
                 failures=failures,
             )
-        # Everything verified: now (and only now) install.
+        # Everything verified: now (and only now) install. The folder lock is lifted just for this.
+        unlock_directories(dest_root)
         for staged, target in downloaded:
             target.parent.mkdir(parents=True, exist_ok=True)
             if target.exists():
@@ -241,6 +310,8 @@ def reconstruct(
         )
     finally:
         shutil.rmtree(stage, ignore_errors=True)
+        # Locked again whatever happened: a half-finished install must not leave it open.
+        locked = lock_directories(dest_root) if (dest_root / MARKER_NAME).is_file() else False
 
     expected = {target.relative_to(dest_root).as_posix() for _i, target, _d in plan}
     return {
@@ -252,6 +323,7 @@ def reconstruct(
         "replaced": len(conflicts),
         "extras": _extras(dest_root, expected),
         "read_only": True,
+        "folder_locked": locked,
     }
 
 
@@ -290,5 +362,6 @@ def remove(root: Path, product_key: str, folder: str) -> dict:
         raise BaselineWorkspaceError(
             409, "That folder was not installed as a baseline, so it was not removed.", path=str(dest_root)
         )
+    unlock_directories(dest_root)
     move_to_trash(dest_root)
     return {"removed": True, "path": str(dest_root)}
