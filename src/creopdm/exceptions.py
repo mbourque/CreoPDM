@@ -127,6 +127,13 @@ class BaselineNameConflictError(CreoPDMError):
     http_status = 409
 
 
+class BaselineImmutableError(CreoPDMError):
+    """A finalized baseline's membership (or snapshot) can never be changed."""
+
+    code = "BASELINE_IMMUTABLE"
+    http_status = 409
+
+
 class BaselineEmptyError(CreoPDMError):
     """A product with no checked-in files has nothing to capture."""
 

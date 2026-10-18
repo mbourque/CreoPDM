@@ -14,10 +14,30 @@ from sqlalchemy import (
     event,
     func,
     inspect,
+    select,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from creopdm.database.base import Base
+from creopdm.exceptions import BaselineImmutableError
+
+STATUS_DRAFT = "DRAFT"  # only inside the one transaction that captures a baseline
+STATUS_FINALIZED = "FINALIZED"
+STATUS_ARCHIVED = "ARCHIVED"
+
+IMMUTABLE_MESSAGE = (
+    "A finalized baseline can never be changed. Create a new baseline for a different "
+    "configuration."
+)
+# Once finalized these never change (the name and description are labels and may).
+_FROZEN_BASELINE_FIELDS = (
+    "product_id",
+    "baseline_type",
+    "member_count",
+    "created_by",
+    "finalized_by",
+    "finalized_at",
+)
 
 
 class Baseline(Base):
@@ -52,6 +72,22 @@ def _baseline_uuid_never_changes(_mapper, _connection, target: Baseline) -> None
         raise ValueError("A baseline's uuid is its identity and can never be changed.")
 
 
+@event.listens_for(Baseline, "before_update")
+def _finalized_baseline_is_frozen(_mapper, _connection, target: Baseline) -> None:
+    """After finalization: no change to what it captured, who made it, or its type, and it can
+    only ever move on to ARCHIVED (never back to a draft)."""
+    state = inspect(target)
+    status = state.attrs.status.history
+    was = status.deleted[0] if status.deleted else target.status
+    if was not in (STATUS_FINALIZED, STATUS_ARCHIVED):
+        return
+    for field in _FROZEN_BASELINE_FIELDS:
+        if state.attrs[field].history.has_changes():
+            raise BaselineImmutableError(IMMUTABLE_MESSAGE, details={"field": field})
+    if status.has_changes() and target.status not in (STATUS_FINALIZED, STATUS_ARCHIVED):
+        raise BaselineImmutableError(IMMUTABLE_MESSAGE, details={"field": "status"})
+
+
 class BaselineMember(Base):
     """One exact object version in a baseline. The ids are authoritative.
 
@@ -77,3 +113,22 @@ class BaselineMember(Base):
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     baseline: Mapped[Baseline] = relationship(back_populates="members")
+
+
+def _parent_is_finalized(connection, baseline_id: int) -> bool:
+    status = connection.execute(
+        select(Baseline.__table__.c.status).where(Baseline.__table__.c.id == baseline_id)
+    ).scalar()
+    return status in (STATUS_FINALIZED, STATUS_ARCHIVED)
+
+
+def _guard_member(_mapper, connection, target: BaselineMember) -> None:
+    """Members may be written only while the baseline is being captured (DRAFT, inside the one
+    transaction that finalizes it). After that: no add, no remove, no replaced version."""
+    if _parent_is_finalized(connection, target.baseline_id):
+        raise BaselineImmutableError(IMMUTABLE_MESSAGE, details={"baseline_id": target.baseline_id})
+
+
+event.listen(BaselineMember, "before_insert", _guard_member)
+event.listen(BaselineMember, "before_update", _guard_member)
+event.listen(BaselineMember, "before_delete", _guard_member)

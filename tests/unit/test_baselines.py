@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from creopdm.app import build_context, create_app
 from creopdm.auth_constants import (
@@ -530,9 +530,12 @@ def test_reopening_a_baseline_ignores_current_pointers_names_and_stored_strings(
         obj.iteration = 99
         # ... and the baseline's own copied strings are tampered with.
         baseline = db.scalar(select(Baseline).where(Baseline.uuid == created["uuid"]))
-        member = next(m for m in baseline.members if m.object_id == obj.id)
-        member.revision = "Q"
-        member.iteration = 7
+        # A direct SQL statement stands in for corruption: the ORM refuses this edit (Story 4).
+        db.execute(
+            update(BaselineMember)
+            .where(BaselineMember.baseline_id == baseline.id, BaselineMember.object_id == obj.id)
+            .values(revision="Q", iteration=7)
+        )
         db.commit()
 
     after = _members(auth_client, created["uuid"])["shaft.prt"]  # name as captured
@@ -574,7 +577,7 @@ def test_baseline_contents_dialog_is_wired():
     assert "data-open-baseline" in module and "OUT_OF_DATE" in module
     # The page-wide click handler soft-navigates every <a href>; "#" is the current page, so a
     # link here reloaded the Files tab instead of opening the dialog.
-    assert '<a href="#"' not in module
+    assert '<a href="#" class' not in module and '<a class="baseline-open"' not in module
     # Wording and font follow the Files list: "In Work" (not "In work"), sans-serif names.
     assert "function stateLabel" in module and "stateLabel(m.lifecycle_state)" in module
     assert "baseline-name-cell" in module and 'class="filename-cell"' not in module
@@ -584,3 +587,169 @@ def test_baseline_contents_dialog_is_wired():
     page = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     assert 'id="baseline-members-dialog"' in page and 'id="baseline-members-table"' in page
     assert "this baseline is immutable" in page
+
+
+# ---- Story 4: a finalized baseline is immutable ---------------------------------------------
+
+
+def _baseline_row(db, uuid):
+    return db.scalar(select(Baseline).where(Baseline.uuid == uuid))
+
+
+def test_a_new_baseline_is_finalized_with_all_members_in_one_step(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+    created = _create(auth_client, product).json()
+    assert created["status"] == "FINALIZED" and created["member_count"] == 3
+    with auth_ctx.session_factory() as db:
+        baseline = _baseline_row(db, created["uuid"])
+        assert baseline.status == "FINALIZED"
+        assert baseline.finalized_at is not None and baseline.finalized_by == "admin"
+        assert len(baseline.members) == baseline.member_count == 3
+
+
+def test_the_model_refuses_to_add_remove_or_change_members_after_finalization(
+    auth_client, auth_ctx
+):
+    from creopdm.exceptions import BaselineImmutableError
+
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client)
+    created = _create(auth_client, product).json()
+    with auth_ctx.session_factory() as db:
+        baseline = _baseline_row(db, created["uuid"])
+        first = baseline.members[0]
+
+        first.revision = "Z"
+        with pytest.raises(BaselineImmutableError):
+            db.flush()
+        db.rollback()
+
+        baseline = _baseline_row(db, created["uuid"])
+        db.delete(baseline.members[0])
+        with pytest.raises(BaselineImmutableError):
+            db.flush()
+        db.rollback()
+
+        baseline = _baseline_row(db, created["uuid"])
+        template = baseline.members[0]
+        db.add(
+            BaselineMember(
+                baseline_id=baseline.id,
+                object_id=template.object_id,
+                object_version_id=template.object_version_id,
+                filename="extra.prt",
+                relative_path="extra.prt",
+                object_type="PART",
+                revision="A",
+                iteration=1,
+                lifecycle_state="IN_WORK",
+                content_hash="x",
+            )
+        )
+        with pytest.raises(BaselineImmutableError):
+            db.flush()
+        db.rollback()
+
+    with auth_ctx.session_factory() as db:
+        baseline = _baseline_row(db, created["uuid"])
+        assert len(baseline.members) == 3
+        assert all(m.revision == "A" for m in baseline.members)
+
+
+def test_the_model_refuses_to_change_what_a_finalized_baseline_is(auth_client, auth_ctx):
+    from creopdm.exceptions import BaselineImmutableError
+
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+    created = _create(auth_client, product).json()
+    for field, value in (
+        ("member_count", 99),
+        ("baseline_type", "AUTOMATIC"),
+        ("created_by", "someone-else"),
+        ("finalized_by", "someone-else"),
+        ("status", "DRAFT"),
+    ):
+        with auth_ctx.session_factory() as db:
+            baseline = _baseline_row(db, created["uuid"])
+            setattr(baseline, field, value)
+            with pytest.raises(BaselineImmutableError):
+                db.flush()
+            db.rollback()
+
+    # Labels stay editable, and the only status it may move to is ARCHIVED.
+    with auth_ctx.session_factory() as db:
+        baseline = _baseline_row(db, created["uuid"])
+        baseline.description = "Reworded"
+        baseline.status = "ARCHIVED"
+        db.commit()
+    with auth_ctx.session_factory() as db:
+        baseline = _baseline_row(db, created["uuid"])
+        assert baseline.description == "Reworded" and baseline.status == "ARCHIVED"
+        assert baseline.member_count == 3 and len(baseline.members) == 3
+        baseline.status = "DRAFT"
+        with pytest.raises(BaselineImmutableError):
+            db.flush()
+        db.rollback()
+
+
+def test_the_service_has_no_way_to_change_membership(auth_client, auth_ctx):
+    from creopdm.exceptions import BaselineImmutableError
+
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+    created = _create(auth_client, product).json()
+    with auth_ctx.session_factory() as db:
+        baseline = auth_ctx.baselines.get(db, created["uuid"])
+        for call in (
+            lambda: auth_ctx.baselines.add_member(db, baseline, object()),
+            lambda: auth_ctx.baselines.remove_member(db, baseline, 1),
+            lambda: auth_ctx.baselines.replace_member_version(db, baseline, 1, 2),
+            lambda: auth_ctx.baselines.replace_members(db, baseline, []),
+        ):
+            with pytest.raises(BaselineImmutableError) as caught:
+                call()
+            assert caught.value.code == "BASELINE_IMMUTABLE"
+            assert caught.value.http_status == 409
+    with auth_ctx.session_factory() as db:
+        assert len(auth_ctx.baselines.get(db, created["uuid"]).members) == 3
+
+
+def test_the_api_offers_no_way_to_modify_a_baseline(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+    created = _create(auth_client, product).json()
+    base = f"/api/baselines/{created['uuid']}"
+    for method, path in (
+        ("post", f"{base}/members"),
+        ("put", f"{base}/members"),
+        ("patch", f"{base}/members"),
+        ("delete", f"{base}/members"),
+        ("put", base),
+        ("patch", base),
+        ("delete", base),
+        ("post", base),
+    ):
+        response = auth_client.request(method.upper(), path, json={"name": "x"})
+        assert response.status_code in (404, 405), (method, path, response.status_code)
+    assert len(_members(auth_client, created["uuid"])) == 3
+    assert auth_client.get(base).json()["name"] == "Design Review 01"
+
+
+@requires_git
+def test_a_different_configuration_needs_a_new_baseline(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client)
+    first = _create(auth_client, product, "Rev A review").json()
+    _check_in(auth_client, auth_ctx, product, objects["shaft.prt"], b"shaft-v2")
+    second = _create(auth_client, product, "Rev B review").json()
+    assert first["uuid"] != second["uuid"]
+
+    assert _members(auth_client, first["uuid"])["shaft.prt"]["iteration"] == 1
+    assert _members(auth_client, second["uuid"])["shaft.prt"]["iteration"] == 2
+
+
+def test_finalized_status_is_explained_in_the_ui():
+    module = (ROOT / "src" / "creopdm" / "static" / "js" / "baselines.js").read_text(encoding="utf-8")
+    assert "function statusHint" in module and "can never change" in module
+    assert "title=\"${esc(statusHint(item.status))}\"" in module

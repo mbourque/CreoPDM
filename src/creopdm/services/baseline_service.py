@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 from creopdm.constants import ActivityAction, LifecycleState
 from creopdm.exceptions import (
     BaselineEmptyError,
+    BaselineImmutableError,
     BaselineNameConflictError,
     BaselineNotFoundError,
     ValidationAppError,
@@ -30,6 +31,7 @@ logger = get_logger("baselines")
 NAME_MAX_LENGTH = 255
 DESCRIPTION_MAX_LENGTH = 2000
 BASELINE_TYPE_MANUAL = "MANUAL"
+STATUS_DRAFT = "DRAFT"
 STATUS_FINALIZED = "FINALIZED"
 
 
@@ -174,23 +176,28 @@ class BaselineService:
                     details={"product": product.uuid},
                 )
             now = datetime.now(timezone.utc)
+            # Capture, then finalize, inside this one transaction: members may be written only
+            # while the baseline is a draft; once finalized nothing about it can change.
             baseline = Baseline(
                 uuid=str(uuidlib.uuid4()),
                 product_id=product.id,
                 name=clean,
                 description=note,
                 baseline_type=BASELINE_TYPE_MANUAL,
-                status=STATUS_FINALIZED,
-                member_count=len(captured),
+                status=STATUS_DRAFT,
+                member_count=0,
                 created_by=user.user_name,
-                finalized_by=user.user_name,
-                finalized_at=now,
                 operation_id=op_id,
             )
             try:
                 session.add(baseline)
                 session.flush()
                 session.add_all(self._members(baseline, captured))
+                session.flush()
+                baseline.status = STATUS_FINALIZED
+                baseline.member_count = len(captured)
+                baseline.finalized_by = user.user_name
+                baseline.finalized_at = now
                 session.flush()
                 self._activities.record(
                     session,
@@ -228,6 +235,33 @@ class BaselineService:
             )
             session.refresh(baseline)
             return baseline
+
+    # ---- membership is closed once finalized -------------------------------------------
+    # A single choke point: these are the only ways code could try to change what a baseline
+    # holds, and a finalized baseline refuses all of them (the model layer enforces it too).
+
+    @staticmethod
+    def _refuse_change(baseline: Baseline) -> None:
+        raise BaselineImmutableError(
+            "A finalized baseline can never be changed. Create a new baseline for a different "
+            "configuration.",
+            details={"baseline": baseline.uuid, "status": baseline.status},
+        )
+
+    def add_member(self, session: Session, baseline: Baseline, *_args, **_kwargs) -> None:
+        self._refuse_change(baseline)
+
+    def remove_member(self, session: Session, baseline: Baseline, *_args, **_kwargs) -> None:
+        self._refuse_change(baseline)
+
+    def replace_member_version(
+        self, session: Session, baseline: Baseline, *_args, **_kwargs
+    ) -> None:
+        self._refuse_change(baseline)
+
+    def replace_members(self, session: Session, baseline: Baseline, *_args, **_kwargs) -> None:
+        """Rewrite the whole membership (also refused)."""
+        self._refuse_change(baseline)
 
     # ---- helpers -----------------------------------------------------------------------
 

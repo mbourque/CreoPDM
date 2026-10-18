@@ -38,6 +38,12 @@ window.__creopdmModules.baselines = {
       return text ? text.charAt(0).toUpperCase() + text.slice(1) : "—";
     }
 
+    function statusHint(status) {
+      return String(status || "").toUpperCase() === "FINALIZED"
+        ? "Finalized: what this baseline captured can never change. Create a new baseline for a different configuration."
+        : "";
+    }
+
     /** IN_WORK → "In Work", RELEASED → "Released": the same wording as the Files list. */
     function stateLabel(value) {
       const words = String(value || "")
@@ -81,7 +87,7 @@ window.__creopdmModules.baselines = {
               description ? `<div class="muted small">${esc(description)}</div>` : ""
             }</td>
             <td>${esc(titleCase(item.baseline_type))}</td>
-            <td>${esc(titleCase(item.status))}</td>
+            <td title="${esc(statusHint(item.status))}">${esc(titleCase(item.status))}</td>
             <td>${esc(item.member_count)}</td>
             <td title="${esc(item.created_at || "")}">${esc(formatWhen(item.created_at))}</td>
             <td>${esc(item.created_by)}</td>
