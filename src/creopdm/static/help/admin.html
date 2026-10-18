@@ -746,6 +746,8 @@
           <li>Check in / Check out, Object added or removed, Checkout cancelled or overridden (Force Undo).</li>
           <li><strong>Revision created</strong> (A.3 → B.1, with the reason) and <strong>Version restored</strong> (for example <em>Restored A.1 as D.3</em>).</li>
           <li><strong>Changes discarded</strong> when someone throws away unsaved vault changes.</li>
+          <li><strong>Metadata collected</strong>: one row for each Collect metadata run, whether started by hand or automatically after an Add, with the counts (for example <em>936 files: 930 saved, 3 failed, 3 skipped in 2 min 5 s</em>, marked <em>cancelled</em> if it was stopped). There is never one row per file, and Open and Check-in do not write one.</li>
+          <li><strong>Where Used rebuilt</strong>: one row for each Where Used run, manual or automatic, in the name of whoever started it, with the links added, files scanned and time (marked <em>cancelled</em> or <em>failed: reason</em> otherwise).</li>
           <li><strong>Product state changed</strong> with “N files released” or “N files set back to In Work”; product created, copied, updated, deleted; vault compacted; database rebuilt.</li>
           <li>Sign-in and sign-out, failed sign-in, password, role and membership changes, user created or disabled, and system-setting changes.</li>
         </ul>

@@ -2870,7 +2870,7 @@ def test_admin_hub_panel_fills_full_width():
     rebuild_handler = auth_pages.split("def admin_utilities_rebuild_product_db")[1].split(
         "\n@router."
     )[0]
-    assert "background_tasks.add_task(ctx.where_used_index.start, pid)" in rebuild_handler
+    assert "background_tasks.add_task(ctx.where_used_index.start, pid, ctx.users.get_current_user())" in rebuild_handler
     assert "ctx.where_used_index.start(pid)" not in rebuild_handler
     assert "Form POST schedules Start after the response" in script
     jobs = (

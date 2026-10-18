@@ -53,6 +53,7 @@ from creopdm.schemas.common import (
     ForgetProductResponse,
     CheckinPreviewResponse,
     ImportLocalRequest,
+    MetadataCollectSummaryRequest,
     ObjectResponse,
     ProductCreateRequest,
     ProductExportRequest,
@@ -542,6 +543,27 @@ def clear_product_creo_metadata_api(
     return ClearCreoMetadataResponse(product_id=product.uuid, versions_cleared=cleared)
 
 
+@router.post("/api/products/{product_id}/metadata-collect-summary", status_code=204)
+def record_metadata_collect_summary(
+    product_id: str,
+    payload: MetadataCollectSummaryRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> Response:
+    """Audit one finished Collect metadata run: who, which product, and the counts."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_METADATA)
+    product = load_accessible_product(request, ctx, db, product_id)
+    ctx.activities.record(
+        db,
+        ActivityAction.METADATA_COLLECTED,
+        ctx.users.get_current_user(),
+        product_id=product.id,
+        details=payload.model_dump(),
+    )
+    return Response(status_code=204)
+
+
 @router.post(
     "/api/products/{product_id}/rebuild-where-used",
     response_model=WhereUsedIndexJobResponse,
@@ -563,7 +585,7 @@ def start_rebuild_where_used(
     from creopdm.product_state import ensure_product_allows
 
     ensure_product_allows(product, "edit_metadata", action="rebuild Where Used")
-    status = ctx.where_used_index.start(product_id)
+    status = ctx.where_used_index.start(product_id, ctx.users.get_current_user())
     return _where_used_job_response(status)
 
 

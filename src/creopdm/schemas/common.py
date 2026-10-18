@@ -1397,6 +1397,18 @@ class RebuildWhereUsedResponse(BaseModel):
     parents_scanned: list[str] = Field(default_factory=list)
 
 
+class MetadataCollectSummaryRequest(BaseModel):
+    """One Collect run, reported once when it finishes (the audit log never gets a row per file)."""
+
+    total: int = Field(ge=0, le=1_000_000)
+    saved: int = Field(ge=0, le=1_000_000)
+    failed: int = Field(default=0, ge=0, le=1_000_000)
+    skipped: int = Field(default=0, ge=0, le=1_000_000)
+    left_local: int = Field(default=0, ge=0, le=1_000_000)
+    cancelled: bool = False
+    seconds: float = Field(default=0, ge=0, le=7 * 24 * 3600)
+
+
 class WhereUsedIndexJobResponse(BaseModel):
     """Background Where Used vault index job status."""
 

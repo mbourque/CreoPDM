@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from sqlalchemy import select
 
+from creopdm.constants import ActivityAction
 from creopdm.logging_setup import get_logger
 from creopdm.models.object import EngineeringObject
 from creopdm.models.product import Product
@@ -37,6 +38,8 @@ class WhereUsedIndexStatus:
     error: str | None = None
     started_at: float | None = None
     finished_at: float | None = None
+    # Who started this run (the audit row is written in their name when it finishes).
+    started_by: object | None = None
 
     @property
     def done(self) -> bool:
@@ -50,6 +53,7 @@ class WhereUsedIndexJobs:
     session_factory: sessionmaker[Session]
     metadata: MetadataService
     thumbnails: ThumbnailService | None = None
+    activities: object | None = None  # ActivityService; None = no audit (tests, internal use)
     _lock: threading.Lock = field(default_factory=threading.Lock)
     _status: dict[str, WhereUsedIndexStatus] = field(default_factory=dict)
 
@@ -71,7 +75,7 @@ class WhereUsedIndexJobs:
                 finished_at=current.finished_at,
             )
 
-    def start(self, product_uuid: str) -> WhereUsedIndexStatus:
+    def start(self, product_uuid: str, started_by: object | None = None) -> WhereUsedIndexStatus:
         start_thread = False
         run_id: float | None = None
         with self._lock:
@@ -81,6 +85,7 @@ class WhereUsedIndexJobs:
                     product_id=product_uuid,
                     state="queued",
                     started_at=time.time(),
+                    started_by=started_by,
                 )
                 self._status[product_uuid] = status
                 run_id = status.started_at
@@ -115,10 +120,50 @@ class WhereUsedIndexJobs:
             status = self._status.get(product_uuid)
             if status is None:
                 return
-            if status.state in {"queued", "running"}:
-                status.state = "cancelled"
-                status.finished_at = time.time()
-                status.error = "Cancelled."
+            if status.state not in {"queued", "running"}:
+                return
+            status.state = "cancelled"
+            status.finished_at = time.time()
+            status.error = "Cancelled."
+            cancelled_status = status
+        self._audit(product_uuid, cancelled_status, "cancelled")
+
+    def _audit(self, product_uuid: str, status: WhereUsedIndexStatus, state: str) -> None:
+        """One audit row per run (done, failed or cancelled), in the name of whoever started it.
+        Never raises: the index job must not fail because the audit row could not be written."""
+        user = status.started_by
+        if self.activities is None or user is None:
+            return
+        started = status.started_at
+        finished = status.finished_at or time.time()
+        details = {
+            "state": state,
+            "edges_added": status.edges_added,
+            "edges_existing": status.edges_existing,
+            "parents_total": status.parents_total,
+            "parents_missing_vault": status.parents_missing_vault,
+            "seconds": round(max(0.0, finished - started), 1) if started else 0,
+        }
+        if status.error:
+            details["error"] = status.error[:300]
+        try:
+            session = self.session_factory()
+            try:
+                product = session.scalar(select(Product).where(Product.uuid == product_uuid))
+                if product is None:
+                    return
+                self.activities.record(
+                    session,
+                    ActivityAction.WHERE_USED_REBUILT,
+                    user,
+                    product_id=product.id,
+                    details=details,
+                )
+                session.commit()
+            finally:
+                session.close()
+        except Exception:  # noqa: BLE001
+            logger.exception("Could not record the Where Used audit event for %s", product_uuid)
 
     def _cancelled(self, product_uuid: str) -> bool:
         with self._lock:
@@ -229,6 +274,8 @@ class WhereUsedIndexJobs:
                     return
                 status.state = "done"
                 status.finished_at = time.time()
+                finished_status = status
+            self._audit(product_uuid, finished_status, "done")
             logger.info(
                 "Where Used index done for %s: +%s edges (%s existing), %s missing vault",
                 product_uuid,
@@ -250,6 +297,8 @@ class WhereUsedIndexJobs:
                 status.state = "error"
                 status.error = str(exc) or exc.__class__.__name__
                 status.finished_at = time.time()
+                failed_status = status
+            self._audit(product_uuid, failed_status, "error")
 
     def _extract_thumbnails_quiet(self, product_uuid: str, run_id: float | None) -> None:
         """Scan vault tips for embedded JPEGs; never raises or touches job status."""

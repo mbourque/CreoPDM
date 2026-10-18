@@ -638,6 +638,9 @@ window.__creopdmModules.metadata = {
       // Tips whose local file is a newer unsaved save: never read onto the checked-in
       // revision, and never counted as "saved" (was: a silent no-op that looked done).
       let leftLocal = Number(state.leftLocal) || 0;
+      // Kept in the saved state so a Collect that survives a page reload reports its whole time.
+      const runStartedAt = Number(state.startedAt) || Date.now();
+      state.startedAt = runStartedAt;
       let lastReason = "";
       let shouldRefreshList = false;
       const pendingErase = [];
@@ -805,6 +808,26 @@ window.__creopdmModules.metadata = {
           const msg = `Metadata collection finished: ${doneBits.join(", ")}.`;
           showOk(msg);
           saveMetadataCollectState(null);
+        }
+        // One audit row for the whole run (never one per file): who, which product, the counts.
+        if (state.productId && captured + failed + expectedSkipped + leftLocal > 0) {
+          try {
+            await fetch(`/api/products/${encodeURIComponent(state.productId)}/metadata-collect-summary`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                total: targets.length,
+                saved: captured,
+                failed,
+                skipped: expectedSkipped,
+                left_local: leftLocal,
+                cancelled: Boolean(metadataCollectJob.cancel),
+                seconds: Math.max(0, (Date.now() - runStartedAt) / 1000),
+              }),
+            });
+          } catch {
+            /* the audit summary is best-effort: the saves themselves are already done */
+          }
         }
         // Type column (SHEETMETAL / MFG / …) comes from SSR — refresh Files after saves.
         shouldRefreshList = captured > 0;

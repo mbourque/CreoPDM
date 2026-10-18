@@ -154,7 +154,7 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
         ai_snapshots=ai_snapshots,
         thumbnails=thumbnails,
         where_used_index=WhereUsedIndexJobs(
-            session_factory, metadata, thumbnails=thumbnails
+            session_factory, metadata, thumbnails=thumbnails, activities=activities
         ),
         zip_imports=ZipImportJobs(),
         email=email,

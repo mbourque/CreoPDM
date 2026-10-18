@@ -270,8 +270,23 @@ window.__creopdmModules.creo_workspace = {
       };
     }
 
+    /** One audit row for a whole Collect run (Add -> Collect), never one per file. */
+    async function reportMetadataCollectSummary(productId, summary) {
+      if (!productId) return;
+      try {
+        await fetch(`/api/products/${encodeURIComponent(productId)}/metadata-collect-summary`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(summary),
+        });
+      } catch {
+        /* best-effort: the saves themselves are already done */
+      }
+    }
+
     async function pushCreoMetadataForItems(items, options) {
       const opts = options && typeof options === "object" ? options : {};
+      const collectStartedAt = Date.now();
       const sessionOnly = Boolean(opts.sessionOnly);
       const sessionWaitRounds = Math.max(0, Number(opts.sessionWaitRounds) || 0);
       const sessionWaitMs = Math.max(50, Number(opts.sessionWaitMs) || 500);
@@ -414,6 +429,16 @@ window.__creopdmModules.creo_workspace = {
         } catch {
           /* soft-fail — metadata is best-effort */
         }
+      }
+      // Add -> Collect passes audit:true. Open and Check-in collect quietly (one file at a time,
+      // and Check-in already has its own audit row), so they never write a summary.
+      if (opts.audit && !sessionOnly) {
+        await reportMetadataCollectSummary(String(opts.productId || currentProductId() || "").trim(), {
+          total: targets.length,
+          saved,
+          failed: Math.max(0, targets.length - saved),
+          seconds: Math.max(0, (Date.now() - collectStartedAt) / 1000),
+        });
       }
       return saved;
     }

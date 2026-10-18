@@ -907,7 +907,7 @@ window.__creopdmModules.add = {
               indexOutcome = await indexWhereUsedUnderBusy(productId);
               if (canGatherCreoMetadata() && Array.isArray(result?.ok) && result.ok.length) {
                 publishBusyMessage("Collecting Creo metadata…");
-                await pushCreoMetadataForItems(metadataTargetsFromResult(result));
+                await pushCreoMetadataForItems(metadataTargetsFromResult(result), { audit: true });
               }
               const failedInside = result?.failed || [];
               if (failedInside.length) {
@@ -1503,7 +1503,7 @@ window.__creopdmModules.add = {
               indexOutcome = await indexWhereUsedUnderBusy(productId);
               if (canGatherCreoMetadata()) {
                 publishBusyMessage("Collecting Creo metadata…");
-                await pushCreoMetadataForItems(metadataTargetsFromResult(out));
+                await pushCreoMetadataForItems(metadataTargetsFromResult(out), { audit: true });
               }
               const failedInside = out.failed || [];
               if (failedInside.length) {

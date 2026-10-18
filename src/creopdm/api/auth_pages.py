@@ -4029,7 +4029,9 @@ def admin_utilities_rebuild_product_db(
         # Do not sync-start under the open request session (indexer write lock
         # blocked the form fetch). Page JS POSTs Start for instant N of M;
         # this BackgroundTask covers plain form POST when JS is unavailable.
-        background_tasks.add_task(ctx.where_used_index.start, pid)
+        # Captured now: the identity context is gone once the response has been sent, and the
+        # audit row is written in the name of the person who ran the rebuild.
+        background_tasks.add_task(ctx.where_used_index.start, pid, ctx.users.get_current_user())
     return _utilities_rebuild_response(
         request,
         ctx,

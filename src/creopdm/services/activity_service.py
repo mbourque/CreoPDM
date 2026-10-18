@@ -55,6 +55,8 @@ ACTION_LABELS: dict[str, str] = {
     ActivityAction.BASELINE_CREATED.value: "Baseline created",
     ActivityAction.BASELINE_ARCHIVED.value: "Baseline archived",
     ActivityAction.BASELINE_RESTORED.value: "Baseline restored",
+    ActivityAction.METADATA_COLLECTED.value: "Metadata collected",
+    ActivityAction.WHERE_USED_REBUILT.value: "Where Used rebuilt",
     ActivityAction.VAULT_HISTORY_COMPACTED.value: "Vault history compacted",
     ActivityAction.PRODUCT_DB_REBUILT.value: "Product DB rebuilt",
     ActivityAction.USER_CREATED.value: "User created",
@@ -96,6 +98,8 @@ AUDIT_ACTION_FILTER_CHOICES: list[tuple[str, str]] = [
     (ActivityAction.BASELINE_CREATED.value, "Baseline created"),
     (ActivityAction.BASELINE_ARCHIVED.value, "Baseline archived"),
     (ActivityAction.BASELINE_RESTORED.value, "Baseline restored"),
+    (ActivityAction.METADATA_COLLECTED.value, "Metadata collected"),
+    (ActivityAction.WHERE_USED_REBUILT.value, "Where Used rebuilt"),
     (ActivityAction.USER_CREATED.value, "User created"),
     (ActivityAction.ROLE_CHANGED.value, "Role changed"),
     (ActivityAction.MEMBERSHIP_CHANGED.value, "Membership changed"),
@@ -686,6 +690,61 @@ def _object_filename_list(
     return tuple(names), more
 
 
+def _collect_summary(details: dict[str, Any]) -> str:
+    """e.g. "936 files: 930 saved, 3 failed, 3 skipped (cancelled) in 2 min 5 s"."""
+
+    def num(key: str) -> int:
+        try:
+            return max(0, int(details.get(key) or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    total = num("total")
+    bits = [f"{num('saved')} saved"]
+    for key, label in (("failed", "failed"), ("skipped", "skipped"), ("left_local", "left (unsaved local changes)")):
+        if num(key):
+            bits.append(f"{num(key)} {label}")
+    text = f"{total} file{'s' if total != 1 else ''}: {', '.join(bits)}"
+    if details.get("cancelled"):
+        text += " (cancelled)"
+    return text + _duration_suffix(details)
+
+
+def _where_used_summary(details: dict[str, Any]) -> str:
+    """e.g. "42 links added (310 already known), 936 files scanned in 1 min 12 s"."""
+
+    def num(key: str) -> int:
+        try:
+            return max(0, int(details.get(key) or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    state = str(details.get("state") or "done")
+    text = (
+        f"{num('edges_added')} link{'s' if num('edges_added') != 1 else ''} added"
+        f" ({num('edges_existing')} already known), {num('parents_total')} "
+        f"file{'s' if num('parents_total') != 1 else ''} scanned"
+    )
+    if num("parents_missing_vault"):
+        text += f", {num('parents_missing_vault')} not in the vault"
+    if state == "cancelled":
+        text += " (cancelled)"
+    elif state == "error":
+        text += f" (failed: {str(details.get('error') or 'error')[:120]})"
+    return text + _duration_suffix(details)
+
+
+def _duration_suffix(details: dict[str, Any]) -> str:
+    try:
+        seconds = int(round(float(details.get("seconds") or 0)))
+    except (TypeError, ValueError):
+        return ""
+    if seconds <= 0:
+        return ""
+    minutes, secs = divmod(seconds, 60)
+    return f" in {minutes} min {secs} s" if minutes else f" in {secs} s"
+
+
 def _object_label(details: dict[str, Any], obj: EngineeringObject | None) -> str | None:
     if obj is not None and (obj.filename or "").strip():
         # Prefer batch list when present (force-undo / multi-remove keep one object_id).
@@ -738,6 +797,11 @@ def _event_summary(
         name = details.get("baseline_name")
         if name:
             parts.append(str(name))
+    if action in {ActivityAction.METADATA_COLLECTED.value, "METADATA_COLLECTED"}:
+        # One summary per Collect run (never one row per file).
+        parts.append(_collect_summary(details))
+    if action in {ActivityAction.WHERE_USED_REBUILT.value, "WHERE_USED_REBUILT"}:
+        parts.append(_where_used_summary(details))
     if action in {ActivityAction.BASELINE_CREATED.value, "BASELINE_CREATED"}:
         name = details.get("baseline_name")
         count = details.get("member_count")
