@@ -405,3 +405,26 @@ def test_open_folder_shows_a_downloaded_copy_and_refuses_one_that_is_not_there(a
     assert shown.status_code == 200, shown.text
     assert shown.json()["opened"] is True
     assert opened == [_baseline_root(root).resolve()]
+
+
+def test_the_marker_file_is_hidden_like_the_workspace_cache_index(agent, monkeypatch):
+    client, root, served, _seen = agent
+    calls: list[tuple[str, bool]] = []
+    real = __import__("creopdm.utils.files", fromlist=["set_hidden"]).set_hidden
+
+    def recording(path, hidden=True):
+        calls.append((Path(path).name, bool(hidden)))
+        real(path, hidden)
+
+    monkeypatch.setattr("creopdm.utils.files.set_hidden", recording)
+    _serve(served, FILES)
+    assert _add(client, _manifest(FILES)).status_code == 200
+    assert calls == [(MARKER_NAME, True)]  # first install: written, then hidden
+
+    calls.clear()
+    assert _add(client, _manifest(FILES)).status_code == 200
+    # Installing again must unhide before rewriting (Windows refuses to write a Hidden file).
+    assert calls == [(MARKER_NAME, False), (MARKER_NAME, True)]
+    # And it is still readable by check/remove afterwards.
+    folder = {"product_id": "p1", "vault_folder": "gearbox", "folder": FOLDER}
+    assert client.post("/baseline-workspace/check", json=folder).json()["installed"] is True

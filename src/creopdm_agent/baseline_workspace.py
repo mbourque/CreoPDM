@@ -303,8 +303,12 @@ def reconstruct(
             os.replace(staged, target)
         for _item, target, _digest in plan:
             _set_read_only(target)
+        from creopdm.utils.files import set_hidden
+
         marker_path = dest_root / MARKER_NAME
         if marker_path.exists():
+            # Windows refuses to rewrite a Hidden file: unhide, write, hide again (as the cache index).
+            set_hidden(marker_path, False)
             _set_writable(marker_path)
         dest_root.mkdir(parents=True, exist_ok=True)
         marker_path.write_text(
@@ -323,6 +327,7 @@ def reconstruct(
             ),
             encoding="utf-8",
         )
+        set_hidden(marker_path, True)  # bookkeeping: it should not show up next to the models
     finally:
         shutil.rmtree(stage, ignore_errors=True)
         # Locked again whatever happened: a half-finished install must not leave it open.
