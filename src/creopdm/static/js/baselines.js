@@ -229,6 +229,8 @@ window.__creopdmModules.baselines = {
       if (structureBox) structureBox.hidden = true;
       const acceptStructure = $("#baseline-accept-structure");
       if (acceptStructure) acceptStructure.checked = false;
+      const releaseBox = $("#baseline-release");
+      if (releaseBox) releaseBox.checked = false;
       const files = $("#metric-filters")?.dataset.productObjects;
       const count = $("#baseline-file-count");
       if (count) {
@@ -268,6 +270,7 @@ window.__creopdmModules.baselines = {
                 description: String(description?.value || "").trim() || null,
                 operation_id: operationId,
                 accept_missing_structure: Boolean(acceptBox?.checked),
+                baseline_type: $("#baseline-release")?.checked ? "RELEASE" : "MANUAL",
               }),
             });
           } catch {

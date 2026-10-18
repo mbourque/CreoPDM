@@ -302,6 +302,8 @@ class BaselineCreateRequest(BaseModel):
     operation_id: str | None = Field(default=None, max_length=64)
     # Set by the dialog after the user confirmed a baseline without structure (Where Used not built).
     accept_missing_structure: bool = False
+    # MANUAL (default, records unresolved links) or RELEASE (strict: unresolved required links block).
+    baseline_type: str | None = Field(default=None, max_length=16)
 
 
 class BaselineResponse(BaseModel):

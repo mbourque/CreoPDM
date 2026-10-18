@@ -123,5 +123,6 @@ def create_baseline(
         payload.description,
         payload.operation_id,
         accept_missing_structure=payload.accept_missing_structure,
+        baseline_type=payload.baseline_type,
     )
     return baseline_to_response(baseline, product.uuid)

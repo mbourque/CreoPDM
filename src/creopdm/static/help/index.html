@@ -781,6 +781,7 @@ END</pre>
             <li>Checking a file in later never alters an existing baseline: it keeps the version it captured, and its contents show that the product now has a newer one. The same goes for a new revision: a baseline of A.1 stays at A.1 after you revise to B.1.</li>
             <li>A baseline also remembers the <strong>structure</strong>: which assembly used which exact version of each part. The contents window shows it under <strong>Structure</strong>; a part with no checked-in version is flagged <strong>Unresolved</strong> rather than left out. If the product has assemblies or drawings but Where Used was never built, Create Baseline stops and asks; you can rebuild Where Used first, or tick <strong>Create it anyway</strong> to make a baseline without structure (it is labelled as such).</li>
             <li>Before a baseline is made CreoPDM checks that every captured file really is in the vault. If any file is missing or damaged, <strong>no baseline is created</strong> and the message lists the files to fix. Archived products can't be baselined.</li>
+            <li>Tick <strong>Release baseline</strong> for a strict snapshot: it is refused if any assembly or drawing needs a file with no checked-in version, or if Where Used hasn't been built. A normal baseline records those gaps instead of refusing.</li>
           </ol>
         </div>
         <div class="callout">

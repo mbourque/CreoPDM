@@ -41,6 +41,9 @@ logger = get_logger("baselines")
 NAME_MAX_LENGTH = 255
 DESCRIPTION_MAX_LENGTH = 2000
 BASELINE_TYPE_MANUAL = "MANUAL"
+# A release baseline is validated STRICTLY: nothing may be unresolved or unindexed.
+BASELINE_TYPE_RELEASE = "RELEASE"
+BASELINE_TYPES = (BASELINE_TYPE_MANUAL, BASELINE_TYPE_RELEASE)
 STATUS_DRAFT = "DRAFT"
 STATUS_FINALIZED = "FINALIZED"
 # Edges whose absence would make the configuration impossible to rebuild; a plain REFERENCE or an
@@ -213,6 +216,7 @@ class BaselineService:
         description: str | None = None,
         operation_id: str | None = None,
         accept_missing_structure: bool = False,
+        baseline_type: str | None = None,
     ) -> Baseline:
         """Capture every file's current version as an immutable, FINALIZED baseline.
 
@@ -225,6 +229,13 @@ class BaselineService:
             return replay
         clean = clean_name(name)
         note = clean_description(description)
+        kind = (baseline_type or BASELINE_TYPE_MANUAL).strip().upper()
+        if kind not in BASELINE_TYPES:
+            raise ValidationAppError(
+                f"Unknown baseline type. Use one of: {', '.join(BASELINE_TYPES)}.",
+                details={"baseline_type": baseline_type},
+            )
+        strict = kind == BASELINE_TYPE_RELEASE
         user = self._users.get_current_user()
 
         with self._locks.acquire(product.uuid):
@@ -249,6 +260,8 @@ class BaselineService:
                 )
             self._validate_content(product, captured)
             structure_indexed = self._structure_indexed(session, product, captured)
+            if strict:
+                self._require_strict_structure(session, product, captured, structure_indexed)
             if not structure_indexed and not accept_missing_structure:
                 raise BaselineStructureNotIndexedError(
                     "Where Used has not been built for this product, so this baseline would not "
@@ -264,7 +277,7 @@ class BaselineService:
                 product_id=product.id,
                 name=clean,
                 description=note,
-                baseline_type=BASELINE_TYPE_MANUAL,
+                baseline_type=kind,
                 status=STATUS_DRAFT,
                 member_count=0,
                 created_by=user.user_name,
@@ -459,6 +472,55 @@ class BaselineService:
         raise BaselineValidationError(
             f"No baseline was created: {len(problems)} file{'s' if len(problems) != 1 else ''} "
             f"failed validation ({shown_names}{more}).",
+            details={"product": product.uuid, "problems": problems[:50]},
+        )
+
+    @staticmethod
+    def _require_strict_structure(
+        session: Session,
+        product: Product,
+        captured: list[EngineeringObject],
+        structure_indexed: bool,
+    ) -> None:
+        """STRICT policy (release baselines): a missing structure index or any unresolved
+        required dependency blocks finalization. Nothing is omitted and nothing is waived."""
+        if not structure_indexed:
+            raise BaselineValidationError(
+                "No release baseline was created: Where Used has not been built for this product, "
+                "so its required dependencies cannot be verified. Rebuild Where Used first.",
+                details={"product": product.uuid, "problems": [{"code": "STRUCTURE_NOT_INDEXED"}]},
+            )
+        members = {obj.id: obj for obj in captured}
+        problems: list[dict] = []
+        edges = session.scalars(
+            select(Dependency)
+            .where(
+                Dependency.product_id == product.id,
+                Dependency.dependency_type.in_(sorted(REQUIRED_DEPENDENCY_TYPES)),
+            )
+            .order_by(Dependency.id.asc())
+        )
+        for edge in edges:
+            parent = members.get(edge.parent_object_id)
+            if parent is None or edge.child_object_id in members:
+                continue
+            child = session.get(EngineeringObject, edge.child_object_id)
+            problems.append(
+                {
+                    "code": "UNRESOLVED_REQUIRED_DEPENDENCY",
+                    "parent": parent.current_version.filename or parent.filename,
+                    "child": child.filename if child is not None else "(unknown)",
+                    "dependency_type": edge.dependency_type,
+                }
+            )
+        if not problems:
+            return
+        shown = "; ".join(f"{p['parent']} needs {p['child']}" for p in problems[:5])
+        more = f" and {len(problems) - 5} more" if len(problems) > 5 else ""
+        raise BaselineValidationError(
+            f"No release baseline was created: {len(problems)} required "
+            f"dependenc{'ies are' if len(problems) != 1 else 'y is'} unresolved, with no checked-in "
+            f"version ({shown}{more}).",
             details={"product": product.uuid, "problems": problems[:50]},
         )
 

@@ -1190,3 +1190,94 @@ def test_blob_sizes_checks_many_stored_files_in_one_call(auth_client, auth_ctx):
     )
     assert sizes == [size, None, None]
     assert auth_ctx.git.blob_sizes(_vault(auth_ctx, product), []) == []
+
+
+# ---- Story 10: a release baseline is validated strictly -------------------------------------
+
+
+def test_release_baseline_is_blocked_by_an_unresolved_required_dependency(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _structure_product(auth_client, auth_ctx)  # gear needs ghost.prt (no version)
+
+    refused = _create(auth_client, product, "Release R1", baseline_type="RELEASE")
+    assert refused.status_code == 409, refused.text
+    error = refused.json()["error"]
+    assert error["code"] == "BASELINE_VALIDATION_FAILED"
+    assert "No release baseline was created" in error["message"]
+    assert "gear.prt needs ghost.prt" in error["message"]
+    assert error["details"]["problems"] == [
+        {
+            "code": "UNRESOLVED_REQUIRED_DEPENDENCY",
+            "parent": "gear.prt",
+            "child": "ghost.prt",
+            "dependency_type": "ASSEMBLY_MEMBER",
+        }
+    ]
+    _no_baselines(auth_ctx)
+
+    # The same configuration is allowed as a manual baseline, with the gap recorded (not hidden).
+    manual = _create(auth_client, product, "Working copy")
+    assert manual.status_code == 201, manual.text
+    assert manual.json()["baseline_type"] == "MANUAL"
+    assert manual.json()["unresolved_dependency_count"] == 1
+
+
+def test_release_baseline_succeeds_when_every_required_dependency_is_resolved(
+    auth_client, auth_ctx
+):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _assembly_product(auth_client, auth_ctx, with_edge=True)
+    created = _create(auth_client, product, "Release R1", baseline_type="release")
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["baseline_type"] == "RELEASE" and body["status"] == "FINALIZED"
+    assert body["dependency_count"] == 1 and body["unresolved_dependency_count"] == 0
+
+
+def test_release_baseline_ignores_unresolved_optional_references(auth_client, auth_ctx):
+    from creopdm.models.product import Product
+
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _structure_product(auth_client, auth_ctx)
+    with auth_ctx.session_factory() as db:
+        row = db.scalar(select(Product).where(Product.uuid == product["uuid"]))
+        from creopdm.models.dependency import Dependency
+
+        # Keep only a REFERENCE edge to the unversioned object: optional, so not blocking.
+        ghost = db.scalar(select(EngineeringObject).where(EngineeringObject.filename == "ghost.prt"))
+        for edge in db.scalars(select(Dependency)):
+            db.delete(edge)
+        db.flush()
+        gear = db.scalar(select(EngineeringObject).where(EngineeringObject.filename == "gear.prt"))
+        _edge(db, row, gear, ghost.id, "REFERENCE")
+        db.commit()
+    created = _create(auth_client, product, "Release R2", baseline_type="RELEASE")
+    assert created.status_code == 201, created.text
+    assert created.json()["unresolved_dependency_count"] == 1
+
+
+def test_release_baseline_cannot_waive_a_missing_where_used_index(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _assembly_product(auth_client, auth_ctx)  # assembly, no edges
+    refused = _create(
+        auth_client, product, "Release R1", baseline_type="RELEASE", accept_missing_structure=True
+    )
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["error"]["code"] == "BASELINE_VALIDATION_FAILED"
+    assert "Where Used" in refused.json()["error"]["message"]
+    _no_baselines(auth_ctx)
+
+
+def test_an_unknown_baseline_type_is_refused(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+    refused = _create(auth_client, product, baseline_type="NIGHTLY")
+    assert 400 <= refused.status_code < 500, refused.text
+    _no_baselines(auth_ctx)
+
+
+def test_release_baseline_choice_is_in_the_dialog():
+    module = (ROOT / "src" / "creopdm" / "static" / "js" / "baselines.js").read_text(encoding="utf-8")
+    assert 'baseline_type: $("#baseline-release")?.checked ? "RELEASE" : "MANUAL"' in module
+    template = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
+    assert 'id="baseline-release"' in template and "strict" in template
