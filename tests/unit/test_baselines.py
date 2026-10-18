@@ -1450,12 +1450,11 @@ def test_baseline_commit_is_shown_in_the_contents_dialog():
     assert 'id="baseline-members-title" tabindex="-1"' in template
     assert "title?.focus({ preventScroll: true })" in module
     css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
-    assert "max-height: 94vh; overflow: hidden; border-radius: 12px; }" in css
-    # The tables keep a usable minimum height; on a short window the dialog contents scroll and the
-    # button row stays pinned (sticky) at the bottom instead of covering the tables.
-    assert ".baseline-members-wrap, #baseline-structure-wrap { flex: 1 1 0; min-height: 12rem; overflow: auto; }" in css
-    assert "min-height: 17rem; }" in css and "overflow-y: auto; overflow-x: hidden; }" in css
-    assert ".baseline-members-dialog .dialog-actions {" in css and "position: sticky; bottom: 0; z-index: 2; background: white;" in css
+    # A fixed height (not content-sized) so the tables fill what the compact header leaves.
+    assert "height: min(92vh, 56rem); max-height: 94vh; overflow: hidden; border-radius: 12px; }" in css
+    # Compact header, then the tables take the leftover height (never overlapped by the buttons).
+    assert ".baseline-members-wrap, #baseline-structure-wrap { flex: 1 1 0; min-height: 8rem; overflow: auto; }" in css
+    assert "gap: 0.35rem; padding: 0.9rem 1.1rem; }" in css and "position: sticky" not in css.split(".baseline-members-dialog")[1]
     # Files and Structure are two views of one dialog so each table gets the full height.
     assert "function setBaselineView" in module and "data-baseline-view" in template
 

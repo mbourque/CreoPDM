@@ -1437,17 +1437,19 @@ button.forgot-password-btn,
 .metric-link:hover { border-color: var(--accent-2); }
 /* The dialog never scrolls (so it opens at its top with rounded corners). Files and Structure are
    two views of one dialog: the visible table takes all the leftover height and scrolls inside. */
-.baseline-members-dialog { width: min(60rem, 96vw); max-height: 94vh; overflow: hidden; border-radius: 12px; }
+/* A fixed height (not content-sized) so the table fills what the header leaves, on every tab. */
+.baseline-members-dialog { width: min(60rem, 96vw); height: min(92vh, 56rem); max-height: 94vh; overflow: hidden; border-radius: 12px; }
 .baseline-members-dialog[open] { display: flex; flex-direction: column; }
-/* On a short window the contents scroll inside the dialog (it keeps its rounded corners) and the
-   buttons stay pinned at the bottom. */
-.baseline-members-dialog form { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; }
-.baseline-members-dialog .dialog-actions {
-  position: sticky; bottom: 0; z-index: 2; background: white;
-  margin: 0 -1.1rem -1.1rem; padding: 0.6rem 1.1rem 1.1rem;
-}
+/* Header first, then Files/Structure/Compare taking all the leftover height, then the buttons: the
+   header is kept compact so the table gets room and nothing overlaps it. */
+.baseline-members-dialog form { flex: 1 1 auto; min-height: 0; overflow: hidden; gap: 0.35rem; padding: 0.9rem 1.1rem; }
+.baseline-members-dialog h2 { font-size: 1.5rem; }
+.baseline-members-dialog form > p { margin: 0; }
+.baseline-members-dialog .baseline-frozen { padding: 0.3rem 0.6rem; font-size: 0.82rem; }
+.baseline-members-dialog .baseline-view-tabs { margin-top: 0.15rem; }
+.baseline-members-dialog .dialog-actions { padding-top: 0.35rem; }
 .baseline-members-dialog form > :not(.table-wrap):not(.baseline-compare-pane) { flex: 0 0 auto; }
-.baseline-members-wrap, #baseline-structure-wrap { flex: 1 1 0; min-height: 12rem; overflow: auto; }
+.baseline-members-wrap, #baseline-structure-wrap { flex: 1 1 0; min-height: 8rem; overflow: auto; }
 .baseline-view-tabs { display: flex; gap: 0.4rem; border-bottom: 1px solid var(--line); }
 .baseline-view-btn {
   appearance: none; -webkit-appearance: none; background: none; border: 0;
@@ -1474,14 +1476,14 @@ button.forgot-password-btn,
 #version-facts td:first-child, #version-identity td:first-child { width: 14rem; white-space: nowrap; font-weight: 600; }
 #version-facts td.filename-cell { overflow-wrap: anywhere; }
 .version-section-title { margin: 1rem 0 0.5rem; font-size: 1.1rem; }
-.baseline-compare-pane { display: flex; flex-direction: column; gap: 0.5rem; flex: 1 1 0; min-height: 17rem; }
+.baseline-compare-pane { display: flex; flex-direction: column; gap: 0.5rem; flex: 1 1 0; min-height: 12rem; }
 .baseline-compare-pane[hidden] { display: none; }
 .baseline-compare-bar { display: flex; align-items: flex-end; gap: 1.2rem; flex-wrap: wrap; }
 .baseline-compare-bar select {
   min-width: 16rem; font: inherit; font-weight: 400; padding: 0.45rem 0.55rem;
   border: 1px solid var(--line); border-radius: 4px; background: white;
 }
-.baseline-compare-pane .baseline-members-wrap { flex: 1 1 0; min-height: 10rem; }
+.baseline-compare-pane .baseline-members-wrap { flex: 1 1 0; min-height: 6rem; }
 #baseline-compare-table tr.compare-version_changed td { background: #fff8e8; }
 #baseline-compare-table tr.compare-added td { background: #eefaf0; }
 #baseline-compare-table tr.compare-removed td { background: #fff1f0; }
