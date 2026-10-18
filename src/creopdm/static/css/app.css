@@ -1447,6 +1447,8 @@ button.forgot-password-btn,
   white-space: normal; overflow-wrap: anywhere;
 }
 .baseline-name-cell .muted.small { display: block; }
+.baseline-release-choice, .baseline-structure-confirm { margin: 6px 0 10px; }
+.baseline-release-choice input, .baseline-structure-confirm input { flex: 0 0 auto; width: auto; margin: 0; }
 .baseline-structure-title { margin: 14px 0 6px; font-size: 1rem; }
 .baseline-unresolved { color: #b42318; font-weight: 700; }
 #baseline-structure-table tr.is-unresolved td { background: #fff4f2; }

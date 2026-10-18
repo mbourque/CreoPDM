@@ -1281,3 +1281,6 @@ def test_release_baseline_choice_is_in_the_dialog():
     assert 'baseline_type: $("#baseline-release")?.checked ? "RELEASE" : "MANUAL"' in module
     template = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     assert 'id="baseline-release"' in template and "strict" in template
+    # Check boxes use the shared "choice" row (box beside its label), not a stacked label.
+    assert 'class="choice baseline-release-choice"' in template
+    assert 'class="choice baseline-structure-confirm"' in template

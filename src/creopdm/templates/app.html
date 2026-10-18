@@ -788,9 +788,9 @@
       <textarea id="baseline-description" name="description" rows="3" maxlength="2000"
                 placeholder="Configuration used for the October design review."></textarea>
     </label>
-    <label class="baseline-release-choice">
+    <label class="choice baseline-release-choice">
       <input type="checkbox" id="baseline-release" name="release">
-      Release baseline <span class="muted small">(strict: refused while a required file or link is unresolved)</span>
+      <span>Release baseline <span class="muted small">(strict: refused while a required file or link is unresolved)</span></span>
     </label>
     <dl class="revise-facts">
       <dt>Source</dt><dd>Current product configuration</dd>
@@ -799,9 +799,9 @@
     </dl>
     <p class="muted small">Each file is captured at its exact current checked-in version. Files that are checked out or modified are recorded at their last checked-in version. A baseline cannot be changed afterwards.</p>
     <p class="error" id="baseline-error" hidden></p>
-    <label class="baseline-structure-confirm" id="baseline-structure-confirm" hidden>
+    <label class="choice baseline-structure-confirm" id="baseline-structure-confirm" hidden>
       <input type="checkbox" id="baseline-accept-structure">
-      Create it anyway, without the assembly/drawing structure
+      <span>Create it anyway, without the assembly/drawing structure</span>
     </label>
     <div class="dialog-actions">
       <button type="button" class="btn" id="baseline-cancel">Cancel</button>
