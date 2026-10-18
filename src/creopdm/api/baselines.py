@@ -27,6 +27,7 @@ from creopdm.schemas.common import (
     BaselineMemberResponse,
     BaselineResponse,
     BaselineWorkspaceManifest,
+    ProductReleaseResponse,
 )
 from creopdm.utils.timefmt import as_utc
 
@@ -34,12 +35,16 @@ router = APIRouter()
 
 
 def baseline_to_response(
-    baseline: Baseline, product_uuid: str, product_name: str | None = None
+    baseline: Baseline,
+    product_uuid: str,
+    product_name: str | None = None,
+    release_label: str | None = None,
 ) -> BaselineResponse:
     return BaselineResponse(
         uuid=baseline.uuid,
         product_uuid=product_uuid,
         product_name=product_name,
+        release_label=release_label,
         name=baseline.name,
         description=baseline.description,
         baseline_type=baseline.baseline_type,
@@ -68,10 +73,25 @@ def list_baselines(
 ) -> list[BaselineResponse]:
     require_permission(request, ctx, PERMISSION_BASELINES_VIEW)
     product = load_accessible_product(request, ctx, db, product_id)
+    rows = ctx.baselines.list_for_product(db, product)
+    labels = ctx.baselines.release_labels(db, [row.id for row in rows])
     return [
-        baseline_to_response(row, product.uuid, product.name)
-        for row in ctx.baselines.list_for_product(db, product)
+        baseline_to_response(row, product.uuid, product.name, labels.get(row.id)) for row in rows
     ]
+
+
+@router.get("/api/products/{product_id}/releases", response_model=list[ProductReleaseResponse])
+def list_product_releases(
+    product_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> list[ProductReleaseResponse]:
+    """The product's releases (R1, R2, ...), newest first, each with the exact baseline it
+    released. Rebuild an old release by downloading that baseline."""
+    require_permission(request, ctx, PERMISSION_BASELINES_VIEW)
+    product = load_accessible_product(request, ctx, db, product_id)
+    return [ProductReleaseResponse(**row) for row in ctx.baselines.list_releases(db, product)]
 
 
 @router.get("/api/baselines/{baseline_uuid}", response_model=BaselineResponse)
@@ -86,7 +106,8 @@ def get_baseline(
     baseline = ctx.baselines.get(db, baseline_uuid)
     product = db.get(Product, baseline.product_id)
     require_product_access(request, ctx, product)
-    return baseline_to_response(baseline, product.uuid, product.name)
+    labels = ctx.baselines.release_labels(db, [baseline.id])
+    return baseline_to_response(baseline, product.uuid, product.name, labels.get(baseline.id))
 
 
 @router.get("/api/baselines/{baseline_uuid}/members", response_model=list[BaselineMemberResponse])

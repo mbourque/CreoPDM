@@ -313,6 +313,8 @@ class BaselineResponse(BaseModel):
     product_uuid: str
     product_name: str | None = None
     name: str
+    # "R2" when this baseline is the exact configuration of a product release.
+    release_label: str | None = None
     description: str | None = None
     baseline_type: str
     status: str
@@ -353,6 +355,18 @@ class BaselineMemberResponse(BaseModel):
     current_display_version: str | None = None
     # SAME = the product still has this exact version; OUT_OF_DATE = it has a newer one.
     status: str
+
+
+class ProductReleaseResponse(BaseModel):
+    uuid: str
+    number: int
+    label: str
+    released_by: str
+    released_at: datetime | None = None
+    # The exact baseline of this release (None only for a product with no checked-in files).
+    baseline_uuid: str | None = None
+    baseline_name: str | None = None
+    member_count: int = 0
 
 
 class BaselineWorkspaceFile(BaseModel):

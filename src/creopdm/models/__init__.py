@@ -1,6 +1,7 @@
 from creopdm.models.activity import Activity
 from creopdm.models.ai_snapshot import ObjectVersionSnapshot
 from creopdm.models.baseline import Baseline, BaselineDependency, BaselineMember
+from creopdm.models.product_release import ProductRelease
 from creopdm.models.checkout import Checkout
 from creopdm.models.dependency import Dependency
 from creopdm.models.object import EngineeringObject
@@ -18,6 +19,7 @@ __all__ = [
     "Baseline",
     "BaselineDependency",
     "BaselineMember",
+    "ProductRelease",
     "Checkout",
     "Dependency",
     "EngineeringObject",

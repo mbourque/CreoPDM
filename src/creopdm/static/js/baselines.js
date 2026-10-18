@@ -86,7 +86,9 @@ window.__creopdmModules.baselines = {
             )}" title="Show the exact versions in this baseline">${esc(item.name)}</button>${
               description ? `<div class="muted small">${esc(description)}</div>` : ""
             }</td>
-            <td>${esc(titleCase(item.baseline_type))}</td>
+            <td>${esc(titleCase(item.baseline_type))}${
+              item.release_label ? ` <span class="baseline-release-badge">${esc(item.release_label)}</span>` : ""
+            }</td>
             <td title="${esc(statusHint(item.status))}">${esc(titleCase(item.status))}</td>
             <td>${esc(item.member_count)}</td>
             <td title="${esc(item.created_at || "")}">${esc(formatWhen(item.created_at))}</td>
@@ -337,7 +339,9 @@ window.__creopdmModules.baselines = {
         }
         if (info && meta) {
           meta.textContent =
-            `${titleCase(info.status)} · ${titleCase(info.baseline_type)} · ` +
+            `${titleCase(info.status)} · ${titleCase(info.baseline_type)}${
+              info.release_label ? ` ${info.release_label}` : ""
+            } · ` +
             (info.product_name ? `${info.product_name} · ` : "") +
             `${info.member_count} member${info.member_count === 1 ? "" : "s"} · ` +
             `${info.dependency_count || 0} link${info.dependency_count === 1 ? "" : "s"}` +

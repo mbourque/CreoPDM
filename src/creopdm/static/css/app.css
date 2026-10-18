@@ -1479,6 +1479,10 @@ button.forgot-password-btn,
 #baseline-compare-table tr.compare-version_changed td { background: #fff8e8; }
 #baseline-compare-table tr.compare-added td { background: #eefaf0; }
 #baseline-compare-table tr.compare-removed td { background: #fff1f0; }
+.baseline-release-badge {
+  display: inline-block; padding: 0 0.4rem; border-radius: 999px; background: #e8f1f7;
+  border: 1px solid #c2d9e8; color: #1f4f68; font-size: 0.78rem; font-weight: 600;
+}
 .baseline-desc { margin: 0; white-space: pre-wrap; }
 /* .baseline-version-link uses the site's normal link style (accent colour, underline on hover). */
 .baseline-structure-title { margin: 14px 0 6px; font-size: 1rem; }

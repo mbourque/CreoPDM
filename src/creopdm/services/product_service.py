@@ -81,6 +81,8 @@ class ProductService:
         self._activities = activities
         self._users = users
         self._workspaces = workspaces
+        # Set by app.py: the baseline service that records a release (R1, R2, ...).
+        self.release_baselines = None
 
     def list_products(
         self,
@@ -477,6 +479,7 @@ class ProductService:
         *,
         state: str | None = None,
         reopen_released_files: bool = False,
+        create_release_baseline: bool = False,
     ) -> Product:
         """Update name/number/description/state. Never changes vault_folder.
 
@@ -571,6 +574,11 @@ class ProductService:
                     if state_changed:
                         released = self._release_objects(session, product) if releasing else 0
                         reopened = self._reopen_objects(session, product) if reopening else 0
+                        release = (
+                            self._record_release(session, product, user)
+                            if releasing and create_release_baseline
+                            else None
+                        )
                         self._activities.record(
                             session,
                             ActivityAction.STATE_CHANGED,
@@ -581,6 +589,7 @@ class ProductService:
                                 "new_state": product.state,
                                 **({"objects_released": released} if releasing else {}),
                                 **({"objects_reopened": reopened} if reopening else {}),
+                                **self._release_details(release),
                             },
                         )
                 except Exception as exc:
@@ -601,6 +610,11 @@ class ProductService:
             session.flush()
             released = self._release_objects(session, product) if releasing else 0
             reopened = self._reopen_objects(session, product) if reopening else 0
+            release = (
+                self._record_release(session, product, user)
+                if releasing and create_release_baseline
+                else None
+            )
             self._activities.record(
                 session,
                 ActivityAction.STATE_CHANGED,
@@ -611,12 +625,32 @@ class ProductService:
                     "new_state": product.state,
                     **({"objects_released": released} if releasing else {}),
                     **({"objects_reopened": reopened} if reopening else {}),
+                    **self._release_details(release),
                 },
             )
 
         logger.info("Updated product %s (%s)", product.uuid, new_name)
         session.commit()
         return product
+
+    def _record_release(self, session: Session, product: Product, user) -> object | None:
+        """Release R<n> with its strict Release baseline, in the promotion's own transaction.
+
+        The files are already Released here, so the baseline captures them as released. Any
+        refusal propagates and the whole promotion is rolled back.
+        """
+        if self.release_baselines is None:
+            return None
+        # Releasing the files was a bulk UPDATE: reload them so the baseline sees "Released".
+        session.flush()
+        session.expire_all()
+        return self.release_baselines.create_release(session, product, user.user_name)
+
+    @staticmethod
+    def _release_details(release) -> dict:
+        if release is None:
+            return {}
+        return {"release": release.label, "release_baseline_id": release.baseline_id}
 
     def _require_no_active_checkouts(
         self, session: Session, product: Product, new_state: str

@@ -26,6 +26,7 @@ from creopdm.exceptions import (
 from creopdm.logging_setup import get_logger
 from creopdm.models.baseline import Baseline, BaselineDependency, BaselineMember
 from creopdm.models.dependency import Dependency
+from creopdm.models.product_release import ProductRelease
 from creopdm.models.object import EngineeringObject
 from creopdm.models.version import ObjectVersion
 from creopdm.models.product import Product
@@ -511,11 +512,14 @@ class BaselineService:
         accept_missing_structure: bool = False,
         baseline_type: str | None = None,
         git_tag: str | None = None,
+        commit: bool = True,
     ) -> Baseline:
         """Capture every file's current version as an immutable, FINALIZED baseline.
 
         All-or-nothing, serialized per product, and committed while the product lock is still
         held. The same ``operation_id`` always returns the same baseline (retry safety).
+        ``commit=False`` (used by a product release) only flushes: the caller owns the one
+        transaction that also changes the product, so everything succeeds or fails together.
         """
         op_id = (operation_id or "").strip() or None
         replay = self._replay(session, product, op_id)
@@ -616,8 +620,16 @@ class BaselineService:
                     },
                     comment=note,
                 )
-                session.commit()
+                if commit:
+                    session.commit()
+                else:
+                    session.flush()
             except IntegrityError as exc:
+                if not commit:
+                    raise BaselineNameConflictError(
+                        f'A baseline named "{clean}" already exists in {product.name}.',
+                        details={"name": clean},
+                    ) from exc
                 session.rollback()
                 # Same operation id, or the same name, won a race: answer from what is stored.
                 replay = self._replay(session, product, op_id)
@@ -628,8 +640,9 @@ class BaselineService:
                     details={"name": clean},
                 ) from exc
             except Exception:
-                session.rollback()
-                logger.exception("Baseline create failed for %s", product.uuid)
+                if commit:
+                    session.rollback()
+                    logger.exception("Baseline create failed for %s", product.uuid)
                 raise
             logger.info(
                 "Created baseline %s (%s members) for product %s",
@@ -638,11 +651,91 @@ class BaselineService:
                 product.uuid,
             )
             session.refresh(baseline)
-            if baseline.git_tag_name:
+            if commit and baseline.git_tag_name:
                 # After the commit: the PDM snapshot is already complete and valid. Whatever
                 # happens to the tag can only change the tag's own status.
                 self._apply_tag(session, product, baseline)
             return baseline
+
+    # ---- product releases ---------------------------------------------------------------
+
+    def create_release(self, session: Session, product: Product, user_name: str) -> ProductRelease:
+        """Record release R<n> of ``product`` with its strict Release baseline.
+
+        Called inside the Promote-to-Released transaction (nothing is committed here). A product
+        with no checked-in file has nothing to capture and is released without a baseline. Any
+        other problem (an unresolved required dependency, missing Where Used, missing or damaged
+        content) refuses the release, and the caller rolls the whole promotion back.
+        """
+        last = session.scalar(
+            select(ProductRelease.number)
+            .where(ProductRelease.product_id == product.id)
+            .order_by(ProductRelease.number.desc())
+            .limit(1)
+        )
+        number = int(last or 0) + 1
+        label = f"R{number}"
+        baseline = None
+        try:
+            with self._locks.acquire(product.uuid):
+                baseline = self.create(
+                    session,
+                    product,
+                    f"{product.name}-{label}",
+                    f"Release {label} of {product.name}",
+                    baseline_type=BASELINE_TYPE_RELEASE,
+                    commit=False,
+                )
+        except BaselineEmptyError:
+            baseline = None
+        except (BaselineValidationError, BaselineStructureNotIndexedError) as exc:
+            raise BaselineValidationError(
+                f"{product.name} cannot be released. {exc.message}", details=exc.details
+            ) from exc
+        release = ProductRelease(
+            uuid=str(uuidlib.uuid4()),
+            product_id=product.id,
+            number=number,
+            label=label,
+            baseline_id=baseline.id if baseline is not None else None,
+            released_by=user_name,
+        )
+        session.add(release)
+        session.flush()
+        return release
+
+    def release_labels(self, session: Session, baseline_ids: list[int]) -> dict[int, str]:
+        """``{baseline id: "R2"}`` for the baselines that are a product release."""
+        if not baseline_ids:
+            return {}
+        rows = session.execute(
+            select(ProductRelease.baseline_id, ProductRelease.label).where(
+                ProductRelease.baseline_id.in_(baseline_ids)
+            )
+        ).all()
+        return {int(bid): str(label) for bid, label in rows}
+
+    def list_releases(self, session: Session, product: Product) -> list[dict]:
+        """The product's releases, newest first, each with its exact baseline."""
+        rows = session.execute(
+            select(ProductRelease, Baseline)
+            .outerjoin(Baseline, Baseline.id == ProductRelease.baseline_id)
+            .where(ProductRelease.product_id == product.id)
+            .order_by(ProductRelease.number.desc())
+        ).all()
+        return [
+            {
+                "uuid": release.uuid,
+                "number": release.number,
+                "label": release.label,
+                "released_by": release.released_by,
+                "released_at": release.released_at,
+                "baseline_uuid": baseline.uuid if baseline is not None else None,
+                "baseline_name": baseline.name if baseline is not None else None,
+                "member_count": baseline.member_count if baseline is not None else 0,
+            }
+            for release, baseline in rows
+        ]
 
     # ---- optional Git tag -------------------------------------------------------------
 

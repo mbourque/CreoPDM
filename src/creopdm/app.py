@@ -127,6 +127,8 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
     with session_factory() as db:
         user_accounts.ensure_builtin_roles(db)
         db.commit()
+    products = ProductService(git, locks, activities, identity, workspaces)
+    products.release_baselines = baselines  # Promote to Released can create the release baseline
     ctx = AppContext(
         config=manager,
         settings=app_settings,
@@ -138,7 +140,7 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
         locks=locks,
         creo=creo_connector,
         activities=activities,
-        products=ProductService(git, locks, activities, identity, workspaces),
+        products=products,
         objects=objects,
         workspaces=workspaces,
         checkouts=checkouts,

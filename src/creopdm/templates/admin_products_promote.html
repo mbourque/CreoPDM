@@ -1,56 +1,61 @@
-{% extends "base.html" %}
-{% block title %}Promote Products — {{ app_name }}{% endblock %}
-{% block content %}
-<article class="detail settings-page admin-page">
-  <nav class="crumb">
-    {% if can_view_products %}
-    <a href="/">Products</a>
-    <span>/</span>
-    {% endif %}
-    <a href="/admin">Administration</a>
-    <span>/</span>
-    <a href="/admin/products">Manage products</a>
-    <span>/</span>
-    <span>Promote Products</span>
-  </nav>
-  <h1>Promote Products</h1>
-  <p class="muted">Change one product’s lifecycle state. Name, number, and description stay as they are.{% if can_manage_lifecycle_states %} Which operations that state allows is the <a href="/admin/lifecycle">Lifecycle states</a> matrix.{% endif %}</p>
-  {% if success %}<p class="ok">{{ success }}</p>{% endif %}
-  {% if error %}<p class="error">{{ error }}</p>{% endif %}
-  <p class="error" id="promote-client-error" hidden></p>
-
-  <section class="settings-card">
-    <form method="post" action="/admin/products/promote" class="settings-form" id="promote-products-form">
-      <label>Product
-        <select name="product_id" id="promote-product" required>
-          <option value="">Select a product…</option>
-          {% for p in products %}
-          <option value="{{ p.uuid }}" data-state="{{ p.state }}" data-name="{{ p.name }}" data-released="{{ released_counts.get(p.uuid, 0) if released_counts else 0 }}"
-                  {% if promote_product_id == p.uuid %}selected{% endif %}>{{ p.name }}{% if not p.active %} (inactive){% endif %}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label>Lifecycle state
-        <select name="state" id="promote-state" required>
-          <option value="">Select a state…</option>
-          {% for key in product_states %}
-          <option value="{{ key }}" {% if promote_state == key %}selected{% endif %}
-                  title="{{ product_state_descriptions.get(key, '') }}">{{ product_state_labels.get(key, key) }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label class="choice" id="promote-reopen-wrap" hidden>
-        <input type="checkbox" name="reopen_files" id="promote-reopen" value="1">
-        <span id="promote-reopen-label">Also set Released files back to In Work (undo the release)</span>
-      </label>
-      <p class="muted small" id="promote-reopen-hint" hidden>Unchecked, the Released files stay Released and each one needs a Revise before it can be edited. Files already In Work are not touched.</p>
-      <input type="hidden" name="confirm_password" value="">
-      <p class="form-actions">
-        <button type="submit" class="btn btn-primary" {% if not products %}disabled{% endif %}>Change state</button>
-        <a class="btn" href="/admin/products">Back to Manage products</a>
-      </p>
-    </form>
-  </section>
-  <script type="application/json" id="promote-lifecycle">{{ lifecycle_promote | tojson }}</script>
-</article>
-{% endblock %}
+{% extends "base.html" %}
+{% block title %}Promote Products — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page admin-page">
+  <nav class="crumb">
+    {% if can_view_products %}
+    <a href="/">Products</a>
+    <span>/</span>
+    {% endif %}
+    <a href="/admin">Administration</a>
+    <span>/</span>
+    <a href="/admin/products">Manage products</a>
+    <span>/</span>
+    <span>Promote Products</span>
+  </nav>
+  <h1>Promote Products</h1>
+  <p class="muted">Change one product’s lifecycle state. Name, number, and description stay as they are.{% if can_manage_lifecycle_states %} Which operations that state allows is the <a href="/admin/lifecycle">Lifecycle states</a> matrix.{% endif %}</p>
+  {% if success %}<p class="ok">{{ success }}</p>{% endif %}
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <p class="error" id="promote-client-error" hidden></p>
+
+  <section class="settings-card">
+    <form method="post" action="/admin/products/promote" class="settings-form" id="promote-products-form">
+      <label>Product
+        <select name="product_id" id="promote-product" required>
+          <option value="">Select a product…</option>
+          {% for p in products %}
+          <option value="{{ p.uuid }}" data-state="{{ p.state }}" data-name="{{ p.name }}" data-released="{{ released_counts.get(p.uuid, 0) if released_counts else 0 }}"
+                  {% if promote_product_id == p.uuid %}selected{% endif %}>{{ p.name }}{% if not p.active %} (inactive){% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Lifecycle state
+        <select name="state" id="promote-state" required>
+          <option value="">Select a state…</option>
+          {% for key in product_states %}
+          <option value="{{ key }}" {% if promote_state == key %}selected{% endif %}
+                  title="{{ product_state_descriptions.get(key, '') }}">{{ product_state_labels.get(key, key) }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="choice" id="promote-reopen-wrap" hidden>
+        <input type="checkbox" name="reopen_files" id="promote-reopen" value="1">
+        <span id="promote-reopen-label">Also set Released files back to In Work (undo the release)</span>
+      </label>
+      <p class="muted small" id="promote-reopen-hint" hidden>Unchecked, the Released files stay Released and each one needs a Revise before it can be edited. Files already In Work are not touched.</p>
+      <label class="choice" id="promote-release-wrap" hidden>
+        <input type="checkbox" name="release_baseline" id="promote-release" value="1" checked>
+        <span>Create a release baseline <span class="muted small">(the next release, R1, R2, …)</span></span>
+      </label>
+      <p class="muted small" id="promote-release-hint" hidden>Records exactly which version of every file is released, so this release can be rebuilt later. It is strict: the promotion is refused, and nothing changes, if a required dependency has no checked-in version, Where Used has not been built for a product with assemblies or drawings, or released content is missing or damaged. Untick the box to release without a baseline.</p>
+      <input type="hidden" name="confirm_password" value="">
+      <p class="form-actions">
+        <button type="submit" class="btn btn-primary" {% if not products %}disabled{% endif %}>Change state</button>
+        <a class="btn" href="/admin/products">Back to Manage products</a>
+      </p>
+    </form>
+  </section>
+  <script type="application/json" id="promote-lifecycle">{{ lifecycle_promote | tojson }}</script>
+</article>
+{% endblock %}

@@ -550,6 +550,10 @@
             <p>Moving a product to <strong>Released</strong> also marks its files Released (files already Obsolete stay Obsolete). That is what makes Revise available later.</p>
           </article>
           <article class="tile">
+            <h3>Release baseline</h3>
+            <p>When you promote to <strong>Released</strong>, <strong>Create a release baseline</strong> is ticked by default. It records release <strong>R1, R2, …</strong> and a baseline with the exact version of every released file, so that release can be rebuilt later (Files → Baselines → <em>Download baseline…</em>). It is strict: if a required dependency has no checked-in version, Where Used has not been built for a product with assemblies or drawings, or released content is missing, the promotion is refused with the reason and nothing changes. Untick the box to release without a baseline.</p>
+          </article>
+          <article class="tile">
             <h3>Checked-out files</h3>
             <p>Promoting to <strong>Released</strong>, <strong>In Review</strong> or <strong>Approved</strong> is refused while any file is checked out; the message names the files and who holds them. Check them in or undo the checkout first.</p>
           </article>

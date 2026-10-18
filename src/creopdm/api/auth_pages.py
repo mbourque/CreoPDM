@@ -2393,6 +2393,7 @@ def admin_products_promote(
     state: str = Form(""),
     confirm_password: str = Form(""),
     reopen_files: str = Form(""),
+    release_baseline: str = Form(""),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
@@ -2438,14 +2439,23 @@ def admin_products_promote(
             description=product.description,
             state=parsed,
             reopen_released_files=str(reopen_files or "").strip().lower() in {"1", "on", "true", "yes"},
+            create_release_baseline=str(release_baseline or "").strip().lower()
+            in {"1", "on", "true", "yes"},
         )
         db.commit()
+        release_note = ""
+        if str(release_baseline or "").strip().lower() in {"1", "on", "true", "yes"} and parsed == "RELEASED":
+            latest = ctx.baselines.list_releases(db, product)
+            if latest:
+                release_note = f" Release {latest[0]['label']} created" + (
+                    f" with baseline {latest[0]['baseline_name']}." if latest[0]["baseline_uuid"] else " (no checked-in files to baseline)."
+                )
         return _promote_products_response(
             request,
             ctx,
             db,
             manager,
-            success=f"Saved {product.name} as {label}.",
+            success=f"Saved {product.name} as {label}.{release_note}",
         )
     except CreoPDMError as exc:
         db.rollback()

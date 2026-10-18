@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from creopdm.exceptions import BaselineReferencedError
 from creopdm.models.baseline import Baseline, BaselineDependency, BaselineMember
+from creopdm.models.product_release import ProductRelease
 
 _NAMES_SHOWN = 5
 
@@ -75,7 +76,8 @@ def ensure_product_has_no_baselines(session: Session, product_id: int, *, action
 
 
 def delete_product_baselines(session: Session, product_id: int) -> int:
-    """Product delete: remove its baselines and members, before objects and versions."""
+    """Product delete: remove its releases, baselines and members, before objects and versions."""
+    session.execute(delete(ProductRelease).where(ProductRelease.product_id == product_id))
     ids = list(session.scalars(select(Baseline.id).where(Baseline.product_id == product_id)))
     for chunk in _chunks(ids):
         session.execute(
