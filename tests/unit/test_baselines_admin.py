@@ -74,7 +74,8 @@ def test_admin_endpoints_and_page_need_the_baselines_admin_permission(auth_clien
     baseline = _create(auth_client, product).json()
     assert auth_client.get("/api/admin/baselines").status_code == 200
     assert auth_client.get("/admin/baselines").status_code == 200
-    assert "/admin/baselines" in auth_client.get("/admin").text  # the Administration tile
+    assert "/admin/baselines" in auth_client.get("/admin/products").text  # the Manage products tile
+    assert "/admin/baselines" not in auth_client.get("/admin").text
 
     for user, password in (("eng", "EngPass1"), ("view", "ViewPass1")):
         _login(auth_client, user, password)
@@ -265,6 +266,15 @@ def test_admin_baselines_page_is_wired():
     # The app swaps only <main.shell> on a soft navigation and never runs <script> tags in it, so the
     # page must be a lazy module that app.js starts after every swap (not a <script> in the page).
     assert "<script" not in template
+    # The name links to the product only for an account that can open it (the Files page sends
+    # an admin-only account straight back to Administration).
+    assert 'data-can-open-product="{% if can_view_products and can_view_baselines %}1' in template
+    assert "canOpenProduct" in (ROOT / "src" / "creopdm" / "static" / "js" / "admin_baselines.js").read_text(encoding="utf-8")
+    # Baselines is a tile of Manage products, not of the Administration hub.
+    products_hub = (ROOT / "src" / "creopdm" / "templates" / "admin_products_hub.html").read_text(encoding="utf-8")
+    assert "can_admin_baselines" in products_hub and "/admin/baselines" in products_hub
+    admin_hub = (ROOT / "src" / "creopdm" / "templates" / "admin.html").read_text(encoding="utf-8")
+    assert 'href="/admin/baselines"' not in admin_hub and "can_admin_baselines or" in admin_hub
     script = (ROOT / "src" / "creopdm" / "static" / "js" / "admin_baselines.js").read_text(encoding="utf-8")
     assert "window.__creopdmModules.admin_baselines" in script and "init() {" in script
     app_py = (ROOT / "src" / "creopdm" / "app.py").read_text(encoding="utf-8")
@@ -273,7 +283,5 @@ def test_admin_baselines_page_is_wired():
     assert 'if ($("#admin-baselines-page"))' in boot and 'initJobModule("admin_baselines"' in boot
     assert "/api/admin/baselines" in script and "/integrity" in script
     assert "data-archive" in script and "data-restore" in script and "deep=" in script
-    hub = (ROOT / "src" / "creopdm" / "templates" / "admin.html").read_text(encoding="utf-8")
-    assert "can_admin_baselines" in hub and "/admin/baselines" in hub
     app_js = (ROOT / "src" / "creopdm" / "static" / "js" / "app.js").read_text(encoding="utf-8")
     assert 'window.location.hash === "#baselines"' in app_js  # the admin link opens the tab

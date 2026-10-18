@@ -1979,6 +1979,7 @@ def _require_manage_products_hub(
         or ctx.user_accounts.can_utilities_delete_product(user)
         or ctx.user_accounts.can_utilities_compact_product(user)
         or ctx.user_accounts.can_utilities_rebuild_product(user)
+        or ctx.user_accounts.can_admin_baselines(user)
     ):
         return HTMLResponse(
             "<h1>403 Forbidden</h1><p>Product management access required.</p>",

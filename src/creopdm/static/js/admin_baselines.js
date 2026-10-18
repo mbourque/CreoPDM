@@ -9,6 +9,9 @@ window.__creopdmModules.admin_baselines = {
   init() {
     const page = document.getElementById("admin-baselines-page");
     if (!page) return;
+    // An account that cannot browse products would just be sent back to Administration by the
+    // Files page, so the name is a link only when it can open the product.
+    const canOpenProduct = page.dataset.canOpenProduct === "1";
 
   const $ = (sel) => document.querySelector(sel);
   const esc = (v) =>
@@ -83,8 +86,12 @@ window.__creopdmModules.admin_baselines = {
         }`;
         return `<tr data-baseline="${esc(item.uuid)}" class="${archived ? "is-archived" : ""}">
           <td class="baseline-name-cell">${esc(item.product_name)}</td>
-          <td class="baseline-name-cell"><a href="/?product=${encodeURIComponent(item.product_uuid)}#baselines"
-              title="Open this product's Baselines tab">${esc(item.name)}</a>${
+          <td class="baseline-name-cell">${
+            canOpenProduct
+              ? `<a href="/?product=${encodeURIComponent(item.product_uuid)}#baselines"
+              title="Open this product's Baselines tab">${esc(item.name)}</a>`
+              : esc(item.name)
+          }${
             item.description ? `<div class="muted small">${esc(item.description)}</div>` : ""
           }</td>
           <td>${kind}</td>

@@ -1,13 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Baselines — {{ app_name }}{% endblock %}
 {% block content %}
-<article class="detail settings-page admin-page" id="admin-baselines-page">
+<article class="detail settings-page admin-page" id="admin-baselines-page"
+         data-can-open-product="{% if can_view_products and can_view_baselines %}1{% else %}0{% endif %}">
   <nav class="crumb">
     {% if can_view_products %}
     <a href="/">Products</a>
     <span>/</span>
     {% endif %}
     <a href="/admin">Administration</a>
+    <span>/</span>
+    <a href="/admin/products">Manage products</a>
     <span>/</span>
     <span>Baselines</span>
   </nav>

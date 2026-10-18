@@ -12,7 +12,7 @@
     <span>Manage products</span>
   </nav>
   <h1>Manage products</h1>
-  <p class="muted">Set who can open products, or edit, copy, promote, define lifecycle states, delete, compact, or rebuild. Each tile is its own page.</p>
+  <p class="muted">Set who can open products, or edit, copy, promote, define lifecycle states, check baselines, delete, compact, or rebuild. Each tile is its own page.</p>
 
   <div class="admin-tile-grid">
     {% if can_manage_products %}
@@ -41,6 +41,12 @@
     <section class="admin-tile">
       <h2><a href="/admin/lifecycle">Lifecycle states</a></h2>
       <p>Define product lifecycle states and which operations each state allows (checkout, download, …).</p>
+    </section>
+    {% endif %}
+    {% if can_admin_baselines %}
+    <section class="admin-tile">
+      <h2><a href="/admin/baselines">Baselines</a></h2>
+      <p>Every baseline of every product: check integrity (versions, vault content, Git commits and tags) and archive or restore.</p>
     </section>
     {% endif %}
     {% if can_utilities_delete_product %}
