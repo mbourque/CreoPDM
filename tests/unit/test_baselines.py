@@ -1620,6 +1620,8 @@ def test_git_tag_ui_is_wired():
     module = (ROOT / "src" / "creopdm" / "static" / "js" / "baselines.js").read_text(encoding="utf-8")
     assert "git_tag:" in module and "/git-check`" in module and "/git-tag`" in module
     assert "function renderTag" in module and "function suggestTag" in module
+    # The suggested tag follows the name until the user types their own.
+    assert "let tagEdited = false" in module and '$("#baseline-name")?.addEventListener("input"' in module
     template = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     for needle in (
         'id="baseline-tag-on"',

@@ -294,6 +294,7 @@ window.__creopdmModules.baselines = {
       if (tagOn) tagOn.checked = false;
       if (tagField) tagField.hidden = true;
       if (tagInput) tagInput.value = "";
+      tagEdited = false;
       const files = $("#metric-filters")?.dataset.productObjects;
       const count = $("#baseline-file-count");
       if (count) {
@@ -399,13 +400,31 @@ window.__creopdmModules.baselines = {
       return slug ? `baseline/${slug}` : "baseline/";
     }
 
+    // The suggested tag follows the baseline name until the user types their own tag.
+    let tagEdited = false;
+
     $("#baseline-tag-on")?.addEventListener("change", (event) => {
       const on = event.currentTarget instanceof HTMLInputElement && event.currentTarget.checked;
       const field = $("#baseline-tag-field");
       const input = $("#baseline-tag");
       if (field) field.hidden = !on;
-      if (on && input && !input.value) input.value = suggestTag($("#baseline-name")?.value);
+      if (on && input && (!input.value || !tagEdited)) {
+        input.value = suggestTag($("#baseline-name")?.value);
+        tagEdited = false;
+      }
       if (on) input?.focus();
+    });
+
+    $("#baseline-tag")?.addEventListener("input", (event) => {
+      const input = event.currentTarget;
+      // Clearing the box hands control back to the suggestion.
+      tagEdited = input instanceof HTMLInputElement && input.value.trim() !== "";
+    });
+
+    $("#baseline-name")?.addEventListener("input", () => {
+      const input = $("#baseline-tag");
+      if (!$("#baseline-tag-on")?.checked || tagEdited || !input) return;
+      input.value = suggestTag($("#baseline-name")?.value);
     });
 
     mod.openBaselineMembers = openBaselineMembers;
