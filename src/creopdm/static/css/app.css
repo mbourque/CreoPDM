@@ -1491,6 +1491,11 @@ button.forgot-password-btn,
    margin) is too loose for two tick boxes that belong to one choice. */
 #promote-release-wrap { margin-top: 0; }
 #promote-tag-wrap { margin-top: -0.75rem; }
+/* Sortable columns in the baseline contents (Files, Structure, Compare). */
+#baseline-members-dialog th[data-sort] { cursor: pointer; user-select: none; white-space: nowrap; }
+#baseline-members-dialog th[data-sort]:hover { color: var(--accent-2, #2f6f8f); }
+#baseline-members-dialog th[aria-sort="ascending"]::after { content: " \25B2"; font-size: 0.7em; }
+#baseline-members-dialog th[aria-sort="descending"]::after { content: " \25BC"; font-size: 0.7em; }
 .baselines-archived-toggle { margin: 0; font-size: 0.88rem; }
 #baselines-table tr.is-archived td { color: var(--muted, #5b6b7a); }
 .baseline-admin-stats { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.6rem 0; }

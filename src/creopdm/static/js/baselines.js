@@ -193,7 +193,10 @@ window.__creopdmModules.baselines = {
           `Changed ${s.changed} · Added ${s.added} · Removed ${s.removed} · Unchanged ${s.unchanged}` +
           ` — ${compareResult.from_baseline.name} → ${compareResult.to_baseline.name}`;
       }
-      const rows = compareResult.items.filter((r) => showSame || r.status !== "UNCHANGED");
+      const rows = sortedRows(
+        "compare",
+        compareResult.items.filter((r) => showSame || r.status !== "UNCHANGED")
+      );
       body.innerHTML = rows.length
         ? rows
             .map(
@@ -229,17 +232,107 @@ window.__creopdmModules.baselines = {
       }
     }
 
+    // ---- sortable columns (Files, Structure, Compare): click a header, click again to reverse ----
+    // Sorting is done on the rows already loaded, so it is instant and never asks the server again.
+    const sorts = { files: null, structure: null, compare: null }; // { key, dir } or null (server order)
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+    let filesData = [];
+    let filesInfo = null;
+    let structureData = [];
+
+    /** "A.12" -> revision letters (A < B < ... < Z < AA) then iteration as a number. */
+    function compareVersions(a, b) {
+      const parse = (v) => {
+        const match = /^([A-Za-z]+)\.(\d+)/.exec(String(v || ""));
+        return match ? [match[1].toUpperCase(), Number(match[2])] : null;
+      };
+      const pa = parse(a);
+      const pb = parse(b);
+      if (!pa && !pb) return 0;
+      if (!pa) return 1; // an empty version sorts after real ones
+      if (!pb) return -1;
+      if (pa[0].length !== pb[0].length) return pa[0].length - pb[0].length;
+      if (pa[0] !== pb[0]) return pa[0] < pb[0] ? -1 : 1;
+      return pa[1] - pb[1];
+    }
+    const byText = (get) => (x, y) => collator.compare(String(get(x) ?? ""), String(get(y) ?? ""));
+    const byNumber = (get) => (x, y) => Number(get(x) ?? 0) - Number(get(y) ?? 0);
+    const CHANGE_ORDER = { VERSION_CHANGED: 0, ADDED: 1, REMOVED: 2, UNCHANGED: 3 };
+    const COLUMNS = {
+      files: {
+        name: byText((m) => m.filename),
+        rev: (x, y) => compareVersions(x.display_version, y.display_version),
+        state: byText((m) => stateLabel(m.lifecycle_state)),
+        type: byText((m) => String(m.object_type || "").replace(/^CREO_/, "")),
+        // "Same version" first, then the files the product has moved on from (by what it has now).
+        now: (x, y) =>
+          (x.status === "OUT_OF_DATE") - (y.status === "OUT_OF_DATE") ||
+          compareVersions(x.current_display_version, y.current_display_version),
+      },
+      structure: {
+        parent: byText((e) => e.parent_filename),
+        uses: byText((e) => e.child_filename),
+        type: byText((e) => e.dependency_type),
+        qty: byNumber((e) => e.quantity),
+        resolved: (x, y) => Number(Boolean(x.resolved)) - Number(Boolean(y.resolved)),
+      },
+      compare: {
+        name: byText((r) => r.filename),
+        change: (x, y) => (CHANGE_ORDER[x.status] ?? 9) - (CHANGE_ORDER[y.status] ?? 9),
+        mine: (x, y) => compareVersions(x.from_version, y.from_version),
+        other: (x, y) => compareVersions(x.to_version, y.to_version),
+      },
+    };
+
+    function sortedRows(table, rows) {
+      const state = sorts[table];
+      const compare = state && COLUMNS[table][state.key];
+      if (!compare) return rows;
+      // Array.prototype.sort is stable: equal rows keep their order, so a tie never shuffles.
+      return [...rows].sort((x, y) => state.dir * (compare(x, y) || 0));
+    }
+
+    const SORT_TABLE_IDS = {
+      "baseline-members-table": "files",
+      "baseline-structure-table": "structure",
+      "baseline-compare-table": "compare",
+    };
+
+    /** Show the arrow on the sorted column (aria-sort) and none on the others. */
+    function paintSortHeaders(table) {
+      const id = Object.keys(SORT_TABLE_IDS).find((key) => SORT_TABLE_IDS[key] === table);
+      const state = sorts[table];
+      document.querySelectorAll(`#${id} th[data-sort]`).forEach((th) => {
+        const active = state && th.getAttribute("data-sort") === state.key;
+        if (active) th.setAttribute("aria-sort", state.dir === 1 ? "ascending" : "descending");
+        else th.removeAttribute("aria-sort");
+      });
+    }
+
+    function resetSorts() {
+      for (const table of Object.keys(sorts)) {
+        sorts[table] = null;
+        paintSortHeaders(table);
+      }
+    }
+
     /** The captured structure: each parent version, the exact child version it uses, or "Unresolved". */
     function renderStructure(edges) {
       const tab = $("#baseline-structure-tab");
       const body = $("#baseline-structure-table tbody");
-      const list = Array.isArray(edges) ? edges : [];
+      structureData = Array.isArray(edges) ? edges : [];
+      const list = structureData;
       if (tab) {
         tab.hidden = !list.length;
         tab.textContent = `Structure · ${list.length}`;
       }
+      paintStructure();
+    }
+
+    function paintStructure() {
+      const body = $("#baseline-structure-table tbody");
       if (!body) return;
-      body.innerHTML = list
+      body.innerHTML = sortedRows("structure", structureData)
         .map((e) => {
           const uses = e.resolved
             ? `${esc(e.child_filename)} <span class="muted">${esc(e.child_display_version || "")}</span>`
@@ -309,6 +402,7 @@ window.__creopdmModules.baselines = {
       if (title) title.textContent = row?.querySelector(".baseline-open")?.textContent || "Baseline";
       if (meta) meta.textContent = "";
       resetCopyStatus();
+      resetSorts();
       compareChoicesFor = "";
       compareResult = null;
       setBaselineView("files");
@@ -365,29 +459,37 @@ window.__creopdmModules.baselines = {
         const noStructure = $("#baseline-no-structure");
         if (noStructure) noStructure.hidden = !(info && info.structure_indexed === false);
         if (!body) return;
-        body.innerHTML = (Array.isArray(members) ? members : [])
-          .map((m) => {
-            const newer = m.status === "OUT_OF_DATE";
-            const now = newer
-              ? `Newer: ${esc(m.current_display_version || "—")}`
-              : "Same version";
-            return `<tr data-version="${esc(m.version_uuid)}" data-object="${esc(m.object_uuid)}">
-              <td class="baseline-name-cell">${versionLink(info, m)}${
-                m.relative_path && m.relative_path !== m.filename
-                  ? `<div class="muted small">${esc(m.relative_path)}</div>`
-                  : ""
-              }</td>
-              <td>${esc(m.display_version)}</td>
-              <td>${esc(stateLabel(m.lifecycle_state))}</td>
-              <td>${esc(String(m.object_type || "").replace(/^CREO_/, "").toLowerCase() || "—")}</td>
-              <td class="${newer ? "is-newer" : ""}">${now}</td>
-            </tr>`;
-          })
-          .join("");
+        filesData = Array.isArray(members) ? members : [];
+        filesInfo = info;
+        paintFiles();
       } catch (err) {
         if (body) body.innerHTML = "";
         showError($("#baseline-members-error"), `Could not load the baseline: ${err?.message || "error"}`);
       }
+    }
+
+    function paintFiles() {
+      const body = $("#baseline-members-table tbody");
+      if (!body) return;
+      body.innerHTML = sortedRows("files", filesData)
+        .map((m) => {
+          const newer = m.status === "OUT_OF_DATE";
+          const now = newer
+            ? `Newer: ${esc(m.current_display_version || "—")}`
+            : "Same version";
+          return `<tr data-version="${esc(m.version_uuid)}" data-object="${esc(m.object_uuid)}">
+            <td class="baseline-name-cell">${versionLink(filesInfo, m)}${
+              m.relative_path && m.relative_path !== m.filename
+                ? `<div class="muted small">${esc(m.relative_path)}</div>`
+                : ""
+            }</td>
+            <td>${esc(m.display_version)}</td>
+            <td>${esc(stateLabel(m.lifecycle_state))}</td>
+            <td>${esc(String(m.object_type || "").replace(/^CREO_/, "").toLowerCase() || "—")}</td>
+            <td class="${newer ? "is-newer" : ""}">${now}</td>
+          </tr>`;
+        })
+        .join("");
     }
 
     function newOperationId() {
@@ -870,6 +972,20 @@ window.__creopdmModules.baselines = {
       }
       if (button instanceof HTMLButtonElement) button.disabled = false;
       await openBaselineMembers(uuid);
+    });
+
+    $("#baseline-members-dialog")?.addEventListener("click", (event) => {
+      const th = event.target instanceof Element ? event.target.closest("th[data-sort]") : null;
+      const tableEl = th?.closest("table");
+      const table = tableEl ? SORT_TABLE_IDS[tableEl.id] : null;
+      if (!th || !table) return;
+      const key = th.getAttribute("data-sort") || "";
+      const current = sorts[table];
+      sorts[table] = current && current.key === key ? { key, dir: -current.dir } : { key, dir: 1 };
+      paintSortHeaders(table);
+      if (table === "files") paintFiles();
+      else if (table === "structure") paintStructure();
+      else renderCompare();
     });
 
     $("#baseline-compare-to")?.addEventListener("change", () => void runCompare());
