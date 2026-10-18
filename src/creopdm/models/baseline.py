@@ -38,6 +38,7 @@ _FROZEN_BASELINE_FIELDS = (
     "member_count",
     "dependency_count",
     "unresolved_dependency_count",
+    "structure_indexed",
     "created_by",
     "finalized_by",
     "finalized_at",
@@ -59,6 +60,9 @@ class Baseline(Base):
     member_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     dependency_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     unresolved_dependency_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # False = the product had assemblies/drawings but Where Used was not built, so no structure
+    # could be captured (the creator confirmed that).
+    structure_indexed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_by: Mapped[str] = mapped_column(String(128), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finalized_by: Mapped[str | None] = mapped_column(String(128), nullable=True)

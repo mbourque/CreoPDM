@@ -1012,3 +1012,74 @@ def test_baseline_structure_ui_is_wired():
     assert "baseline-unresolved" in module and "unresolved_dependency_count" in module
     template = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     assert 'id="baseline-structure-table"' in template
+
+
+# ---- Story 7b: a missing Where Used index is never silently an empty structure -------------
+
+
+def _assembly_product(auth_client, auth_ctx, with_edge=False):
+    from creopdm.models.product import Product
+
+    product, objects = _product(auth_client, "Rig", ("top.asm", "bolt.prt"))
+    if with_edge:
+        with auth_ctx.session_factory() as db:
+            row = db.scalar(select(Product).where(Product.uuid == product["uuid"]))
+            by_name = {
+                o.filename: o
+                for o in db.scalars(
+                    select(EngineeringObject).where(EngineeringObject.product_id == row.id)
+                )
+            }
+            assert by_name["top.asm"].object_type == "CREO_ASSEMBLY"
+            _edge(db, row, by_name["top.asm"], by_name["bolt.prt"].id)
+            db.commit()
+    return product, objects
+
+
+def test_creating_without_where_used_asks_first_and_creates_nothing(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _assembly_product(auth_client, auth_ctx)
+    refused = _create(auth_client, product)
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["error"]["code"] == "BASELINE_STRUCTURE_NOT_INDEXED"
+    assert "Where Used" in refused.json()["error"]["message"]
+    with auth_ctx.session_factory() as db:
+        assert db.scalar(select(func.count()).select_from(Baseline)) == 0
+
+
+def test_the_user_can_confirm_a_baseline_without_structure_and_it_says_so(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _assembly_product(auth_client, auth_ctx)
+    created = _create(auth_client, product, accept_missing_structure=True)
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["structure_indexed"] is False and body["dependency_count"] == 0
+    assert auth_client.get(f"/api/baselines/{body['uuid']}").json()["structure_indexed"] is False
+    with auth_ctx.session_factory() as db:
+        events = auth_ctx.activities.list_events(db, q="Design Review 01")
+        entry = next(e for e in events if e.action == "BASELINE_CREATED")
+        assert (entry.details or {}).get("structure_indexed") is False
+
+
+def test_no_confirmation_is_needed_when_structure_exists_or_is_not_applicable(
+    auth_client, auth_ctx
+):
+    _signed_in_admin(auth_client, auth_ctx)
+    indexed, _o = _assembly_product(auth_client, auth_ctx, with_edge=True)
+    created = _create(auth_client, indexed, "With structure")
+    assert created.status_code == 201, created.text
+    assert created.json()["structure_indexed"] is True
+    assert created.json()["dependency_count"] == 1
+
+    parts_only, _p = _product(auth_client, "Parts only", ("a.prt", "b.prt"))
+    plain = _create(auth_client, parts_only, "Plain")
+    assert plain.status_code == 201, plain.text
+    assert plain.json()["structure_indexed"] is True
+
+
+def test_missing_structure_ui_is_wired():
+    module = (ROOT / "src" / "creopdm" / "static" / "js" / "baselines.js").read_text(encoding="utf-8")
+    assert "BASELINE_STRUCTURE_NOT_INDEXED" in module and "accept_missing_structure" in module
+    assert "baseline-no-structure" in module and "structure_indexed === false" in module
+    template = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
+    assert 'id="baseline-accept-structure"' in template and 'id="baseline-no-structure"' in template

@@ -163,8 +163,9 @@ window.__creopdmModules.baselines = {
         ]);
         if (!membersResp.ok) throw new Error(await readError(membersResp));
         const members = await membersResp.json();
-        if (baselineResp.ok && meta) {
-          const info = await baselineResp.json();
+        let info = null;
+        if (baselineResp.ok) info = await baselineResp.json();
+        if (info && meta) {
           meta.textContent =
             `${titleCase(info.status)} · ${titleCase(info.baseline_type)} · ` +
             `${info.member_count} member${info.member_count === 1 ? "" : "s"} · ` +
@@ -176,6 +177,8 @@ window.__creopdmModules.baselines = {
             `created ${formatWhen(info.created_at)} by ${info.created_by}`;
         }
         renderStructure(structureResp.ok ? await structureResp.json() : []);
+        const noStructure = $("#baseline-no-structure");
+        if (noStructure) noStructure.hidden = !(info && info.structure_indexed === false);
         if (!body) return;
         body.innerHTML = (Array.isArray(members) ? members : [])
           .map((m) => {
@@ -222,6 +225,10 @@ window.__creopdmModules.baselines = {
       if (description) description.value = "";
       if (confirm) confirm.disabled = false;
       showError($("#baseline-error"), "");
+      const structureBox = $("#baseline-structure-confirm");
+      if (structureBox) structureBox.hidden = true;
+      const acceptStructure = $("#baseline-accept-structure");
+      if (acceptStructure) acceptStructure.checked = false;
       const files = $("#metric-filters")?.dataset.productObjects;
       const count = $("#baseline-file-count");
       if (count) {
@@ -250,6 +257,7 @@ window.__creopdmModules.baselines = {
           }
           showError($("#baseline-error"), "");
           if (confirm) confirm.disabled = true;
+          const acceptBox = $("#baseline-accept-structure");
           let response;
           try {
             response = await fetch(`/api/products/${encodeURIComponent(pid)}/baselines`, {
@@ -259,6 +267,7 @@ window.__creopdmModules.baselines = {
                 name: text,
                 description: String(description?.value || "").trim() || null,
                 operation_id: operationId,
+                accept_missing_structure: Boolean(acceptBox?.checked),
               }),
             });
           } catch {
@@ -270,7 +279,18 @@ window.__creopdmModules.baselines = {
             return;
           }
           if (!response.ok) {
+            let code = "";
+            try {
+              code = (await response.clone().json())?.error?.code || "";
+            } catch {
+              code = "";
+            }
             showError($("#baseline-error"), await readError(response));
+            if (code === "BASELINE_STRUCTURE_NOT_INDEXED") {
+              // Nothing was created. Offer the explicit choice instead of a silent empty structure.
+              const box = $("#baseline-structure-confirm");
+              if (box) box.hidden = false;
+            }
             if (confirm) confirm.disabled = false;
             return;
           }

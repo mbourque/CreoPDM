@@ -749,6 +749,7 @@
   <form method="dialog" id="baseline-members-form">
     <h2 id="baseline-members-title">Baseline</h2>
     <p class="muted small" id="baseline-members-meta"></p>
+    <p class="baseline-frozen baseline-no-structure" id="baseline-no-structure" hidden>Structure was not captured: Where Used had not been built for this product when this baseline was made, so which parts each assembly and drawing used is not recorded.</p>
     <p class="baseline-frozen">Configuration snapshot — this baseline is immutable. Each row is the exact version captured, whatever the product holds today.</p>
     <p class="error" id="baseline-members-error" hidden></p>
     <div class="table-wrap baseline-members-wrap">
@@ -794,6 +795,10 @@
     </dl>
     <p class="muted small">Each file is captured at its exact current checked-in version. Files that are checked out or modified are recorded at their last checked-in version. A baseline cannot be changed afterwards.</p>
     <p class="error" id="baseline-error" hidden></p>
+    <label class="baseline-structure-confirm" id="baseline-structure-confirm" hidden>
+      <input type="checkbox" id="baseline-accept-structure">
+      Create it anyway, without the assembly/drawing structure
+    </label>
     <div class="dialog-actions">
       <button type="button" class="btn" id="baseline-cancel">Cancel</button>
       <button type="submit" class="btn btn-primary" id="baseline-confirm">Create Baseline</button>

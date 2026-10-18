@@ -134,6 +134,13 @@ class BaselineImmutableError(CreoPDMError):
     http_status = 409
 
 
+class BaselineStructureNotIndexedError(CreoPDMError):
+    """The product has assemblies or drawings but Where Used was never built: no structure to capture."""
+
+    code = "BASELINE_STRUCTURE_NOT_INDEXED"
+    http_status = 409
+
+
 class BaselineEmptyError(CreoPDMError):
     """A product with no checked-in files has nothing to capture."""
 

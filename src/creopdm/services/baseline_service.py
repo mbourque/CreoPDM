@@ -15,6 +15,7 @@ from creopdm.exceptions import (
     BaselineImmutableError,
     BaselineNameConflictError,
     BaselineNotFoundError,
+    BaselineStructureNotIndexedError,
     ValidationAppError,
 )
 from creopdm.logging_setup import get_logger
@@ -44,6 +45,9 @@ REQUIRED_DEPENDENCY_TYPES = frozenset(
         DependencyType.MERGE.value,
     }
 )
+
+
+_STRUCTURE_OBJECT_TYPES = frozenset({"CREO_ASSEMBLY", "CREO_DRAWING"})
 
 
 def clean_name(name: str | None) -> str:
@@ -196,6 +200,7 @@ class BaselineService:
         name: str | None,
         description: str | None = None,
         operation_id: str | None = None,
+        accept_missing_structure: bool = False,
     ) -> Baseline:
         """Capture every file's current version as an immutable, FINALIZED baseline.
 
@@ -229,6 +234,14 @@ class BaselineService:
                     f"{product.name} has no files with a checked-in version to baseline.",
                     details={"product": product.uuid},
                 )
+            structure_indexed = self._structure_indexed(session, product, captured)
+            if not structure_indexed and not accept_missing_structure:
+                raise BaselineStructureNotIndexedError(
+                    "Where Used has not been built for this product, so this baseline would not "
+                    "record which parts its assemblies and drawings use. Rebuild Where Used first, "
+                    "or confirm that you want a baseline without structure.",
+                    details={"product": product.uuid},
+                )
             now = datetime.now(timezone.utc)
             # Capture, then finalize, inside this one transaction: members may be written only
             # while the baseline is a draft; once finalized nothing about it can change.
@@ -242,6 +255,7 @@ class BaselineService:
                 member_count=0,
                 created_by=user.user_name,
                 operation_id=op_id,
+                structure_indexed=structure_indexed,
             )
             try:
                 session.add(baseline)
@@ -270,6 +284,7 @@ class BaselineService:
                         "member_count": baseline.member_count,
                         "dependency_count": baseline.dependency_count,
                         "unresolved_dependency_count": baseline.unresolved_dependency_count,
+                        "structure_indexed": baseline.structure_indexed,
                     },
                     comment=note,
                 )
@@ -349,6 +364,21 @@ class BaselineService:
                     f'A baseline named "{existing}" already exists in {product.name}.',
                     details={"name": existing},
                 )
+
+    @staticmethod
+    def _structure_indexed(
+        session: Session, product: Product, captured: list[EngineeringObject]
+    ) -> bool:
+        """False only when there is structure to capture (an assembly or drawing) but the product
+        has no dependency rows at all, i.e. Where Used was never built."""
+        if not any(obj.object_type in _STRUCTURE_OBJECT_TYPES for obj in captured):
+            return True
+        return (
+            session.scalar(
+                select(Dependency.id).where(Dependency.product_id == product.id).limit(1)
+            )
+            is not None
+        )
 
     @staticmethod
     def _dependencies(

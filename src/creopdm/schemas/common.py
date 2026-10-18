@@ -300,6 +300,8 @@ class BaselineCreateRequest(BaseModel):
     description: str | None = None
     # Client-made id for one logical create. A retry with the same id returns the same baseline.
     operation_id: str | None = Field(default=None, max_length=64)
+    # Set by the dialog after the user confirmed a baseline without structure (Where Used not built).
+    accept_missing_structure: bool = False
 
 
 class BaselineResponse(BaseModel):
@@ -312,6 +314,7 @@ class BaselineResponse(BaseModel):
     member_count: int
     dependency_count: int = 0
     unresolved_dependency_count: int = 0
+    structure_indexed: bool = True
     created_by: str
     created_at: datetime | None = None
     finalized_at: datetime | None = None

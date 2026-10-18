@@ -38,6 +38,7 @@ def baseline_to_response(baseline: Baseline, product_uuid: str) -> BaselineRespo
         member_count=baseline.member_count,
         dependency_count=baseline.dependency_count,
         unresolved_dependency_count=baseline.unresolved_dependency_count,
+        structure_indexed=bool(baseline.structure_indexed),
         created_by=baseline.created_by,
         created_at=as_utc(baseline.created_at),
         finalized_at=as_utc(baseline.finalized_at),
@@ -121,5 +122,6 @@ def create_baseline(
         payload.name,
         payload.description,
         payload.operation_id,
+        accept_missing_structure=payload.accept_missing_structure,
     )
     return baseline_to_response(baseline, product.uuid)
