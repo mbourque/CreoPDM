@@ -753,3 +753,55 @@ def test_finalized_status_is_explained_in_the_ui():
     module = (ROOT / "src" / "creopdm" / "static" / "js" / "baselines.js").read_text(encoding="utf-8")
     assert "function statusHint" in module and "can never change" in module
     assert "title=\"${esc(statusHint(item.status))}\"" in module
+
+
+# ---- Story 5: a new check-in does not change an existing baseline -------------------------
+
+
+@requires_git
+def test_new_check_ins_leave_an_existing_baseline_unchanged(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client)
+    shaft = objects["shaft.prt"]
+    _check_in(auth_client, auth_ctx, product, shaft, b"shaft-v2")  # shaft is now A.2
+    created = _create(auth_client, product, "Shaft at A.2").json()
+
+    def snapshot():
+        with auth_ctx.session_factory() as db:
+            baseline = _baseline_row(db, created["uuid"])
+            return baseline.member_count, sorted(
+                (m.id, m.object_id, m.object_version_id, m.revision, m.iteration, m.content_hash)
+                for m in baseline.members
+            )
+
+    before = snapshot()
+    before_members = _members(auth_client, created["uuid"])
+    assert before_members["shaft.prt"]["iteration"] == 2
+
+    _check_in(auth_client, auth_ctx, product, shaft, b"shaft-v3")  # A.3
+    _check_in(auth_client, auth_ctx, product, shaft, b"shaft-v4")  # A.4
+
+    # The object moved on, the baseline did not: same rows, same version ids, same hashes.
+    assert snapshot() == before
+    after_members = _members(auth_client, created["uuid"])
+    assert after_members["shaft.prt"]["iteration"] == 2
+    assert after_members["shaft.prt"]["revision"] == "A"
+    assert after_members["shaft.prt"]["version_uuid"] == before_members["shaft.prt"]["version_uuid"]
+    assert after_members["shaft.prt"]["content_hash"] == before_members["shaft.prt"]["content_hash"]
+    assert after_members["shaft.prt"]["status"] == "OUT_OF_DATE"  # reported as newer, not rewritten
+    assert after_members["housing.prt"]["status"] == "SAME"
+    assert after_members["housing.prt"]["version_uuid"] == before_members["housing.prt"]["version_uuid"]
+
+    listed = auth_client.get(f"/api/products/{product['uuid']}/baselines").json()
+    assert [b["member_count"] for b in listed] == [3]
+
+    # The pinned A.2 version row itself is still there and still holds A.2's content.
+    with auth_ctx.session_factory() as db:
+        version = db.scalar(
+            select(ObjectVersion).where(ObjectVersion.uuid == before_members["shaft.prt"]["version_uuid"])
+        )
+        assert version is not None and (version.revision, version.iteration) == ("A", 2)
+        current = db.scalar(
+            select(EngineeringObject).where(EngineeringObject.uuid == shaft["uuid"])
+        ).current_version
+        assert current.id != version.id and current.iteration == 4
