@@ -110,7 +110,8 @@ window.__creopdmModules.baselines = {
         if (!response.ok) throw new Error(await readError(response));
         const items = await response.json();
         const list = Array.isArray(items) ? items : [];
-        renderRows(list);
+        baselineList = list;
+        renderRows(sortedRows("baselines", list));
         // The tab and the pill count what is in everyday use, not archived baselines.
         paintCounts(list.filter((item) => item.status !== "ARCHIVED").length);
       } catch (err) {
@@ -234,7 +235,8 @@ window.__creopdmModules.baselines = {
 
     // ---- sortable columns (Files, Structure, Compare): click a header, click again to reverse ----
     // Sorting is done on the rows already loaded, so it is instant and never asks the server again.
-    const sorts = { files: null, structure: null, compare: null }; // { key, dir } or null (server order)
+    const sorts = { baselines: null, files: null, structure: null, compare: null }; // { key, dir } or null (server order)
+    let baselineList = [];
     const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
     let filesData = [];
     let filesInfo = null;
@@ -259,6 +261,17 @@ window.__creopdmModules.baselines = {
     const byNumber = (get) => (x, y) => Number(get(x) ?? 0) - Number(get(y) ?? 0);
     const CHANGE_ORDER = { VERSION_CHANGED: 0, ADDED: 1, REMOVED: 2, UNCHANGED: 3 };
     const COLUMNS = {
+      // The product's Baselines tab. Created sorts as the ISO timestamp text (oldest first).
+      baselines: {
+        name: byText((b) => b.name),
+        type: (x, y) =>
+          collator.compare(String(x.baseline_type || ""), String(y.baseline_type || "")) ||
+          collator.compare(String(x.release_label || ""), String(y.release_label || "")),
+        status: byText((b) => b.status),
+        members: byNumber((b) => b.member_count),
+        created: byText((b) => b.created_at),
+        by: byText((b) => b.created_by),
+      },
       files: {
         name: byText((m) => m.filename),
         rev: (x, y) => compareVersions(x.display_version, y.display_version),
@@ -293,6 +306,7 @@ window.__creopdmModules.baselines = {
     }
 
     const SORT_TABLE_IDS = {
+      "baselines-table": "baselines",
       "baseline-members-table": "files",
       "baseline-structure-table": "structure",
       "baseline-compare-table": "compare",
@@ -946,6 +960,17 @@ window.__creopdmModules.baselines = {
     mod.openBaselineMembers = openBaselineMembers;
     mod.loadBaselinesTab = loadBaselinesTab;
     mod.openCreateBaselineDialog = openCreateBaselineDialog;
+
+    // Click a column header to sort the list (click again to reverse).
+    $("#baselines-table")?.addEventListener("click", (event) => {
+      const th = event.target instanceof Element ? event.target.closest("th[data-sort]") : null;
+      if (!th) return;
+      const key = th.getAttribute("data-sort") || "";
+      const current = sorts.baselines;
+      sorts.baselines = current && current.key === key ? { key, dir: -current.dir } : { key, dir: 1 };
+      paintSortHeaders("baselines");
+      renderRows(sortedRows("baselines", baselineList));
+    });
 
     $("#baselines-table")?.addEventListener("click", (event) => {
       // A button, not <a href="#">: the page-wide link handler soft-navigates every anchor,

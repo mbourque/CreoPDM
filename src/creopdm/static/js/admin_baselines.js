@@ -48,6 +48,41 @@ window.__creopdmModules.admin_baselines = {
 
   let items = [];
   let healthFilter = ""; // "", "WARNING" or "ERROR": from the last integrity check on this page
+  let sort = null; // { key, dir } or null (newest first, as the server sends it)
+  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+  const byText = (get) => (x, y) => collator.compare(String(get(x) ?? ""), String(get(y) ?? ""));
+  // Worst first when ascending, so a sort on Integrity brings the problems to the top.
+  const HEALTH_ORDER = { ERROR: 0, WARNING: 1, HEALTHY: 2 };
+  const COLUMNS = {
+    product: byText((i) => i.product_name),
+    name: byText((i) => i.name),
+    type: (x, y) =>
+      collator.compare(String(x.baseline_type || ""), String(y.baseline_type || "")) ||
+      collator.compare(String(x.release_label || ""), String(y.release_label || "")),
+    status: byText((i) => i.status),
+    members: (x, y) => Number(x.member_count || 0) - Number(y.member_count || 0),
+    created: byText((i) => i.created_at),
+    by: byText((i) => i.created_by),
+    integrity: (x, y) =>
+      (HEALTH_ORDER[health.get(x.uuid)?.status] ?? 3) - (HEALTH_ORDER[health.get(y.uuid)?.status] ?? 3),
+  };
+
+  function sortedItems(list) {
+    const compare = sort && COLUMNS[sort.key];
+    if (!compare) return list;
+    // Array.prototype.sort is stable: equal rows keep their order.
+    return [...list].sort((x, y) => sort.dir * (compare(x, y) || 0));
+  }
+
+  function paintSortHeaders() {
+    document.querySelectorAll("#baseline-admin-table th[data-sort]").forEach((th) => {
+      if (sort && th.getAttribute("data-sort") === sort.key) {
+        th.setAttribute("aria-sort", sort.dir === 1 ? "ascending" : "descending");
+      } else {
+        th.removeAttribute("aria-sort");
+      }
+    });
+  }
   const health = new Map(); // baseline uuid -> integrity report (this page view only)
   let currentReport = null;
 
@@ -122,7 +157,9 @@ window.__creopdmModules.admin_baselines = {
   function render() {
     const body = $("#baseline-admin-table tbody");
     if (!body) return;
-    const shown = healthFilter ? items.filter((i) => health.get(i.uuid)?.status === healthFilter) : items;
+    const shown = sortedItems(
+      healthFilter ? items.filter((i) => health.get(i.uuid)?.status === healthFilter) : items
+    );
     syncPills();
     if (!shown.length) {
       body.innerHTML = `<tr class="empty-row"><td colspan="9">${
@@ -285,6 +322,15 @@ window.__creopdmModules.admin_baselines = {
   $("#baseline-admin-table")?.addEventListener("click", async (event) => {
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
+    // A column header sorts the list; click it again to reverse.
+    const header = target.closest("th[data-sort]");
+    if (header) {
+      const key = header.getAttribute("data-sort") || "";
+      sort = sort && sort.key === key ? { key, dir: -sort.dir } : { key, dir: 1 };
+      paintSortHeaders();
+      render();
+      return;
+    }
     const checkBtn = target.closest("[data-check]");
     if (checkBtn) {
       const report = await check(checkBtn.getAttribute("data-check") || "", false);

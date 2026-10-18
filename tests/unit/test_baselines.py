@@ -1657,7 +1657,7 @@ def test_the_baseline_list_shows_the_required_columns_newest_first(auth_client, 
     header = template[template.index('id="baselines-table"') :]
     header = header[: header.index("</thead>")]
     for column in ("Name", "Type", "Status", "Members", "Created", "Created by"):
-        assert f"<th>{column}</th>" in header
+        assert f">{column}</th>" in header  # the headers also carry data-sort now
 
 
 def test_the_baseline_detail_shows_its_facts(auth_client, auth_ctx):
