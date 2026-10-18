@@ -259,6 +259,7 @@ class BaselineService:
                     details={"product": product.uuid},
                 )
             self._validate_content(product, captured)
+            commit_sha = self._vault_commit(product)
             structure_indexed = self._structure_indexed(session, product, captured)
             if strict:
                 self._require_strict_structure(session, product, captured, structure_indexed)
@@ -283,6 +284,7 @@ class BaselineService:
                 created_by=user.user_name,
                 operation_id=op_id,
                 structure_indexed=structure_indexed,
+                git_commit_sha=commit_sha,
             )
             try:
                 session.add(baseline)
@@ -312,6 +314,7 @@ class BaselineService:
                         "dependency_count": baseline.dependency_count,
                         "unresolved_dependency_count": baseline.unresolved_dependency_count,
                         "structure_indexed": baseline.structure_indexed,
+                        "git_commit_sha": baseline.git_commit_sha,
                     },
                     comment=note,
                 )
@@ -474,6 +477,28 @@ class BaselineService:
             f"failed validation ({shown_names}{more}).",
             details={"product": product.uuid, "problems": problems[:50]},
         )
+
+    def _vault_commit(self, product: Product) -> str | None:
+        """The product repository's HEAD as a full SHA, read inside the product lock so no check-in
+        can move it between the validation and the capture."""
+        if self._git is None or self._config is None:
+            return None
+        vault = self._config.workspace_for_product(
+            (product.vault_folder or "").strip() or product.uuid
+        )
+        try:
+            sha = self._git.get_head(vault).strip().lower()
+        except RepositoryError as exc:
+            raise BaselineValidationError(
+                f"The repository state of {product.name} could not be read: {exc.message}",
+                details={"product": product.uuid},
+            ) from exc
+        if len(sha) < 40 or any(ch not in "0123456789abcdef" for ch in sha):
+            raise BaselineValidationError(
+                f"The repository state of {product.name} could not be read (no commit).",
+                details={"product": product.uuid},
+            )
+        return sha
 
     @staticmethod
     def _require_strict_structure(

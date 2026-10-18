@@ -1370,3 +1370,79 @@ def test_a_baseline_is_never_visible_as_a_draft(auth_client, auth_ctx):
         )
     listed = auth_client.get(f"/api/products/{product['uuid']}/baselines").json()
     assert {row["status"] for row in listed} == {"FINALIZED"}
+
+
+# ---- Story 12: the baseline records the repository commit ------------------------------------
+
+
+def _head(auth_ctx, product) -> str:
+    return auth_ctx.git.get_head(_vault(auth_ctx, product)).strip().lower()
+
+
+@requires_git
+def test_a_baseline_records_the_full_repository_commit(auth_client, auth_ctx):
+    import re
+
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+    head = _head(auth_ctx, product)
+    created = _create(auth_client, product).json()
+
+    assert re.fullmatch(r"[0-9a-f]{40}", created["git_commit_sha"])  # the whole SHA, not a prefix
+    assert created["git_commit_sha"] == head
+    assert auth_client.get(f"/api/baselines/{created['uuid']}").json()["git_commit_sha"] == head
+    listed = auth_client.get(f"/api/products/{product['uuid']}/baselines").json()
+    assert listed[0]["git_commit_sha"] == head
+
+    # It is a record, never an identity: not the baseline uuid and not any version uuid.
+    assert created["git_commit_sha"] != created["uuid"]
+    members = _members(auth_client, created["uuid"])
+    assert head not in {m["version_uuid"] for m in members.values()} | {
+        m["object_uuid"] for m in members.values()
+    }
+    with auth_ctx.session_factory() as db:
+        events = auth_ctx.activities.list_events(db, q="Design Review 01")
+        entry = next(e for e in events if e.action == "BASELINE_CREATED")
+        assert (entry.details or {}).get("git_commit_sha") == head
+
+
+@requires_git
+def test_the_recorded_commit_does_not_follow_the_repository(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client)
+    first = _create(auth_client, product, "At first commit").json()
+    _check_in(auth_client, auth_ctx, product, objects["shaft.prt"], b"shaft-v2")
+    moved = _head(auth_ctx, product)
+    assert moved != first["git_commit_sha"]
+
+    # The repository moved on; the baseline still points at the commit it was made at.
+    assert auth_client.get(f"/api/baselines/{first['uuid']}").json()["git_commit_sha"] != moved
+    second = _create(auth_client, product, "At second commit").json()
+    assert second["git_commit_sha"] == moved
+    assert second["git_commit_sha"] != first["git_commit_sha"]
+
+
+@requires_git
+def test_the_recorded_commit_is_frozen(auth_client, auth_ctx):
+    from creopdm.exceptions import BaselineImmutableError
+
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+    created = _create(auth_client, product).json()
+    with auth_ctx.session_factory() as db:
+        baseline = _baseline_row(db, created["uuid"])
+        baseline.git_commit_sha = "f" * 40
+        with pytest.raises(BaselineImmutableError):
+            db.flush()
+        db.rollback()
+    assert (
+        auth_client.get(f"/api/baselines/{created['uuid']}").json()["git_commit_sha"]
+        == created["git_commit_sha"]
+    )
+
+
+def test_baseline_commit_is_shown_in_the_contents_dialog():
+    module = (ROOT / "src" / "creopdm" / "static" / "js" / "baselines.js").read_text(encoding="utf-8")
+    assert "git_commit_sha" in module and "baseline-commit-sha" in module
+    template = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
+    assert 'id="baseline-commit-sha"' in template

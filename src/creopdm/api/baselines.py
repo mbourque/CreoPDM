@@ -39,6 +39,7 @@ def baseline_to_response(baseline: Baseline, product_uuid: str) -> BaselineRespo
         dependency_count=baseline.dependency_count,
         unresolved_dependency_count=baseline.unresolved_dependency_count,
         structure_indexed=bool(baseline.structure_indexed),
+        git_commit_sha=baseline.git_commit_sha,
         created_by=baseline.created_by,
         created_at=as_utc(baseline.created_at),
         finalized_at=as_utc(baseline.finalized_at),

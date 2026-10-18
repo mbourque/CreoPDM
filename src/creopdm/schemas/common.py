@@ -317,6 +317,8 @@ class BaselineResponse(BaseModel):
     dependency_count: int = 0
     unresolved_dependency_count: int = 0
     structure_indexed: bool = True
+    # Full SHA of the vault repository when the baseline was made (None for older baselines).
+    git_commit_sha: str | None = None
     created_by: str
     created_at: datetime | None = None
     finalized_at: datetime | None = None

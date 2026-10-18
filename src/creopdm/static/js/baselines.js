@@ -154,6 +154,8 @@ window.__creopdmModules.baselines = {
       const row = $(`#baselines-table tr[data-baseline="${CSS.escape(baselineUuid)}"]`);
       if (title) title.textContent = row?.querySelector(".baseline-open")?.textContent || "Baseline";
       if (meta) meta.textContent = "";
+      const staleCommit = $("#baseline-commit-line");
+      if (staleCommit) staleCommit.hidden = true;
       if (!dialog.open) dialog.showModal();
       try {
         const [baselineResp, membersResp, structureResp] = await Promise.all([
@@ -165,6 +167,14 @@ window.__creopdmModules.baselines = {
         const members = await membersResp.json();
         let info = null;
         if (baselineResp.ok) info = await baselineResp.json();
+        const commitLine = $("#baseline-commit-line");
+        const commitCode = $("#baseline-commit-sha");
+        if (commitLine && commitCode) {
+          const sha = String(info?.git_commit_sha || "");
+          commitLine.hidden = !sha;
+          commitCode.textContent = sha ? sha.slice(0, 12) : "";
+          commitCode.title = sha ? `Full commit SHA: ${sha}` : "Full commit SHA";
+        }
         if (info && meta) {
           meta.textContent =
             `${titleCase(info.status)} · ${titleCase(info.baseline_type)} · ` +

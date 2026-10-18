@@ -39,6 +39,7 @@ _FROZEN_BASELINE_FIELDS = (
     "dependency_count",
     "unresolved_dependency_count",
     "structure_indexed",
+    "git_commit_sha",
     "created_by",
     "finalized_by",
     "finalized_at",
@@ -63,6 +64,9 @@ class Baseline(Base):
     # False = the product had assemblies/drawings but Where Used was not built, so no structure
     # could be captured (the creator confirmed that).
     structure_indexed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # The vault repository's HEAD (full SHA) when the baseline was made. It is a traceability
+    # record only: PDM membership stays authoritative and the SHA is never an identity.
+    git_commit_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_by: Mapped[str] = mapped_column(String(128), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finalized_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
