@@ -115,14 +115,26 @@ window.__creopdmModules.baselines = {
     }
 
     /** The exact versions captured, read through the stored version ids (not the current ones). */
+    /** Files and Structure are two views of one dialog; the visible table gets all the height. */
+    function setBaselineView(view) {
+      const showStructure = view === "structure" && !$("#baseline-structure-tab")?.hidden;
+      const files = $("#baseline-members-table-wrap");
+      const structure = $("#baseline-structure-wrap");
+      if (files) files.hidden = showStructure;
+      if (structure) structure.hidden = !showStructure;
+      $("#baseline-files-tab")?.classList.toggle("is-active", !showStructure);
+      $("#baseline-structure-tab")?.classList.toggle("is-active", showStructure);
+    }
+
     /** The captured structure: each parent version, the exact child version it uses, or "Unresolved". */
     function renderStructure(edges) {
-      const title = $("#baseline-structure-title");
-      const wrap = $("#baseline-structure-wrap");
+      const tab = $("#baseline-structure-tab");
       const body = $("#baseline-structure-table tbody");
       const list = Array.isArray(edges) ? edges : [];
-      if (title) title.hidden = !list.length;
-      if (wrap) wrap.hidden = !list.length;
+      if (tab) {
+        tab.hidden = !list.length;
+        tab.textContent = `Structure · ${list.length}`;
+      }
       if (!body) return;
       body.innerHTML = list
         .map((e) => {
@@ -154,6 +166,7 @@ window.__creopdmModules.baselines = {
       const row = $(`#baselines-table tr[data-baseline="${CSS.escape(baselineUuid)}"]`);
       if (title) title.textContent = row?.querySelector(".baseline-open")?.textContent || "Baseline";
       if (meta) meta.textContent = "";
+      setBaselineView("files");
       const staleCommit = $("#baseline-commit-line");
       if (staleCommit) staleCommit.hidden = true;
       if (!dialog.open) dialog.showModal();
@@ -342,6 +355,13 @@ window.__creopdmModules.baselines = {
       if (!link) return;
       event.preventDefault();
       void openBaselineMembers(link.getAttribute("data-open-baseline") || "");
+    });
+
+    $("#baseline-members-dialog")?.addEventListener("click", (event) => {
+      const button = event.target instanceof Element ? event.target.closest("[data-baseline-view]") : null;
+      if (!button) return;
+      event.preventDefault();
+      setBaselineView(button.getAttribute("data-baseline-view") || "files");
     });
 
     $("#create-baseline-btn")?.addEventListener("click", () => {

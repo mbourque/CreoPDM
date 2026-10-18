@@ -1450,4 +1450,6 @@ def test_baseline_commit_is_shown_in_the_contents_dialog():
     assert 'id="baseline-members-title" tabindex="-1"' in template
     assert "title?.focus({ preventScroll: true })" in module
     css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
-    assert ".baseline-members-dialog { width: min(52rem, 94vw); max-height: 92vh; overflow: hidden; }" in css
+    assert "max-height: 94vh; overflow: hidden; border-radius: 12px; }" in css
+    # Files and Structure are two views of one dialog so each table gets the full height.
+    assert "function setBaselineView" in module and "data-baseline-view" in template

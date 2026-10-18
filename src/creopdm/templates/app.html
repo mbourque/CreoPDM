@@ -753,6 +753,10 @@
     <p class="baseline-frozen baseline-no-structure" id="baseline-no-structure" hidden>Structure was not captured: Where Used had not been built for this product when this baseline was made, so which parts each assembly and drawing used is not recorded.</p>
     <p class="baseline-frozen">Configuration snapshot — this baseline is immutable. Each row is the exact version captured, whatever the product holds today.</p>
     <p class="error" id="baseline-members-error" hidden></p>
+    <div class="baseline-view-tabs" role="tablist">
+      <button type="button" class="baseline-view-btn is-active" data-baseline-view="files" id="baseline-files-tab" role="tab">Files</button>
+      <button type="button" class="baseline-view-btn" data-baseline-view="structure" id="baseline-structure-tab" role="tab" hidden>Structure</button>
+    </div>
     <div class="table-wrap baseline-members-wrap" id="baseline-members-table-wrap">
       <table class="grid" id="baseline-members-table">
         <thead>
@@ -761,7 +765,6 @@
         <tbody></tbody>
       </table>
     </div>
-    <h3 class="baseline-structure-title" id="baseline-structure-title" hidden>Structure</h3>
     <div class="table-wrap baseline-members-wrap" id="baseline-structure-wrap" hidden>
       <table class="grid" id="baseline-structure-table">
         <thead>
