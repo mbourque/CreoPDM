@@ -351,3 +351,111 @@ def test_baselines_client_wiring():
     assert "[data-tab-link]" in app
     server = (ROOT / "src" / "creopdm" / "app.py").read_text(encoding="utf-8")
     assert '"baselines"' in server
+
+
+# ---- Story 2: identity is the uuid, never the name --------------------------------------
+
+
+@requires_git
+def test_every_baseline_has_a_unique_server_made_uuid(auth_client, auth_ctx):
+    import uuid as uuidlib
+
+    _signed_in_admin(auth_client, auth_ctx)
+    first_product, _a = _product(auth_client, "Alpha")
+    second_product, _b = _product(auth_client, "Beta", ("bracket.prt",))
+
+    # Same name in two products: two different identities.
+    one = _create(auth_client, first_product, "Review").json()
+    two = _create(auth_client, second_product, "Review").json()
+    assert one["name"] == two["name"] == "Review"
+    assert one["uuid"] != two["uuid"]
+    for value in (one["uuid"], two["uuid"]):
+        assert str(uuidlib.UUID(value)) == value  # a real uuid, canonical form
+
+    # The client cannot choose the identity: a uuid in the request is ignored.
+    forced = _create(
+        auth_client, first_product, "Forced", uuid="00000000-0000-0000-0000-000000000001"
+    ).json()
+    assert forced["uuid"] != "00000000-0000-0000-0000-000000000001"
+    assert len({one["uuid"], two["uuid"], forced["uuid"]}) == 3
+
+    with auth_ctx.session_factory() as db:
+        uuids = list(db.scalars(select(Baseline.uuid)))
+        assert len(uuids) == len(set(uuids)) == 3
+
+
+@requires_git
+def test_a_baseline_is_found_by_uuid_not_by_name(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+    created = _create(auth_client, product, "Design Review 01").json()
+
+    found = auth_client.get(f"/api/baselines/{created['uuid']}")
+    assert found.status_code == 200, found.text
+    body = found.json()
+    assert body["uuid"] == created["uuid"] and body["name"] == "Design Review 01"
+    assert body["product_uuid"] == product["uuid"] and body["member_count"] == 3
+
+    # The name (or a differently written name) is never an identity.
+    by_name = auth_client.get("/api/baselines/Design Review 01")
+    assert by_name.status_code == 404, by_name.text
+    assert by_name.json()["error"]["code"] == "BASELINE_NOT_FOUND"
+    assert auth_client.get("/api/baselines/does-not-exist").status_code == 404
+
+    # Viewing needs the permission and access to the product.
+    _login(auth_client, "view", "ViewPass1")
+    assert auth_client.get(f"/api/baselines/{created['uuid']}").status_code == 200
+
+
+@requires_git
+def test_baseline_lookup_respects_product_membership(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+    other, _o = _product(auth_client, "Other", ("bracket.prt",))
+    created = _create(auth_client, product, "Design Review 01").json()
+
+    # eng may only open the other product: the baseline of the first one is not theirs to read.
+    with auth_ctx.session_factory() as db:
+        from creopdm.models.user import User
+
+        eng = db.scalar(select(User).where(User.username == "eng"))
+        auth_ctx.user_accounts.set_product_access(
+            db, eng, access_all=False, product_uuids=[other["uuid"]]
+        )
+        db.commit()
+    _login(auth_client, "eng", "EngPass1")
+    denied = auth_client.get(f"/api/baselines/{created['uuid']}")
+    assert denied.status_code == 403, denied.text
+
+
+@requires_git
+def test_other_records_refer_to_the_baseline_by_uuid_and_the_uuid_cannot_change(
+    auth_client, auth_ctx
+):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+    created = _create(auth_client, product, "Design Review 01").json()
+
+    with auth_ctx.session_factory() as db:
+        # The audit entry carries the uuid, so it stays meaningful if a name ever changed.
+        events = auth_ctx.activities.list_events(db, q="Design Review 01")
+        entry = next(e for e in events if e.action == "BASELINE_CREATED")
+        assert (entry.details or {}).get("baseline_uuid") == created["uuid"]
+
+        # Members point at the baseline by its row id, never by name.
+        baseline = db.scalar(select(Baseline).where(Baseline.uuid == created["uuid"]))
+        assert all(m.baseline_id == baseline.id for m in baseline.members)
+        assert len(baseline.members) == 3
+
+        # The name is just a label: it can be edited without touching identity ...
+        baseline.name = "Renamed review"
+        db.flush()
+        assert baseline.uuid == created["uuid"]
+        # ... but the uuid itself can never be rewritten.
+        baseline.uuid = "11111111-2222-3333-4444-555555555555"
+        with pytest.raises(ValueError, match="uuid is its identity"):
+            db.flush()
+        db.rollback()
+
+    with auth_ctx.session_factory() as db:
+        assert db.scalar(select(Baseline.uuid).where(Baseline.uuid == created["uuid"])) is not None

@@ -4,7 +4,17 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    event,
+    func,
+    inspect,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from creopdm.database.base import Base
@@ -33,6 +43,13 @@ class Baseline(Base):
     members: Mapped[list["BaselineMember"]] = relationship(
         back_populates="baseline", order_by="BaselineMember.id"
     )
+
+
+@event.listens_for(Baseline, "before_update")
+def _baseline_uuid_never_changes(_mapper, _connection, target: Baseline) -> None:
+    """Identity is the uuid: whatever else may change, this value never does."""
+    if inspect(target).attrs.uuid.history.has_changes():
+        raise ValueError("A baseline's uuid is its identity and can never be changed.")
 
 
 class BaselineMember(Base):

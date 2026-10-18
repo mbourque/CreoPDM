@@ -5,10 +5,17 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
-from creopdm.api.deps import get_context, get_db, load_accessible_product, require_permission
+from creopdm.api.deps import (
+    get_context,
+    get_db,
+    load_accessible_product,
+    require_permission,
+    require_product_access,
+)
 from creopdm.auth_constants import PERMISSION_BASELINES_CREATE, PERMISSION_BASELINES_VIEW
 from creopdm.context import AppContext
 from creopdm.models.baseline import Baseline
+from creopdm.models.product import Product
 from creopdm.schemas.common import BaselineCreateRequest, BaselineResponse
 from creopdm.utils.timefmt import as_utc
 
@@ -43,6 +50,21 @@ def list_baselines(
         baseline_to_response(row, product.uuid)
         for row in ctx.baselines.list_for_product(db, product)
     ]
+
+
+@router.get("/api/baselines/{baseline_uuid}", response_model=BaselineResponse)
+def get_baseline(
+    baseline_uuid: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> BaselineResponse:
+    """One baseline, found by its uuid (the name is never used to look a baseline up)."""
+    require_permission(request, ctx, PERMISSION_BASELINES_VIEW)
+    baseline = ctx.baselines.get(db, baseline_uuid)
+    product = db.get(Product, baseline.product_id)
+    require_product_access(request, ctx, product)
+    return baseline_to_response(baseline, product.uuid)
 
 
 @router.post("/api/products/{product_id}/baselines", response_model=BaselineResponse, status_code=201)

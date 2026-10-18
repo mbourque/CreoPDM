@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from creopdm.constants import ActivityAction, LifecycleState
 from creopdm.exceptions import (
@@ -81,7 +81,7 @@ class BaselineService:
     def get(self, session: Session, baseline_uuid: str) -> Baseline:
         row = session.scalar(
             select(Baseline)
-            .options(joinedload(Baseline.members))
+            .options(selectinload(Baseline.members))
             .where(Baseline.uuid == (baseline_uuid or "").strip())
         )
         if row is None:
