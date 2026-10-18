@@ -49,7 +49,10 @@ def test_admin_help_page_is_packaged_and_styled_like_the_user_help():
         "revise",
         "danger",
         "settings",
+        "email",
+        "ai",
         "utilities",
+        "health",
         "audit",
         "tips",
     ):
@@ -64,6 +67,18 @@ def test_admin_help_page_is_packaged_and_styled_like_the_user_help():
         "Revision created",
         "state ∩ role",
         "Utilities → Logs",
+        # Pages and fields are explained, not just named.
+        "New users get no product access",
+        "Save members",
+        "Reset to defaults",
+        "Add lifecycle state",
+        "Rebuild file list from vault Git tip",
+        "Compact product vault history",
+        "Export CSV",
+        "Authenticated SMTP",
+        "Snapshot compare prompt",
+        "file list refresh interval",
+        "git fsck",
     ):
         assert needle in text, needle
     # Every System Settings tile is described.

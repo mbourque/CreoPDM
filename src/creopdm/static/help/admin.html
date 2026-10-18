@@ -349,11 +349,14 @@
         <a href="#revise">Revise (admin view)</a>
         <a href="#danger">Delete, compact, rebuild</a>
         <a href="#settings">System Settings</a>
+        <a href="#email">Email &amp; notifications</a>
+        <a href="#ai">AI</a>
         <a href="#utilities">Utilities</a>
+        <a href="#health">Health &amp; Logs</a>
         <a href="#audit">Audit log</a>
         <a href="#tips">Troubleshooting</a>
       </nav>
-      <p class="note">Looking for everyday file work (checkout, check-in, Revise as a user)? Open the regular <a href="/help" target="creopdm-help">CreoPDM help</a>. Menus on every page follow the signed-in user’s role: you only see the tiles you have permission for.</p>
+      <p class="note">Looking for everyday file work (checkout, check-in, Revise as a user)? Open the regular <a href="/help" target="creopdm-help">CreoPDM help</a>. Every page shows only the tiles and buttons the signed-in user has permission for.</p>
     </aside>
 
     <main class="main" id="top">
@@ -361,7 +364,8 @@
         <h1>How to administrate CreoPDM</h1>
         <p>
           Administration covers who can sign in, what each person can do, which products they can open,
-          what state each product is in, and the server tools that keep it healthy. Start at
+          what state each product is in, and the server tools that keep it healthy. Every page below says
+          what its fields do, what is checked, and what cannot be undone. Start at
           <strong>Administration</strong> in the top bar.
         </p>
         <div class="hero-meta">
@@ -369,108 +373,143 @@
           <a class="chip" href="#users">Users</a>
           <a class="chip" href="#roles">Roles</a>
           <a class="chip" href="#lifecycle">Lifecycle states</a>
-          <a class="chip" href="#revise">Revise</a>
+          <a class="chip" href="#settings">System Settings</a>
+          <a class="chip" href="#danger">Delete / compact / rebuild</a>
           <a class="chip" href="#tips">If something fails</a>
         </div>
       </header>
 
       <section id="start">
         <h2>Quick start</h2>
-        <p>The <strong>Administration</strong> page is a set of tiles. Each tile appears only when your role has the matching permission.</p>
-        <div class="grid-2">
-          <article class="tile">
-            <h3>Users</h3>
-            <p>Add and edit accounts, assign a role, set status, set passwords.</p>
-          </article>
-          <article class="tile">
-            <h3>Roles</h3>
-            <p>Create roles and choose what each one can do — products, files, administration.</p>
-          </article>
-          <article class="tile">
-            <h3>Manage products</h3>
-            <p>Products, Product Membership, Copy, Promote, Lifecycle states, then Delete, Compact and Rebuild.</p>
-          </article>
-          <article class="tile">
-            <h3>Utilities</h3>
-            <p>Email all users, Audit log, Health and Logs.</p>
-          </article>
-          <article class="tile">
-            <h3>System Settings</h3>
-            <p>Server-wide options: Open Creo models, Vault, file types, the local agent, Database, Email, AI, Availability.</p>
-          </article>
+        <p>The <strong>Administration</strong> page is a set of tiles. A tile appears only when your role has the matching permission, so two administrators can see different pages.</p>
+        <div class="panel">
+          <table>
+            <thead><tr><th>Tile</th><th>What is behind it</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Users</strong></td><td>Add and edit accounts, assign a role, set status.</td></tr>
+              <tr><td><strong>Roles</strong></td><td>Create roles and choose what each can do (products, files, administration).</td></tr>
+              <tr><td><strong>Manage products</strong></td><td>Products, Product Membership, Copy, Promote, Lifecycle states, then Delete, Compact and Rebuild.</td></tr>
+              <tr><td><strong>Utilities</strong></td><td>Email all users, Audit log, Health and Logs.</td></tr>
+              <tr><td><strong>System Settings</strong></td><td>Server-wide options: Open Creo models, Vault, file types, the local agent, Database, Email, AI, Availability.</td></tr>
+            </tbody>
+          </table>
         </div>
+        <h3>A good order for a new server</h3>
+        <ol class="steps">
+          <li><strong>System Settings</strong>: check the <a href="#settings">Vault</a> folder, <a href="#settings">Network</a> port and, if you use Postgres, the <a href="#settings">Database</a> URL (it takes effect at the next restart). Set up <a href="#email">Email</a> so password reset and notifications work.</li>
+          <li><strong>Roles</strong>: review the four starter roles and adjust them (<a href="#roles">Roles &amp; permissions</a>).</li>
+          <li><strong>Lifecycle states</strong>: confirm what each product state allows (<a href="#lifecycle">Lifecycle states</a>).</li>
+          <li><strong>Users</strong>: create accounts, then give each person product access under <a href="#membership">Product Membership</a> — new users start with <em>no</em> product access.</li>
+          <li><strong>Products</strong>: create or copy the products people will work in.</li>
+        </ol>
         <div class="callout">
-          <strong>Two layers decide what a person can do.</strong> The <em>role</em> says what the person may do at all; the product’s <em>lifecycle state</em> says what is allowed on that product right now. A button appears only when both agree — “state ∩ role”.
+          <strong>Two layers decide what a person can do.</strong> The <em>role</em> says what the person may do at all; the product’s <em>lifecycle state</em> says what is allowed on that product right now. A button appears only when both agree — “state ∩ role”. Permissions are also checked on the server, not just by hiding buttons.
         </div>
         <div class="callout warn">
-          Always keep at least one active user with every administration permission. CreoPDM refuses to remove the last one.
+          Always keep at least one active user who has every administration permission. CreoPDM refuses to remove the last one.
         </div>
       </section>
 
       <section id="users">
         <h2>Users</h2>
-        <p><strong>Administration → Users</strong> lists every account.</p>
+        <p><strong>Administration → Users</strong> lists every account with its name, username, role, status and product access. Click a name to edit that user, or a role name to edit that role.</p>
+        <h3>Adding a user</h3>
+        <div class="panel">
+          <table>
+            <thead><tr><th>Field</th><th>Rules</th></tr></thead>
+            <tbody>
+              <tr><td>Display name</td><td>Shown in the top bar and on history rows.</td></tr>
+              <tr><td>Username</td><td>2–64 characters: letters, numbers or underscore only, no spaces. Sign-in is not case-sensitive.</td></tr>
+              <tr><td>Email</td><td>Must look like <code>name@example.com</code> (a real ending such as .com or .ca). Used for watch emails and password reset.</td></tr>
+              <tr><td>Role</td><td>You can only assign a role with <em>fewer</em> permissions than your own — not your own role and not a higher one. New users start as Engineer.</td></tr>
+              <tr><td>Status</td><td><strong>ACTIVE</strong> can sign in. <strong>DISABLED</strong> cannot; their history and audit entries stay.</td></tr>
+              <tr><td>Password / Confirm</td><td>Initial password, at least 8 characters. The user must change it at first sign-in.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Rules to know</h3>
         <ul class="clean">
-          <li><strong>Add a user</strong>: name, username, email, role, status and an initial password. The person must change a temporary password at first sign-in.</li>
-          <li><strong>Status</strong> Active or Disabled. A disabled user cannot sign in; their history and audit entries stay.</li>
-          <li><strong>Passwords</strong> are set or reset with the “Set or reset user passwords” permission. Email on the server lets people use <em>Forgot password</em>.</li>
-          <li><strong>Role</strong> is assigned with the “Assign roles to users” permission.</li>
-          <li><strong>Product access</strong> is set per user here or under <a href="#membership">Product Membership</a> (All products, or a chosen list).</li>
+          <li><strong>New users get no product access.</strong> Grant <em>All products</em> or a list under <a href="#membership">Product Membership</a> (needs the products.assign permission). Until then they sign in and see nothing to open.</li>
+          <li>Creating a user, or setting or resetting a password later, needs <code>users.password</code>. Changing a role needs <code>roles.assign</code>. <code>users.manage</code> alone cannot do either.</li>
+          <li>You <strong>cannot change your own role, disable yourself, or change your own status</strong>. Another administrator has to.</li>
+          <li>Only a full administrator can edit their own account or other administrators’ accounts.</li>
+          <li>To reset a password, edit the user and enter a new password (at least 8 characters, they must change it at next sign-in); leave it blank to keep the current one.</li>
         </ul>
       </section>
 
       <section id="roles">
         <h2>Roles &amp; permissions</h2>
-        <p><strong>Administration → Roles</strong> creates roles and picks their permissions. Everything a signed-in person sees is checked against these keys on the server, not only by hiding buttons.</p>
+        <p><strong>Administration → Roles</strong> lists each role with its description, how many users have it and its permissions. Assign roles to users on the Users page.</p>
+        <h3>The permission groups</h3>
         <div class="panel">
           <table>
             <thead><tr><th>Group</th><th>Permissions</th></tr></thead>
             <tbody>
-              <tr><td><strong>Administration</strong></td><td>Manage users, set passwords, assign roles, manage roles, assign products (membership), manage products, manage lifecycle states, change settings, AI settings, email.</td></tr>
-              <tr><td><strong>Utilities</strong></td><td>Availability, Email all users, Compact, Rebuild, Delete products, Audit log, Health, Logs — each its own key.</td></tr>
-              <tr><td><strong>Products</strong></td><td>View, create, edit, delete or forget, export a whole product.</td></tr>
-              <tr><td><strong>Files</strong></td><td>View, add, check out, check in, force undo checkout, remove, revert (restore an older version), <strong>revise</strong>, update metadata, copy to vault, export selected.</td></tr>
+              <tr><td><strong>Administration</strong></td><td><code>users.manage</code> create, edit and disable users · <code>users.password</code> set or reset passwords · <code>roles.assign</code> assign roles · <code>roles.manage</code> create, edit and delete roles · <code>products.assign</code> product membership · <code>products.manage</code> create, edit and delete products · <code>lifecycle_states.manage</code> the state matrix · <code>settings.manage</code> global settings · <code>settings.ai</code> AI settings · <code>email.manage</code> email and notifications.</td></tr>
+              <tr><td><strong>Utilities</strong></td><td>Each is its own key: Availability, Email all users, Compact, Rebuild, Delete products, Audit, Health, Logs (<code>utilities.*</code>).</td></tr>
+              <tr><td><strong>Products</strong></td><td><code>products.view</code>, <code>products.create</code>, <code>products.edit</code>, <code>products.delete</code> (delete or forget), <code>products.export</code> (whole-product zip).</td></tr>
+              <tr><td><strong>Files</strong></td><td><code>objects.view</code> browse history, open and download · <code>objects.add</code> · <code>objects.checkout</code> check out and undo your own · <code>objects.checkin</code> · <code>objects.force_undo_checkout</code> release someone else’s checkout · <code>objects.remove</code> · <code>objects.revert</code> restore an older version · <code>objects.revise</code> start the next revision of a released file · <code>objects.metadata</code> collect metadata · <code>objects.copy_to_vault</code> · <code>objects.export</code> zip selected files.</td></tr>
             </tbody>
           </table>
         </div>
+        <h3>Starter roles</h3>
         <ul class="clean">
-          <li><strong>Starter roles</strong> are Administrator (everything), PDM Manager, Engineer (everyday authoring, including Revise) and Viewer (browse and open). They are only a starting point; edit or add roles freely.</li>
-          <li><strong>Revise</strong> is its own permission, <code>objects.revise</code>. Give it to the people who may start the next revision of a released file.</li>
-          <li>A role that can <em>see</em> a file but not <em>check it out</em> simply never gets the checkout buttons.</li>
+          <li><strong>Administrator</strong> — everything. <strong>PDM Manager</strong> — engineering data without full server administration. <strong>Engineer</strong> — everyday authoring (including Revise). <strong>Viewer</strong> — read-only access to assigned products.</li>
+          <li>They are only a starting point: edit them or add your own. A role is saved by its permission ticks, grouped on the role page.</li>
+        </ul>
+        <h3>Rules to know</h3>
+        <ul class="clean">
+          <li>At least one <em>active</em> user must keep full administration: <code>users.manage</code>, <code>users.password</code>, <code>roles.assign</code>, <code>roles.manage</code>, <code>products.assign</code>, <code>products.manage</code>, <code>settings.manage</code>, <code>email.manage</code> and every <code>utilities.*</code> key. This stops administrators locking themselves out.</li>
+          <li>On <strong>your own role</strong>, the name, description and administration permissions are locked. You can still change Products and Files permissions. Ask another administrator for the rest.</li>
+          <li>A role that is assigned to users cannot be deleted — reassign them first. You cannot delete the role assigned to you.</li>
+          <li>A role that can <em>see</em> a file but cannot <em>check it out</em> simply never gets the checkout buttons.</li>
         </ul>
       </section>
 
       <section id="products">
         <h2>Products</h2>
-        <p><strong>Administration → Manage products</strong> is the hub for everything about a product. <strong>Products</strong> lists every product on the server and lets you add or edit one.</p>
+        <p><strong>Administration → Manage products</strong> is the hub for everything about a product; each tile is its own page. <strong>Products</strong> lists every product on this server (including Archived) with name, created date, number, state, vault folder and description.</p>
+        <h3>Add a product</h3>
         <div class="panel">
-          <h3>Add a product</h3>
           <ol class="steps">
-            <li>Choose <strong>Add product</strong> and enter a <strong>Name</strong> (required, must be unique), an optional <strong>Number</strong> and <strong>Description</strong>.</li>
-            <li>The <strong>Vault/Workspace name</strong> is the folder under the vaults directory. By default <strong>Use hash</strong> is ticked: a unique id is filled in and locked.</li>
-            <li>Untick <strong>Use hash</strong> to type your own folder name (no spaces). It cannot be the same as another product’s vault name.</li>
-            <li>The folder cannot be changed after the product is created.</li>
+            <li>Choose <strong>Add product</strong> and enter a <strong>Name</strong> (required, and unique across all products, even inactive or Archived ones).</li>
+            <li>Optional <strong>Number</strong> and <strong>Description</strong>. The sidebar shows the number under the name only when one is set.</li>
+            <li>The <strong>Vault/Workspace name</strong> is the folder under the vaults directory. <strong>Use hash</strong> is ticked by default: a unique id is filled in and locked.</li>
+            <li>Untick <strong>Use hash</strong> to type your own name — no spaces, and it cannot match another product’s vault name.</li>
+            <li>Pick the starting <strong>Lifecycle state</strong> (default In Work) and choose <strong>Create product</strong>.</li>
           </ol>
         </div>
         <ul class="clean">
-          <li><strong>Edit</strong> changes name, number and description. The product list shows the number under the name only when one is set.</li>
-          <li><strong>Copy Products</strong> makes a new product from another product’s current vault files. Each file starts again at A.1, In Work, not checked out, with a fresh history.</li>
+          <li><strong>Edit product</strong> changes the name, number and description. The vault folder is fixed at creation and cannot be changed. The lifecycle is changed under <a href="#promote">Promote Products</a>.</li>
+          <li><strong>Copy Products</strong>: pick a product, then <strong>Copy</strong>. It makes a <em>new</em> product (new id, new vault) from the original’s current vault files, the same way Add does: each file starts at <strong>A.1</strong>, In Work, not checked out, with a clean Git history of just that first Add. You can add an initial History comment. The original is not changed.</li>
         </ul>
       </section>
 
       <section id="membership">
         <h2>Product Membership</h2>
-        <p>Decide who can open which products, either <strong>by product</strong> (pick the people) or <strong>by user</strong> (pick the products).</p>
+        <p>Decides who can open which products. There are two ways in, both under <strong>Manage products → Product Membership</strong>:</p>
+        <div class="grid-2">
+          <article class="tile">
+            <h3>By product</h3>
+            <p>Open a product, then tick which <em>restricted</em> users are members and choose <strong>Save members</strong>. Users with All products already see it.</p>
+          </article>
+          <article class="tile">
+            <h3>By user</h3>
+            <p>Open a user, then tick <strong>All products</strong>, or untick it and multi-select products (Ctrl/Cmd-click). <strong>Save membership</strong>.</p>
+          </article>
+        </div>
         <ul class="clean">
-          <li>A user with <em>All products</em> sees every product.</li>
-          <li>A user restricted to a list sees only those products, even if their role could otherwise open any.</li>
-          <li>Membership never grants more than the role allows; it only limits which products are visible.</li>
+          <li>The summary table shows, per product, <strong>Members</strong> (everyone who can open it: restricted members plus All-products users) and <strong>Restricted</strong> (users without All products who are explicitly on it).</li>
+          <li>With All products off and nothing selected, the user cannot browse any product.</li>
+          <li>Membership never gives more than the role allows; it only limits which products are visible.</li>
         </ul>
       </section>
 
       <section id="lifecycle">
         <h2>Lifecycle states</h2>
-        <p><strong>Manage products → Lifecycle states</strong> is the permission matrix. Each row is a product state; each column is an operation that state allows (ticked) or blocks.</p>
+        <p><strong>Manage products → Lifecycle states</strong> defines the product states and which operations each state allows. Role permissions still apply on top (state ∩ role). New products default to <strong>In Work</strong>.</p>
+        <h3>The permission matrix</h3>
+        <p>Each row is a state with an <strong>Order</strong>, a <strong>State</strong> label and a <strong>Description</strong>. Each column is an operation, ticked when the state allows it:</p>
         <div class="panel">
           <table>
             <thead><tr><th>Column</th><th>What it controls</th></tr></thead>
@@ -480,28 +519,34 @@
               <tr><td>Check Out / Undo Checkout</td><td>Checking out, and releasing your own or another user’s checkout.</td></tr>
               <tr><td>Check In / Add / Upload</td><td>Check-in, adding files, uploads.</td></tr>
               <tr><td>Delete / Remove (vault)</td><td>Removing files from the vault.</td></tr>
-              <tr><td>Edit Metadata</td><td>Collect, rebuild metadata and AI snapshots.</td></tr>
+              <tr><td>Edit Metadata</td><td>Collect, rebuild metadata, AI snapshots.</td></tr>
               <tr><td>Revise (new revision)</td><td>Offering <strong>Revise…</strong> for Released files.</td></tr>
               <tr><td>Rename product</td><td>Changing the product’s name.</td></tr>
               <tr><td>View History / Audit</td><td>History tabs and audit views.</td></tr>
             </tbody>
           </table>
         </div>
+        <h3>Default states</h3>
         <ul class="clean">
-          <li><strong>Defaults</strong>: Pre-Work and In Work are editable, In Review and Approved are frozen, Released is frozen, <strong>Under Change</strong> is editable again, Obsolete, Archived and Locked are frozen.</li>
-          <li><strong>Revise</strong> is allowed in In Work and Under Change by default, and off in Pre-Work and in every frozen state.</li>
-          <li>You can add your own states, reorder them and rename labels. Built-in states cannot be removed.</li>
-          <li>Changes take effect for everyone as soon as you save.</li>
+          <li><strong>Pre-Work</strong> and <strong>In Work</strong> are editable. <strong>In Review</strong>, <strong>Approved</strong> and <strong>Released</strong> are frozen. <strong>Under Change</strong> is editable again. <strong>Obsolete</strong>, <strong>Archived</strong> and <strong>Locked</strong> are frozen (Locked also blocks download).</li>
+          <li><strong>Revise</strong> is allowed in In Work and Under Change, and off in Pre-Work and every frozen state.</li>
+          <li><strong>Archived</strong> products are hidden from the normal Files list; administrators still see them in Manage products.</li>
+        </ul>
+        <h3>Buttons on the page</h3>
+        <ul class="clean">
+          <li><strong>Save</strong> applies the matrix to everyone at once. <strong>Reset to defaults</strong> puts the built-in matrix back.</li>
+          <li><strong>Add lifecycle state</strong>: enter a <strong>Name</strong> (and an optional description). CreoPDM makes a state key from it (for example <code>PROTO_A</code>); its permissions start like In Review — view, download and history only — so you tick what it should allow.</li>
+          <li>States you add are marked <em>custom</em> and can be deleted; the built-in states stay.</li>
         </ul>
       </section>
 
       <section id="promote">
         <h2>Promote Products</h2>
-        <p><strong>Manage products → Promote Products</strong> changes one product’s lifecycle state. You confirm with your password.</p>
+        <p><strong>Manage products → Promote Products</strong> changes one product’s lifecycle state. Pick the <strong>Product</strong> and the new <strong>Lifecycle state</strong>, choose <strong>Change state</strong>, read the summary of what the new state allows, and confirm with your <strong>password</strong>. Name, number and description stay as they are.</p>
         <div class="grid-2">
           <article class="tile">
             <h3>Releasing</h3>
-            <p>Moving a product to <strong>Released</strong> also marks its files Released. Files already Obsolete stay Obsolete. This is what makes Revise available later.</p>
+            <p>Moving a product to <strong>Released</strong> also marks its files Released (files already Obsolete stay Obsolete). That is what makes Revise available later.</p>
           </article>
           <article class="tile">
             <h3>Checked-out files</h3>
@@ -513,11 +558,11 @@
           </article>
           <article class="tile">
             <h3>Undo a release</h3>
-            <p>When promoting to <strong>In Work</strong> or <strong>Pre-Work</strong> a product that has Released files, tick <strong>Also set the N Released files back to In Work (undo the release)</strong> to unlock them without Revise — for example after a release by mistake. Files already In Work are untouched.</p>
+            <p>When you promote a product that has Released files to <strong>In Work</strong> or <strong>Pre-Work</strong>, a box appears: <strong>Also set the N Released files back to In Work (undo the release)</strong>. Tick it to unlock them without Revise, for example after a release by mistake. Files already In Work are untouched; earlier Released revisions keep their state.</p>
           </article>
         </div>
         <div class="callout">
-          The audit shows each promote as <em>Product state changed</em>, with how many files were released or set back to In Work.
+          Promote is recorded in the <a href="#audit">Audit log</a> as <em>Product state changed</em>, with how many files were released or set back to In Work. A product that is already in the chosen state is refused.
         </div>
       </section>
 
@@ -526,88 +571,157 @@
         <p>Users start the next revision of a Released file with <strong>Revise…</strong> (A.3 → B.1). As administrator you control <em>who</em> and <em>when</em>:</p>
         <ul class="clean">
           <li><strong>Who</strong>: the <code>objects.revise</code> permission on the role.</li>
-          <li><strong>When</strong>: the product’s state must allow Revise in the Lifecycle states matrix (In Work and Under Change by default), the file must be Released, and nobody may have it checked out.</li>
+          <li><strong>When</strong>: the product’s state must allow Revise in the matrix (In Work and Under Change by default), the file must be Released, and nobody may have it checked out.</li>
           <li><strong>Reopening a released product for revision</strong>: promote it to <strong>Under Change</strong>. A product that is itself <em>Released</em> is frozen and does not offer Revise.</li>
+          <li>The Revise dialog needs a <strong>reason</strong> (up to 500 characters). The server picks the next revision letter (A → B → … Z → AA); it cannot be typed in. A retry after a lost answer returns the same new version.</li>
         </ul>
         <div class="callout">
           <strong>A user says they cannot see Revise?</strong> Check in this order: the file reads Released · it is not checked out · their role has Revise · the product’s state allows Revise · the page was reloaded after a deploy.
         </div>
-        <p>Each revise is recorded in the <a href="#audit">Audit log</a> as <em>Revision created</em> (A.3 → B.1, with the reason). The new revision keeps its own metadata; the released one is never changed, and baselines and product releases keep pointing at the version they used.</p>
+        <p>Each revise appears in the <a href="#audit">Audit log</a> as <em>Revision created</em> (A.3 → B.1, with the reason). The new revision keeps its own copy of the metadata; the released one is never changed, and baselines and product releases keep pointing at the version they used.</p>
       </section>
 
       <section id="danger">
         <h2>Delete, compact, rebuild</h2>
-        <p>These sit under <strong>Manage products</strong>, in red, and each needs its own Utilities permission and your <strong>password</strong>.</p>
+        <p>These three sit under <strong>Manage products</strong>, in red. Each needs its own Utilities permission, your <strong>password</strong>, and a tick on an “I understand…” box. Choose the product from a list (Archived and inactive products are included and marked).</p>
         <div class="panel">
-          <table>
-            <thead><tr><th>Action</th><th>What it does</th></tr></thead>
-            <tbody>
-              <tr><td><strong>Delete products</strong></td><td>Deletes the product’s vault and unregisters it from the database. History in the Audit log is kept.</td></tr>
-              <tr><td><strong>Compact product vault history</strong></td><td>Squashes one product’s Git history to the tip and frees the bytes of removed files. Older versions are no longer restorable.</td></tr>
-              <tr><td><strong>Rebuild product database</strong></td><td>Rebuilds a product’s database records from its vault, with options for metadata and the Where Used index.</td></tr>
-            </tbody>
-          </table>
+          <h3>Delete products</h3>
+          <p>Deletes the product’s CreoPDM <strong>vault</strong> (working copies and Git history) and unregisters the product from the database. Works for Archived and locked products. <strong>Original CAD folders</strong> you imported from are not deleted. The product’s rows in the Audit log are kept.</p>
+        </div>
+        <div class="panel">
+          <h3>Compact product vault history</h3>
+          <p>Squashes one product’s vault to a <strong>single tip commit</strong> and runs Git cleanup so the bytes of removed files leave <code>.git/objects</code>. The tip files stay, but <strong>all older History versions of every file in that product are destroyed</strong> — Revert to those rows no longer works. <strong>Release every checkout first</strong> and make sure the vault is clean.</p>
+        </div>
+        <div class="panel">
+          <h3>Rebuild product database</h3>
+          <p>Repairs one product’s database rows <em>without rewriting vault Git history</em>. Choose one action:</p>
+          <ul class="clean">
+            <li><strong>Rebuild file list from vault Git tip</strong> — replaces the product’s file list from the vault. It also clears checkouts, Where Used and Creo metadata for the old rows. Every checkout must be released first.</li>
+            <li><strong>Delete collected Creo metadata</strong> — clears identity, BOM and parameters only.</li>
+            <li><strong>Delete and rebuild Where Used</strong> — clears the dependency links and re-indexes from the vault (the same as the product gear). Works when the product is locked or Archived (admin recovery).</li>
+          </ul>
         </div>
         <div class="callout warn">
-          Take a copy of the vault folder before compacting or deleting anything you may need again. Neither can be undone from CreoPDM.
+          Compacting and deleting cannot be undone from CreoPDM. Keep a copy of the vault folder first if you may need the history again.
         </div>
       </section>
 
       <section id="settings">
         <h2>System Settings</h2>
-        <p><strong>Administration → System Settings</strong> is a hub of tiles, each its own page. Which tiles you see depends on your settings, AI, email and availability permissions.</p>
+        <p><strong>Administration → System Settings</strong> holds server options for this install. They are stored in the server settings, <em>not</em> in any product’s Git history. The page is a hub of tiles, each its own page; you see the tiles your permissions allow.</p>
         <div class="panel">
           <table>
             <thead><tr><th>Tile</th><th>What it sets</th></tr></thead>
             <tbody>
-              <tr><td>Availability</td><td>Mark CreoPDM available, or show a maintenance message to non-administrators. An <em>Unavailable</em> pill shows in the top bar while it is on.</td></tr>
-              <tr><td>Open Creo models</td><td>Choose OS file association or the Embedded Creo Browser for Open.</td></tr>
-              <tr><td>Vault</td><td>The master repository folder for each product’s Git history and vault copies.</td></tr>
-              <tr><td>Creo Models</td><td>Extensions the Creo Models filter on the Files page counts and shows.</td></tr>
-              <tr><td>Documents</td><td>Extensions counted and filtered by the Documents chip.</td></tr>
-              <tr><td>Creo-openable models</td><td>Types Creo can open from click-to-open.</td></tr>
-              <tr><td>Text files</td><td>CAD-like files that open with a text editor, not Creo.</td></tr>
-              <tr><td>Non openable CAD</td><td>CAD-like files that stay in the product but do not open.</td></tr>
-              <tr><td>Numbered saves</td><td>Extensions that use numbered names like <code>part.prt.3</code> for Add and Purge workspace.</td></tr>
-              <tr><td>File type names</td><td>Optional labels for the Type column by extension or file name.</td></tr>
-              <tr><td>Ignored files</td><td>Patterns that never enter the vault or appear in the file list.</td></tr>
-              <tr><td>Network</td><td>The TCP port for this CreoPDM server on the LAN.</td></tr>
-              <tr><td>Local Creo agent</td><td>The agent base URL and how often the file list refreshes.</td></tr>
-              <tr><td>Database</td><td>Local SQLite by default, or a Postgres URL.</td></tr>
-              <tr><td>Email</td><td>SMTP or local Postfix, the From address and a test email, used for notifications, password reset and Email all users.</td></tr>
-              <tr><td>AI</td><td>Enable AI, the Ollama host URL, the model and the snapshot compare prompt.</td></tr>
+              <tr><td>Availability</td><td>Mark CreoPDM <em>available</em>, or <em>unavailable</em> with a message that non-administrators see on their next page open. Administrators still get in and can still change settings. It only changes what is displayed: uploads and check-ins already in progress are not cancelled. An <em>Unavailable</em> pill shows in the top bar while it is on.</td></tr>
+              <tr><td>Open Creo models</td><td>How <strong>Open</strong> works. <strong>OS file association</strong> opens the file the way double-clicking it would, via creopdm-agent. <strong>Embedded Creo Browser</strong> drives Creo’s File &gt; Open to the local workspace folder (and sets Creo’s working directory there) but only when the page runs inside Creo’s browser with Creo.JS connected; anywhere else Open falls back to the OS association. Images, PDFs and other non-Creo files always use the OS association. An optional Creo.JS path overrides the bundled library.</td></tr>
+              <tr><td>Vault</td><td>The master repository folder: one folder per product holding its Git history and vault copies. On Linux the default is <code>~/.local/share/CreoPDM/vaults</code>. Point it at the <em>vaults</em> folder, not at the application data folder above it. Creo working files on each PC live in the local agent workspace, not here.</td></tr>
+              <tr><td>Creo Models</td><td>Extensions the <strong>Creo Models</strong> filter on the Files page counts and shows; “Other” is everything not on the list. A numbered save such as <code>shaft.prt.3</code> still counts as <code>.prt</code>. Details shows Where Used only for these extensions. It does not decide which files have numbered versions.</td></tr>
+              <tr><td>Documents</td><td>Extensions counted and filtered by the <strong>Documents</strong> chip.</td></tr>
+              <tr><td>Creo-openable models</td><td>Types Creo can open from click-to-open (numbered saves count as their base extension).</td></tr>
+              <tr><td>Text files</td><td>CAD-like files that open with the Windows text editor, not Creo. They still count as CAD in the product.</td></tr>
+              <tr><td>Non openable CAD</td><td>CAD-like files that stay in the product and count as CAD but do not open.</td></tr>
+              <tr><td>Numbered saves</td><td>Extensions that use numbered names like <code>part.prt.3</code>. <strong>Add</strong> uploads only the highest number and skips older ones; <strong>Purge workspace</strong> deletes local copies older than the vault file (the vault file and any newer local save stay). It does not change the Creo Models filter.</td></tr>
+              <tr><td>File type names</td><td>Optional labels for the Files <strong>Type</strong> column. Map an extension (or several, such as <code>.stp, .step</code>) or a specific file name to a name. A name like <code>reviewref.inf</code> matches that file including numbered saves; a pattern like <code>.ncl.tl*</code> matches <code>op10.ncl.tl1</code>. Leave unused rows blank; anything without a row keeps the usual CreoPDM name.</td></tr>
+              <tr><td>Ignored files</td><td>Comma-separated gitignore patterns. Matching files never enter the vault, are never stored in Git and never appear in the file list; the patterns are written to each product’s <code>.gitignore</code>.</td></tr>
+              <tr><td>Network</td><td>The TCP port this CreoPDM server listens on for the LAN. <code>0</code> picks a free port at each start; a fixed number such as <code>8765</code> stays the same until it is in use. Takes effect at the next start. The agent tray calls the server over normal HTTP, so no special inbound port is opened for it.</td></tr>
+              <tr><td>Local Creo agent</td><td>The <strong>agent base URL</strong> (change it if the agent does not listen on port 8766), the <strong>file list refresh interval</strong> (500–120000 ms, default 5000; how often the page checks for pending saves and new workspace files) and <strong>pause after idle</strong> (0–1440 minutes, default 10; 0 = never pause; hidden tabs always pause). Reload the product page after saving.</td></tr>
+              <tr><td>Database</td><td>Leave blank for the local SQLite file, or enter a Postgres URL such as <code>postgresql+psycopg://creopdm:PASSWORD@localhost:5432/CreoPDM</code>. It takes effect at the next CreoPDM start. An <code>@</code> in the password is encoded automatically when connecting.</td></tr>
+              <tr><td>Email</td><td>Outgoing mail for notifications, password reset and Email all users — see <a href="#email">Email &amp; notifications</a>.</td></tr>
+              <tr><td>AI</td><td>Ollama connection and the Ask AI prompt — see <a href="#ai">AI</a>.</td></tr>
             </tbody>
           </table>
         </div>
         <div class="callout">
-          Changes here apply to the whole server. Tell users before changing file-type or open-mode settings during working hours.
+          Settings apply to the whole server. Tell users before changing open mode or file-type settings in working hours, and reload product pages afterwards. Network, Database and Vault changes need a restart or a careful move of files.
         </div>
+      </section>
+
+      <section id="email">
+        <h2>Email &amp; notifications</h2>
+        <p><strong>System Settings → Email</strong> chooses how CreoPDM sends mail. Product <em>Watch</em> emails, password reset and <strong>Email all users</strong> all use it.</p>
+        <div class="panel">
+          <table>
+            <thead><tr><th>Setting</th><th>What it does</th></tr></thead>
+            <tbody>
+              <tr><td>Enable email notifications</td><td>Master switch. When off, CreoPDM sends no notification mail. Test email uses the last <em>saved</em> delivery settings.</td></tr>
+              <tr><td>Delivery method</td><td><strong>Local Postfix</strong> sends through <code>127.0.0.1:25</code> on the CreoPDM server (no username or password; use a From address your MTA accepts). <strong>Authenticated SMTP</strong> uses an outside provider. Use one method; switching keeps the other’s saved settings.</td></tr>
+              <tr><td>From address / display name</td><td>The sender users see. Providers usually require the address to be one they allow.</td></tr>
+              <tr><td>Administrator email</td><td>Admin-attention alerts (failures, disk space, server errors) go here when notifications are enabled.</td></tr>
+              <tr><td>SMTP server, port, TLS, authentication</td><td>Typical provider setup: port <code>587</code>, <strong>Use TLS (STARTTLS)</strong> on, <strong>Use SMTP authentication</strong> on. Leave the password blank to keep the saved one. Gmail needs an App password. Allow outbound TCP 587 from this host.</td></tr>
+              <tr><td>Test email</td><td>Enter <strong>Send test to</strong>, a subject and a message, then <strong>Send test email</strong>. Save your delivery settings first.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <ul class="clean">
+          <li>Users need a valid <strong>email address</strong> on their account to get mail.</li>
+          <li>Users choose what to follow with the bell next to the product gear (<em>Watch</em>); they are not emailed for their own actions.</li>
+        </ul>
+      </section>
+
+      <section id="ai">
+        <h2>AI</h2>
+        <p><strong>System Settings → AI</strong> controls the optional <em>Ask AI</em> tools (Ask AI what changed on Modifications, Ask AI for comment at Check In).</p>
+        <ul class="clean">
+          <li><strong>Enable AI features</strong> — when off, those buttons are hidden, the Ollama compare API refuses requests and the fields below are disabled. The plain <em>Computed differences</em> on Modifications still work.</li>
+          <li><strong>Ollama host URL</strong> — host name or IP plus port, with the scheme (for example <code>http://127.0.0.1:11434</code> or <code>http://michael-desktop:11434</code>). The default Ollama port is 11434.</li>
+          <li><strong>Refresh models</strong> asks the CreoPDM server first, then falls back to this browser if the server cannot reach Ollama — common when Ollama runs on a Creo PC and CreoPDM on another host. Then choose the <strong>Model</strong>.</li>
+          <li><strong>Snapshot compare prompt</strong> — the system instructions for Ask AI what changed. CreoPDM appends plain-language OLD and NEW outlines after it (not raw JSON). When nothing changed, CreoPDM answers “Nothing changed between A.1 and A.2.” itself without calling Ollama. Paste, Save, then try again on Modifications.</li>
+          <li>The <code>settings.ai</code> permission is separate from general settings.</li>
+        </ul>
       </section>
 
       <section id="utilities">
         <h2>Utilities</h2>
-        <p><strong>Administration → Utilities</strong> holds day-to-day server tools. Each tile needs its own permission.</p>
+        <p><strong>Administration → Utilities</strong> holds the day-to-day server tools. Each tile needs its own permission. Compact, rebuild and delete live under <a href="#danger">Manage products</a>, and Availability under <a href="#settings">System Settings</a>.</p>
+        <div class="panel">
+          <h3>Email all users</h3>
+          <p>Sends <strong>one message per active user</strong> using the <a href="#email">Email</a> delivery settings. Addresses stay private (they are not in To or Cc). Enter a <strong>Subject</strong> and <strong>Message</strong>; the page shows how many active users with an email will receive it, and you tick <strong>I want to email all N active users</strong> before <strong>Send email to all users</strong>. Use it for downtime notices.</p>
+        </div>
         <ul class="clean">
-          <li><strong>Email all users</strong> sends one message to every active user; addresses stay private.</li>
-          <li><strong>Audit log</strong> — see <a href="#audit">below</a>.</li>
-          <li><strong>Health</strong> shows CPU load, I/O, disk space, the database, Git, product vault checks, counts and server paths. Look here first when something is slow.</li>
-          <li><strong>Logs</strong> lists the server log files and shows the end of the selected one (default <code>creopdm.log</code>).</li>
+          <li><strong>Audit log</strong>, <strong>Health</strong> and <strong>Logs</strong> are described below.</li>
         </ul>
+      </section>
+
+      <section id="health">
+        <h2>Health &amp; Logs</h2>
+        <h3>Health</h3>
+        <p><strong>Utilities → Health</strong> re-runs its probes each time you choose <strong>Refresh</strong>. Look here first when the server is slow or something looks wrong.</p>
+        <div class="panel">
+          <table>
+            <thead><tr><th>Section</th><th>What it shows</th></tr></thead>
+            <tbody>
+              <tr><td>System health</td><td>Application and overall status (with the reason when degraded), server time, host, platform, Python, site availability, whether authentication is enabled, and the agent URL.</td></tr>
+              <tr><td>Database</td><td>A probe result, the dialect (SQLite or Postgres) and the URL.</td></tr>
+              <tr><td>Git</td><td>The Git executable and its version.</td></tr>
+              <tr><td>CPU and I/O</td><td>A short sample at refresh: load, logical CPUs, load average, I/O wait (a Linux metric), disk read and write, and network receive and send (loopback excluded). They are information only and do not change the overall status.</td></tr>
+              <tr><td>Products</td><td>Lightweight vault checks: a missing vault or <code>.git</code>, a broken Git HEAD, a tip commit missing from the repository, orphan vault folders, files that have history but no current version. It does not read file contents or run <code>git fsck</code>. Issues mark overall health as degraded.</td></tr>
+              <tr><td>Disk space</td><td>Free and used space on the volume that holds CreoPDM data (below about 1 GB free is degraded) and the size of each CreoPDM folder.</td></tr>
+              <tr><td>Counts and server paths</td><td>Number of products, users and active checkouts; the data, vaults and logs folders.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Logs</h3>
+        <p><strong>Utilities → Logs</strong> lists the files in the server log folder and shows the <strong>end</strong> of the selected one (default <code>creopdm.log</code>); use <strong>Refresh</strong> for newer lines. When a page shows an “unexpected error”, the real cause is in the last lines here.</p>
       </section>
 
       <section id="audit">
         <h2>Audit log</h2>
-        <p><strong>Utilities → Audit log</strong> records what happened, who did it, from which client and to which product and file. Filter by event, user, product or text.</p>
+        <p><strong>Utilities → Audit log</strong> records what happened, who did it, from which client, and to which product and file. It is append-only: deleting a product keeps its rows (marked <em>(deleted)</em>).</p>
+        <h3>Finding events</h3>
         <ul class="clean">
-          <li>Check in / Check out, Object added or removed, Checkout cancelled or overridden.</li>
+          <li><strong>Filters</strong>: Search, Event (a type such as Check in/Check out), User, Product, Object, From date and To date. <strong>Apply filters</strong> or <strong>Clear</strong>.</li>
+          <li><strong>Export CSV</strong> downloads the events that match the filters.</li>
+          <li>Each row shows the time, event, user, client, product, file, and a comment or summary. Events that touched many files show the first and “(+N more)”.</li>
+        </ul>
+        <h3>What is recorded</h3>
+        <ul class="clean">
+          <li>Check in / Check out, Object added or removed, Checkout cancelled or overridden (Force Undo).</li>
           <li><strong>Revision created</strong> (A.3 → B.1, with the reason) and <strong>Version restored</strong> (for example <em>Restored A.1 as D.3</em>).</li>
           <li><strong>Changes discarded</strong> when someone throws away unsaved vault changes.</li>
-          <li><strong>Product state changed</strong> with “N files released” or “N files set back to In Work”.</li>
-          <li>Sign-in, password, role, membership and system-setting changes.</li>
+          <li><strong>Product state changed</strong> with “N files released” or “N files set back to In Work”; product created, copied, updated, deleted; vault compacted; database rebuilt.</li>
+          <li>Sign-in and sign-out, failed sign-in, password, role and membership changes, user created or disabled, and system-setting changes.</li>
         </ul>
-        <div class="callout">
-          Audit entries are append-only. Deleting a product keeps its history rows.
-        </div>
       </section>
 
       <section id="tips">
@@ -616,6 +730,10 @@
           <article class="tile">
             <h3>A delete or rebuild fails with “unexpected error”</h3>
             <p>Open <strong>Utilities → Logs</strong>, select <code>creopdm.log</code> and read the last lines — the real cause is there. Send the error text when asking for help.</p>
+          </article>
+          <article class="tile">
+            <h3>A user signs in and sees no products</h3>
+            <p>New users have no product access. Grant <strong>All products</strong> or a list under Product Membership, and check their role has <code>products.view</code> and <code>objects.view</code>.</p>
           </article>
           <article class="tile">
             <h3>A user cannot check out or check in</h3>
@@ -627,7 +745,11 @@
           </article>
           <article class="tile">
             <h3>A file keeps reading Modified</h3>
-            <p>Right-click it → <strong>Discard changes…</strong> (also on its row on the Modified tab). It restores the vault copy and, for a Newer local save, removes the local file from that PC. It needs no checkout to be held.</p>
+            <p>Right-click it → <strong>Discard changes…</strong> (also on its row on the Modified tab). It restores the vault copy and, for a Newer local save, moves the local file to the Recycle Bin on that PC. No checkout may be held.</p>
+          </article>
+          <article class="tile">
+            <h3>Promote is refused</h3>
+            <p>Read the message: files are checked out (Released, In Review, Approved), or the product is already in that state. Check the files in or undo the checkouts, then try again.</p>
           </article>
           <article class="tile">
             <h3>Menus look old after an update</h3>
@@ -635,7 +757,7 @@
           </article>
           <article class="tile">
             <h3>Creo: Agent offline</h3>
-            <p>The agent tray is not running on that PC. Collect metadata, Rebuild metadata and Open refuse to run without it. See the user help for starting it.</p>
+            <p>The agent tray is not running on that PC. Collect metadata, Rebuild metadata and Open need it. See the user help for starting it; check the agent URL under System Settings → Local Creo agent.</p>
           </article>
         </div>
         <div class="panel">
@@ -644,6 +766,7 @@
             <li>Mark the site <strong>Unavailable</strong> (System Settings → Availability) and email users from Utilities.</li>
             <li>Make sure nothing is checked out (Checked out tab on each product).</li>
             <li>Check <strong>Utilities → Health</strong> for disk space and the database.</li>
+            <li>For compact, delete or rebuild, keep a copy of the vault folder.</li>
             <li>Make the change, then turn Availability back on.</li>
           </ol>
         </div>
