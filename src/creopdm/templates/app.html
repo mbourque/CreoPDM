@@ -760,6 +760,7 @@
     <div class="baseline-view-tabs" role="tablist">
       <button type="button" class="baseline-view-btn is-active" data-baseline-view="files" id="baseline-files-tab" role="tab">Files</button>
       <button type="button" class="baseline-view-btn" data-baseline-view="structure" id="baseline-structure-tab" role="tab" hidden>Structure</button>
+      <button type="button" class="baseline-view-btn" data-baseline-view="compare" id="baseline-compare-tab" role="tab">Compare</button>
     </div>
     <div class="table-wrap baseline-members-wrap" id="baseline-members-table-wrap">
       <table class="grid" id="baseline-members-table">
@@ -768,6 +769,23 @@
         </thead>
         <tbody></tbody>
       </table>
+    </div>
+    <div class="baseline-compare-pane" id="baseline-compare-wrap" hidden>
+      <div class="baseline-compare-bar">
+        <label>Compare this baseline with
+          <select id="baseline-compare-to"></select>
+        </label>
+        <label class="choice"><input type="checkbox" id="baseline-compare-unchanged"> <span>Show unchanged</span></label>
+      </div>
+      <p class="muted small" id="baseline-compare-summary"></p>
+      <div class="table-wrap baseline-members-wrap" id="baseline-compare-table-wrap">
+        <table class="grid" id="baseline-compare-table">
+          <thead>
+            <tr><th>Name</th><th>Change</th><th>This baseline</th><th id="baseline-compare-with">Compared with</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
     <div class="table-wrap baseline-members-wrap" id="baseline-structure-wrap" hidden>
       <table class="grid" id="baseline-structure-table">

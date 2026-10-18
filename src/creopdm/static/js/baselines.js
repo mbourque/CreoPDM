@@ -117,13 +117,105 @@ window.__creopdmModules.baselines = {
     /** The exact versions captured, read through the stored version ids (not the current ones). */
     /** Files and Structure are two views of one dialog; the visible table gets all the height. */
     function setBaselineView(view) {
-      const showStructure = view === "structure" && !$("#baseline-structure-tab")?.hidden;
-      const files = $("#baseline-members-table-wrap");
-      const structure = $("#baseline-structure-wrap");
-      if (files) files.hidden = showStructure;
-      if (structure) structure.hidden = !showStructure;
-      $("#baseline-files-tab")?.classList.toggle("is-active", !showStructure);
-      $("#baseline-structure-tab")?.classList.toggle("is-active", showStructure);
+      const wanted =
+        view === "structure" && !$("#baseline-structure-tab")?.hidden
+          ? "structure"
+          : view === "compare"
+            ? "compare"
+            : "files";
+      const panes = {
+        files: $("#baseline-members-table-wrap"),
+        structure: $("#baseline-structure-wrap"),
+        compare: $("#baseline-compare-wrap"),
+      };
+      for (const [name, pane] of Object.entries(panes)) if (pane) pane.hidden = name !== wanted;
+      $("#baseline-files-tab")?.classList.toggle("is-active", wanted === "files");
+      $("#baseline-structure-tab")?.classList.toggle("is-active", wanted === "structure");
+      $("#baseline-compare-tab")?.classList.toggle("is-active", wanted === "compare");
+      if (wanted === "compare") void loadCompareChoices();
+    }
+
+    let compareResult = null;
+    let compareChoicesFor = "";
+
+    /** The "compare with" list: the product as it is now, then every other baseline. */
+    async function loadCompareChoices() {
+      const select = $("#baseline-compare-to");
+      if (!(select instanceof HTMLSelectElement) || !openBaselineUuid) return;
+      if (compareChoicesFor === openBaselineUuid && select.options.length) return;
+      compareChoicesFor = openBaselineUuid;
+      select.innerHTML = '<option value="current">Current product</option>';
+      const pid = productId();
+      try {
+        const response = pid ? await fetch(`/api/products/${encodeURIComponent(pid)}/baselines`) : null;
+        const rows = response && response.ok ? await response.json() : [];
+        for (const row of Array.isArray(rows) ? rows : []) {
+          if (row.uuid === openBaselineUuid) continue;
+          const option = document.createElement("option");
+          option.value = row.uuid;
+          option.textContent = `${row.name} (${titleCase(row.baseline_type)})`;
+          select.appendChild(option);
+        }
+      } catch {
+        /* the product option still works */
+      }
+      await runCompare();
+    }
+
+    const CHANGE_LABEL = {
+      VERSION_CHANGED: "Changed",
+      ADDED: "Added",
+      REMOVED: "Removed",
+      UNCHANGED: "Same",
+    };
+
+    function renderCompare() {
+      const body = $("#baseline-compare-table tbody");
+      const summary = $("#baseline-compare-summary");
+      const head = $("#baseline-compare-with");
+      if (!body || !compareResult) return;
+      const showSame = Boolean($("#baseline-compare-unchanged")?.checked);
+      const s = compareResult.summary;
+      if (head) head.textContent = compareResult.to_baseline.name;
+      if (summary) {
+        summary.textContent =
+          `Changed ${s.changed} · Added ${s.added} · Removed ${s.removed} · Unchanged ${s.unchanged}` +
+          ` — ${compareResult.from_baseline.name} → ${compareResult.to_baseline.name}`;
+      }
+      const rows = compareResult.items.filter((r) => showSame || r.status !== "UNCHANGED");
+      body.innerHTML = rows.length
+        ? rows
+            .map(
+              (r) => `<tr class="compare-${esc(r.status.toLowerCase())}">
+              <td class="baseline-name-cell">${esc(r.filename)}</td>
+              <td>${esc(CHANGE_LABEL[r.status] || r.status)}</td>
+              <td>${esc(r.from_version || "—")}</td>
+              <td>${esc(r.to_version || "—")}</td>
+            </tr>`
+            )
+            .join("")
+        : '<tr class="empty-row"><td colspan="4">No differences.</td></tr>';
+    }
+
+    async function runCompare() {
+      const select = $("#baseline-compare-to");
+      const body = $("#baseline-compare-table tbody");
+      if (!(select instanceof HTMLSelectElement) || !openBaselineUuid) return;
+      showError($("#baseline-members-error"), "");
+      if (body) body.innerHTML = '<tr class="empty-row"><td colspan="4">Comparing…</td></tr>';
+      try {
+        const response = await fetch(
+          `/api/baselines/${encodeURIComponent(openBaselineUuid)}/compare?to=${encodeURIComponent(
+            select.value || "current"
+          )}`
+        );
+        if (!response.ok) throw new Error(await readError(response));
+        compareResult = await response.json();
+        renderCompare();
+      } catch (err) {
+        if (body) body.innerHTML = "";
+        showError($("#baseline-members-error"), `Could not compare: ${err?.message || "error"}`);
+      }
     }
 
     /** The captured structure: each parent version, the exact child version it uses, or "Unresolved". */
@@ -205,6 +297,8 @@ window.__creopdmModules.baselines = {
       const row = $(`#baselines-table tr[data-baseline="${CSS.escape(baselineUuid)}"]`);
       if (title) title.textContent = row?.querySelector(".baseline-open")?.textContent || "Baseline";
       if (meta) meta.textContent = "";
+      compareChoicesFor = "";
+      compareResult = null;
       setBaselineView("files");
       renderTag(null, null);
       const staleDesc = $("#baseline-members-desc");
@@ -476,6 +570,9 @@ window.__creopdmModules.baselines = {
       if (button instanceof HTMLButtonElement) button.disabled = false;
       await openBaselineMembers(uuid);
     });
+
+    $("#baseline-compare-to")?.addEventListener("change", () => void runCompare());
+    $("#baseline-compare-unchanged")?.addEventListener("change", () => renderCompare());
 
     $("#baseline-members-dialog")?.addEventListener("click", (event) => {
       const button = event.target instanceof Element ? event.target.closest("[data-baseline-view]") : null;

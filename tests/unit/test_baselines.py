@@ -1732,3 +1732,134 @@ def test_baseline_member_rows_link_to_the_exact_version():
     assert "baseline-version-link" in module
     template = (ROOT / "src" / "creopdm" / "templates" / "object_version.html").read_text(encoding="utf-8")
     assert "Historical version" in template and 'id="version-facts"' in template
+
+
+# ---- Stories 27-30: comparing baselines, in PDM terms -----------------------------------------
+
+
+def _compare(auth_client, baseline_uuid, to="current"):
+    response = auth_client.get(f"/api/baselines/{baseline_uuid}/compare", params={"to": to})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    return body, {row["filename"]: row for row in body["items"]}
+
+
+def _add_file(auth_client, product, filename, payload=b"new-file-v1"):
+    added = auth_client.post(
+        f"/api/products/{product['uuid']}/objects",
+        files={"file": (filename, payload, "application/octet-stream")},
+        data={"comment": "Add"},
+    )
+    assert added.status_code == 201, added.text
+    return added.json()
+
+
+@requires_git
+def test_two_baselines_are_compared_as_added_removed_changed_and_unchanged(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client)
+    first = _create(auth_client, product, "Base").json()
+    _check_in(auth_client, auth_ctx, product, objects["shaft.prt"], b"shaft-v2")
+    _add_file(auth_client, product, "bracket.prt")
+    second = _create(auth_client, product, "Later").json()
+
+    body, rows = _compare(auth_client, first["uuid"], second["uuid"])
+    assert body["summary"] == {"changed": 1, "added": 1, "removed": 0, "unchanged": 2}
+    assert rows["shaft.prt"]["status"] == "VERSION_CHANGED"
+    assert (rows["shaft.prt"]["from_version"], rows["shaft.prt"]["to_version"]) == ("A.1", "A.2")
+    assert rows["bracket.prt"]["status"] == "ADDED"
+    assert (rows["bracket.prt"]["from_version"], rows["bracket.prt"]["to_version"]) == (None, "A.1")
+    assert rows["housing.prt"]["status"] == "UNCHANGED" and rows["gear.prt"]["status"] == "UNCHANGED"
+    assert body["from_baseline"]["name"] == "Base" and body["to_baseline"]["name"] == "Later"
+    # Changed first, then added, removed, unchanged.
+    assert [r["status"] for r in body["items"]] == [
+        "VERSION_CHANGED", "ADDED", "UNCHANGED", "UNCHANGED"
+    ]
+
+    # The other way round: what the later baseline has that the earlier does not is REMOVED.
+    back, back_rows = _compare(auth_client, second["uuid"], first["uuid"])
+    assert back["summary"] == {"changed": 1, "added": 0, "removed": 1, "unchanged": 2}
+    assert back_rows["bracket.prt"]["status"] == "REMOVED"
+    assert (back_rows["shaft.prt"]["from_version"], back_rows["shaft.prt"]["to_version"]) == ("A.2", "A.1")
+
+    same, same_rows = _compare(auth_client, first["uuid"], first["uuid"])
+    assert same["summary"]["unchanged"] == 3 and {r["status"] for r in same_rows.values()} == {"UNCHANGED"}
+
+
+@requires_git
+def test_a_baseline_is_compared_with_the_current_configuration(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client)
+    base = _create(auth_client, product, "Base").json()
+
+    body, rows = _compare(auth_client, base["uuid"])  # default target: current
+    assert body["to_baseline"]["kind"] == "CURRENT"
+    assert body["summary"] == {"changed": 0, "added": 0, "removed": 0, "unchanged": 3}
+
+    _check_in(auth_client, auth_ctx, product, objects["shaft.prt"], b"shaft-v2")
+    _check_in(auth_client, auth_ctx, product, objects["housing.prt"], b"housing-v2")
+    _add_file(auth_client, product, "bracket.prt")
+    body, rows = _compare(auth_client, base["uuid"], "current")
+    assert body["summary"] == {"changed": 2, "added": 1, "removed": 0, "unchanged": 1}
+    assert rows["shaft.prt"]["status"] == "VERSION_CHANGED" and rows["shaft.prt"]["to_version"] == "A.2"
+    assert rows["bracket.prt"]["status"] == "ADDED" and rows["gear.prt"]["status"] == "UNCHANGED"
+
+    # Comparing changes nothing: the baseline still holds exactly what it captured.
+    assert {m["display_version"] for m in _members(auth_client, base["uuid"]).values()} == {"A.1"}
+
+
+@requires_git
+def test_a_review_baseline_is_compared_with_a_release_baseline(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client)
+    review = _create(auth_client, product, "Review").json()
+    _check_in(auth_client, auth_ctx, product, objects["gear.prt"], b"gear-v2")
+    release = _create(auth_client, product, "R1", baseline_type="RELEASE").json()
+
+    body, rows = _compare(auth_client, review["uuid"], release["uuid"])
+    assert body["to_baseline"]["baseline_type"] == "RELEASE"
+    assert body["summary"]["changed"] == 1 and rows["gear.prt"]["status"] == "VERSION_CHANGED"
+
+
+@requires_git
+def test_the_result_is_in_pdm_versions_with_commits_only_as_supplemental_info(
+    auth_client, auth_ctx
+):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client)
+    first = _create(auth_client, product, "Base").json()
+    _check_in(auth_client, auth_ctx, product, objects["shaft.prt"], b"shaft-v2")
+    second = _create(auth_client, product, "Later").json()
+    body, rows = _compare(auth_client, first["uuid"], second["uuid"])
+    # Reported as "A.1 -> A.2" of the exact versions, never as a raw Git change.
+    assert rows["shaft.prt"]["from_version_uuid"] != rows["shaft.prt"]["to_version_uuid"]
+    assert (rows["shaft.prt"]["from_version"], rows["shaft.prt"]["to_version"]) == ("A.1", "A.2")
+    assert body["from_baseline"]["git_commit_sha"] == first["git_commit_sha"]
+    assert body["to_baseline"]["git_commit_sha"] == second["git_commit_sha"]
+    assert body["from_baseline"]["git_commit_sha"] != body["to_baseline"]["git_commit_sha"]
+
+
+def test_compare_refuses_other_products_and_unknown_baselines(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client)
+    other, _o = _product(auth_client, "Other", ("bracket.prt",))
+    mine = _create(auth_client, product, "Mine").json()
+    theirs = _create(auth_client, other, "Theirs").json()
+    refused = auth_client.get(f"/api/baselines/{mine['uuid']}/compare", params={"to": theirs["uuid"]})
+    assert refused.status_code in (400, 422), refused.text
+    unknown = auth_client.get(
+        f"/api/baselines/{mine['uuid']}/compare", params={"to": "00000000-0000-4000-8000-000000000000"}
+    )
+    assert unknown.status_code == 404
+
+    _login(auth_client, "view", "ViewPass1")
+    assert auth_client.get(f"/api/baselines/{mine['uuid']}/compare").status_code == 200
+
+
+def test_compare_ui_is_wired():
+    module = (ROOT / "src" / "creopdm" / "static" / "js" / "baselines.js").read_text(encoding="utf-8")
+    assert "/compare?to=" in module and "function runCompare" in module and "function renderCompare" in module
+    assert "VERSION_CHANGED" in module and "baseline-compare-unchanged" in module
+    template = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
+    for needle in ('data-baseline-view="compare"', 'id="baseline-compare-to"', 'id="baseline-compare-table"'):
+        assert needle in template

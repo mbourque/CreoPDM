@@ -17,6 +17,7 @@ from creopdm.context import AppContext
 from creopdm.models.baseline import Baseline
 from creopdm.models.product import Product
 from creopdm.schemas.common import (
+    BaselineCompareResponse,
     BaselineCreateRequest,
     BaselineDependencyResponse,
     BaselineGitCheckResponse,
@@ -111,6 +112,27 @@ def list_baseline_dependencies(
     baseline = ctx.baselines.get(db, baseline_uuid)
     require_product_access(request, ctx, db.get(Product, baseline.product_id))
     return [BaselineDependencyResponse(**row) for row in ctx.baselines.dependencies(db, baseline)]
+
+
+@router.get("/api/baselines/{baseline_uuid}/compare", response_model=BaselineCompareResponse)
+def compare_baseline(
+    baseline_uuid: str,
+    request: Request,
+    to: str = "current",
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> BaselineCompareResponse:
+    """Compare this baseline with another baseline of the same product (``to=<uuid>``) or with
+    the product as it is now (``to=current``, the default). Exact versions, read only."""
+    require_permission(request, ctx, PERMISSION_BASELINES_VIEW)
+    baseline = ctx.baselines.get(db, baseline_uuid)
+    product = db.get(Product, baseline.product_id)
+    require_product_access(request, ctx, product)
+    target = (to or "current").strip()
+    other = None if target.lower() == "current" else ctx.baselines.get(db, target)
+    if other is not None:
+        require_product_access(request, ctx, db.get(Product, other.product_id))
+    return BaselineCompareResponse(**ctx.baselines.compare(db, baseline, other, product))
 
 
 @router.get("/api/baselines/{baseline_uuid}/git-check", response_model=BaselineGitCheckResponse)

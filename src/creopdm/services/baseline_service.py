@@ -193,6 +193,114 @@ class BaselineService:
             )
         return out
 
+    def current_configuration(self, session: Session, product: Product) -> list[dict]:
+        """The product as it is now, in the same shape as ``members``: every file's CURRENT
+        version, resolved before any comparison (so a compare never mixes in stale pointers)."""
+        objects = session.scalars(
+            select(EngineeringObject)
+            .options(joinedload(EngineeringObject.current_version))
+            .where(EngineeringObject.product_id == product.id)
+            .order_by(EngineeringObject.relative_path.asc())
+        )
+        out: list[dict] = []
+        for obj in objects:
+            version = obj.current_version
+            if version is None:
+                continue
+            out.append(
+                {
+                    "object_uuid": obj.uuid,
+                    "version_uuid": version.uuid,
+                    "filename": version.filename or obj.filename,
+                    "relative_path": version.relative_path or obj.relative_path,
+                    "revision": version.revision,
+                    "iteration": version.iteration,
+                    "display_version": f"{version.revision}.{version.iteration}",
+                    "lifecycle_state": version.lifecycle_state or obj.lifecycle_state or "",
+                }
+            )
+        return out
+
+    def compare(
+        self,
+        session: Session,
+        baseline: Baseline,
+        other: Baseline | None,
+        product: Product,
+    ) -> dict:
+        """Compare ``baseline`` (the starting point) with ``other`` (or, when None, the current
+        configuration) in PDM terms: exact object/version membership, never a Git diff.
+
+        ADDED = only in the target, REMOVED = only in the starting baseline, VERSION_CHANGED =
+        the file is in both but at a different exact version, UNCHANGED = the same version.
+        Files are matched by object identity, so a rename is not a remove plus an add.
+        """
+        if other is not None and other.product_id != baseline.product_id:
+            raise ValidationAppError(
+                "Only baselines of the same product can be compared.",
+                details={"from": baseline.uuid, "to": other.uuid},
+            )
+        left = {row["object_uuid"]: row for row in self.members(session, baseline)}
+        right_rows = (
+            self.members(session, other)
+            if other is not None
+            else self.current_configuration(session, product)
+        )
+        right = {row["object_uuid"]: row for row in right_rows}
+
+        items: list[dict] = []
+        for key in sorted(set(left) | set(right)):
+            a, b = left.get(key), right.get(key)
+            if a is not None and b is None:
+                status = "REMOVED"
+            elif a is None and b is not None:
+                status = "ADDED"
+            elif a["version_uuid"] != b["version_uuid"]:
+                status = "VERSION_CHANGED"
+            else:
+                status = "UNCHANGED"
+            shown = b or a
+            items.append(
+                {
+                    "object_uuid": key,
+                    "filename": shown["filename"],
+                    "status": status,
+                    "from_version": a["display_version"] if a else None,
+                    "to_version": b["display_version"] if b else None,
+                    "from_version_uuid": a["version_uuid"] if a else None,
+                    "to_version_uuid": b["version_uuid"] if b else None,
+                    "from_state": (a["lifecycle_state"] if a else None),
+                    "to_state": (b["lifecycle_state"] if b else None),
+                }
+            )
+        order = {"VERSION_CHANGED": 0, "ADDED": 1, "REMOVED": 2, "UNCHANGED": 3}
+        items.sort(key=lambda row: (order[row["status"]], row["filename"].casefold()))
+        summary = {
+            "changed": sum(1 for r in items if r["status"] == "VERSION_CHANGED"),
+            "added": sum(1 for r in items if r["status"] == "ADDED"),
+            "removed": sum(1 for r in items if r["status"] == "REMOVED"),
+            "unchanged": sum(1 for r in items if r["status"] == "UNCHANGED"),
+        }
+        return {
+            "from_baseline": self._compare_side(baseline),
+            "to_baseline": self._compare_side(other) if other is not None else self._compare_side(None),
+            "summary": summary,
+            "items": items,
+        }
+
+    @staticmethod
+    def _compare_side(baseline: Baseline | None) -> dict:
+        if baseline is None:
+            return {"kind": "CURRENT", "name": "Current product", "uuid": None,
+                    "baseline_type": None, "git_commit_sha": None}
+        return {
+            "kind": "BASELINE",
+            "name": baseline.name,
+            "uuid": baseline.uuid,
+            "baseline_type": baseline.baseline_type,
+            "git_commit_sha": baseline.git_commit_sha,
+        }
+
     def dependencies(self, session: Session, baseline: Baseline) -> list[dict]:
         """The structure captured with the baseline, read from the STORED rows only.
 

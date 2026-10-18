@@ -365,6 +365,43 @@ class BaselineGitCheckResponse(BaseModel):
     warning: str | None = None
 
 
+class BaselineCompareSide(BaseModel):
+    kind: str  # BASELINE or CURRENT
+    name: str
+    uuid: str | None = None
+    baseline_type: str | None = None
+    git_commit_sha: str | None = None  # supplemental only
+
+
+class BaselineCompareItem(BaseModel):
+    object_uuid: str
+    filename: str
+    # ADDED, REMOVED, VERSION_CHANGED or UNCHANGED
+    status: str
+    from_version: str | None = None
+    to_version: str | None = None
+    from_version_uuid: str | None = None
+    to_version_uuid: str | None = None
+    from_state: str | None = None
+    to_state: str | None = None
+
+
+class BaselineCompareSummary(BaseModel):
+    changed: int
+    added: int
+    removed: int
+    unchanged: int
+
+
+class BaselineCompareResponse(BaseModel):
+    """Exact PDM membership compared (a Git diff is never the source of truth)."""
+
+    from_baseline: BaselineCompareSide
+    to_baseline: BaselineCompareSide
+    summary: BaselineCompareSummary
+    items: list[BaselineCompareItem]
+
+
 class BaselineDependencyResponse(BaseModel):
     """One structure edge (parent uses child) as captured, with the exact versions on each end."""
 
