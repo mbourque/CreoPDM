@@ -4851,6 +4851,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return (await withCreoWorkspace()).attachCollectLocalPaths(productId, targets);
   }
 
+  async function noteCollectFailures(failed, fromOpen) {
+    if (!Array.isArray(failed) || !failed.length) return;
+    return (await withCreoWorkspace()).noteCollectFailures(failed, fromOpen);
+  }
+
   async function gatherCreoMetadataForFilename(filename, filePath, options) {
     // Cheap guard before loading the module (same as the module's first line).
     if (!canGatherCreoMetadata() || !filename) return null;
@@ -8282,6 +8287,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     assertProductAllows,
     typeIconHtml,
     refreshTabMetrics,
+    noteCollectFailures,
     agentBase,
     agentAuthHeaders,
     agentPdmAuth,

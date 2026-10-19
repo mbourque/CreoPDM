@@ -40,3 +40,18 @@ def test_no_stub_identity_is_saved_for_an_unreadable_file():
     assert "if (!identityName) continue;" in save  # nothing is posted without a real identity name
     serializers = (ROOT / "src" / "creopdm" / "api" / "serializers.py").read_text(encoding="utf-8")
     assert "creo_metadata_captured" in serializers
+
+
+def test_a_manual_collect_names_the_files_it_skipped_with_the_toolkit_reason():
+    metadata = (ROOT / "src" / "creopdm" / "static" / "js" / "metadata.js").read_text(encoding="utf-8")
+    assert "const failedFiles = [];" in metadata
+    assert "failedFiles.push({ filename: target.filename, detail });" in metadata
+    assert "if (failedFiles.length) await noteCollectFailures(failedFiles, false);" in metadata
+    assert "const noteCollectFailures = shell.noteCollectFailures;" in metadata
+    # harness (expected) skips and files left for Check In are not failures
+    assert "expectedSkipped += 1;" in metadata and "leftLocal += 1;" in metadata
+    script = _module()
+    assert "mod.noteCollectFailures = noteCollectFailures;" in script
+    assert 'target.detail)?.detail' in script  # the Toolkit's own reason, when a manual run has it
+    app = (ROOT / "src" / "creopdm" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    assert "async function noteCollectFailures(failed, fromOpen)" in app and "    noteCollectFailures,\n" in app.replace("\r\n", "\n")

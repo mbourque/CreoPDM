@@ -302,7 +302,10 @@ window.__creopdmModules.creo_workspace = {
       const hint = needsModels
         ? " A drawing or assembly needs the models it uses to be in the product."
         : "";
-      const text = `Metadata was not collected for ${shown}${more}. ${reason}${hint} Collect it again once that is fixed.`;
+      // A manual Collect knows the Toolkit's own reason for the first file: show it.
+      const detail = String(failed.find((target) => target.detail)?.detail || "").trim();
+      const why = detail ? ` (${detail.slice(0, 160)})` : "";
+      const text = `Metadata was not collected for ${shown}${more}. ${reason}${why}${hint} Collect it again once that is fixed.`;
       showError($("#toolbar-error"), text);
       // A reload right after Add / Check in would clear the message: keep it for the next page,
       // but never past the moment it was meant for.
@@ -796,6 +799,7 @@ window.__creopdmModules.creo_workspace = {
     mod.gatherCreoMetadataForFilename = gatherCreoMetadataForFilename;
     mod.ensureToolkitAgentHealthy = ensureToolkitAgentHealthy;
     mod.pushCreoMetadataForItems = pushCreoMetadataForItems;
+    mod.noteCollectFailures = noteCollectFailures;
     mod.captureCreoMetadataAfterOpen = captureCreoMetadataAfterOpen;
     mod.rematerializeCheckedInLocalTips = rematerializeCheckedInLocalTips;
     mod.materializeViaAgent = materializeViaAgent;

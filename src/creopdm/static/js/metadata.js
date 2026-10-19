@@ -35,6 +35,7 @@ window.__creopdmModules.metadata = {
     const attachCollectLocalPaths = shell.attachCollectLocalPaths;
     const materializeCheckedOutToAgentCache = shell.materializeCheckedOutToAgentCache;
     const gatherCreoMetadataForFilename = shell.gatherCreoMetadataForFilename;
+    const noteCollectFailures = shell.noteCollectFailures;
     const ensureToolkitAgentReady = shell.ensureToolkitAgentReady;
     const postAiSnapshotFromGather = shell.postAiSnapshotFromGather;
     const reconcileProductLifecycleChrome = shell.reconcileProductLifecycleChrome;
@@ -634,6 +635,8 @@ window.__creopdmModules.metadata = {
       let index = Math.max(0, Number(state.index) || 0);
       let captured = Number(state.captured) || 0;
       let failed = Number(state.failed) || 0;
+      // Which files this run could not read, and the Toolkit's reason (named at the end).
+      const failedFiles = [];
       let expectedSkipped = Number(state.expectedSkipped) || 0;
       // Tips whose local file is a newer unsaved save: never read onto the checked-in
       // revision, and never counted as "saved" (was: a silent no-op that looked done).
@@ -746,6 +749,7 @@ window.__creopdmModules.metadata = {
             } else {
               failed += 1;
               lastReason = detail;
+              failedFiles.push({ filename: target.filename, detail });
             }
             // Lifecycle / validation: stop immediately — do not Creo-walk the rest.
             const locked =
@@ -809,6 +813,8 @@ window.__creopdmModules.metadata = {
           showOk(msg);
           saveMetadataCollectState(null);
         }
+        // The finish line counts the skipped files; this names them and says why.
+        if (failedFiles.length) await noteCollectFailures(failedFiles, false);
         // One audit row for the whole run (never one per file): who, which product, the counts.
         if (state.productId && captured + failed + expectedSkipped + leftLocal > 0) {
           try {
