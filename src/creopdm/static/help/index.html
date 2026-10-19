@@ -837,6 +837,7 @@ END</pre>
           <li><strong>History</strong> lists versions and check-in comments, grouped by revision (newest first). Restore / revert needs the matching permission; a restore is recorded as a new version and the audit says which version it came from (for example <em>Restored A.1 as D.3</em>).</li>
           <li><strong>Revision created</strong> by <a href="#revise">Revise</a> shows <strong>Created From</strong> and the <strong>Revision Reason</strong> on Overview.</li>
           <li><strong>Modifications</strong> compares checked-in snapshots and, when the file is modified, a live gather of the current model.</li>
+          <li><strong>What changed</strong> between two revisions of a part or assembly also lists each feature whose <em>status</em> changed (for example <em>active → suppressed</em>), and says when <strong>Insert mode</strong> was turned on, off or moved (<em>Insert mode on: after HOLE_1</em>) with the features it suppressed. Features that Insert mode suppresses are never counted as suppressed by the user. Revisions collected before Insert mode was recorded are compared as if it was off.</li>
           <li><strong>Ask AI what changed</strong> uses the prompt saved under System Settings → AI (when enabled).</li>
         </ul>
         <div class="callout">

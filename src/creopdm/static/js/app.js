@@ -4943,7 +4943,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       : (gatherSnapshot?.mass && typeof gatherSnapshot.mass === "object"
         ? gatherSnapshot.mass
         : null);
+    // Insert mode (where the tree is inserted, what that suppresses) rides along for Compare.
+    const insertMode = ai.insert_mode && typeof ai.insert_mode === "object"
+      ? ai.insert_mode
+      : (gatherSnapshot?.insert_mode && typeof gatherSnapshot.insert_mode === "object"
+        ? gatherSnapshot.insert_mode
+        : null);
     return {
+      ...(insertMode ? { insert_mode: insertMode } : {}),
       schema_version: Number(ai.schema_version) || 1,
       identity: aiSnapshotIdentityFromGather(ai.identity) || ai.identity || null,
       features: Array.isArray(ai.features) ? ai.features : [],

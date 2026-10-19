@@ -311,6 +311,19 @@ def nest_drawing_inventory_by_sheet(
     return out
 
 
+def normalize_toolkit_insert_mode(raw: Any) -> dict[str, Any] | None:
+    """``{active, after_feature_id, after_feature_name}`` from domains.features.insert_mode, or None."""
+    if not isinstance(raw, dict):
+        return None
+    active = bool(raw.get("active"))
+    out: dict[str, Any] = {"active": active}
+    if active:
+        after_id = raw.get("after_feature_id")
+        out["after_feature_id"] = after_id if after_id not in ("", None) else None
+        out["after_feature_name"] = str(raw.get("after_feature_name") or "").strip()
+    return out
+
+
 def normalize_toolkit_feature_rows(
     rows: list[Any] | None,
 ) -> list[dict[str, Any]] | None:
@@ -595,8 +608,12 @@ def map_toolkit_collect_to_snapshot(
     parameters_block = _ok_domain(payload, "parameters")
     parameters = _list_field(parameters_block, "parameters") or []
 
-    features = normalize_toolkit_feature_rows(
-        _list_field(_ok_domain(payload, "features"), "features")
+    features_block = _ok_domain(payload, "features")
+    features = normalize_toolkit_feature_rows(_list_field(features_block, "features"))
+    # Insert mode (domains.features.insert_mode): where the model tree is "inserted" and which
+    # rows that suppresses. Kept so a revision compare can say it turned on, off or moved.
+    insert_mode = normalize_toolkit_insert_mode(
+        features_block.get("insert_mode") if isinstance(features_block, dict) else None
     )
     structure = normalize_toolkit_structure_rows(
         _list_field(
@@ -736,7 +753,9 @@ def map_toolkit_collect_to_snapshot(
         "relations": None,
         "capture": {"status": "ok", "errors": [], "source": "toolkit"},
     }
-    return {
+    if insert_mode is not None:
+        ai_snapshot["insert_mode"] = insert_mode
+    result = {
         "identity": identity,
         "parameters": parameters,
         "materials": materials,
@@ -755,3 +774,6 @@ def map_toolkit_collect_to_snapshot(
         "ai_snapshot": ai_snapshot,
         "_pdm_source": "toolkit",
     }
+    if insert_mode is not None:
+        result["insert_mode"] = insert_mode
+    return result

@@ -1661,6 +1661,133 @@ def empty_snapshot_compare_summary(
     return f"Nothing changed between {older_label} and {newer_label}."
 
 
+def _feature_compare_key(feat: dict[str, Any]) -> str | None:
+    """Same feature in two snapshots: the Creo id, else the (lower-cased) name."""
+    fid = _norm_feature_id(feat.get("id"))
+    if fid:
+        return f"id:{fid}"
+    name = str(feat.get("name") or "").strip().lower()
+    return f"name:{name}" if name else None
+
+
+def _by_insert_mode(feat: dict[str, Any]) -> bool:
+    """Rows with ``after_insert`` are suppressed by Insert mode, not by the user."""
+    return bool(feat.get("after_insert"))
+
+
+def _feature_user_state(feat: dict[str, Any]) -> str:
+    """'suppressed' (the user did it), 'active', or the Creo status text.
+
+    A row that Insert mode suppresses (``after_insert``) is NOT user-suppressed: its
+    suppressed flag / SUPPRESSED status come from the insert point and are reported by the
+    Insert mode block instead.
+    """
+    status = str(feat.get("status") or "").strip().upper()
+    suppressed = bool(feat.get("suppressed")) or "SUPPRESS" in status
+    if _by_insert_mode(feat):
+        suppressed = False
+        if "SUPPRESS" in status:
+            status = ""
+    if suppressed:
+        return "suppressed"
+    if status in {"", "ACTIVE", "NORMAL"} or status.startswith("SIMP_REP"):
+        return "active"
+    return status.lower()
+
+
+def _compare_feature_rows(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    """Features of a PART / ASSEMBLY snapshot as the compare sees them (none for a drawing)."""
+    identity = snapshot.get("identity") if isinstance(snapshot.get("identity"), dict) else {}
+    if _is_drawing_snapshot(snapshot, identity):
+        return []
+    raw = snapshot.get("features") if isinstance(snapshot.get("features"), list) else []
+    return _iter_compare_features(raw)
+
+
+def _feature_state_diff_lines(older: dict[str, Any], newer: dict[str, Any]) -> list[str]:
+    """Features present in both whose status / suppressed state changed (user suppress, resume …)."""
+    old_rows = {}
+    for feat in _compare_feature_rows(older):
+        key = _feature_compare_key(feat)
+        if key and key not in old_rows:
+            old_rows[key] = feat
+    changed: list[str] = []
+    seen: set[str] = set()
+    for feat in _compare_feature_rows(newer):
+        key = _feature_compare_key(feat)
+        if not key or key in seen or key not in old_rows:
+            continue
+        seen.add(key)
+        before = _feature_user_state(old_rows[key])
+        after = _feature_user_state(feat)
+        if before != after:
+            changed.append(f"{_feature_outline_label(feat)}: {before} → {after}")
+    return ["Features status changed:", *[f"- {item}" for item in changed]] if changed else []
+
+
+def _insert_mode(snapshot: dict[str, Any]) -> dict[str, Any] | None:
+    """``domains.features.insert_mode`` as kept in the snapshot: active, after_feature_id/name."""
+    raw = snapshot.get("insert_mode")
+    if not isinstance(raw, dict):
+        return None
+    active = bool(raw.get("active"))
+    return {
+        "active": active,
+        "after_id": _norm_feature_id(raw.get("after_feature_id")) if active else None,
+        "after_name": str(raw.get("after_feature_name") or "").strip() if active else "",
+    }
+
+
+def _insert_after_label(mode: dict[str, Any], snapshot: dict[str, Any]) -> str:
+    name = str(mode.get("after_name") or "").strip()
+    fid = mode.get("after_id")
+    if not name and fid:
+        name = _feature_id_label_map(snapshot).get(str(fid), "") or f"feature {fid}"
+    if name and fid and f"({fid})" not in name:
+        return f"{name} ({fid})"
+    return name or "(unknown feature)"
+
+
+def _insert_mode_diff_lines(older: dict[str, Any], newer: dict[str, Any]) -> list[str]:
+    """Insert mode turned on / off / moved, and the features that became suppressed by it."""
+    old_mode = _insert_mode(older) or {"active": False, "after_id": None, "after_name": ""}
+    new_mode = _insert_mode(newer) or {"active": False, "after_id": None, "after_name": ""}
+    if old_mode["active"] and new_mode["active"]:
+        moved = (old_mode["after_id"], old_mode["after_name"].lower()) != (
+            new_mode["after_id"],
+            new_mode["after_name"].lower(),
+        )
+        if not moved:
+            return []
+        head = (
+            f"Insert mode moved: after {_insert_after_label(new_mode, newer)}"
+            f" (was after {_insert_after_label(old_mode, older)})"
+        )
+    elif new_mode["active"]:
+        head = f"Insert mode on: after {_insert_after_label(new_mode, newer)}"
+    elif old_mode["active"]:
+        head = f"Insert mode off (was after {_insert_after_label(old_mode, older)})"
+    else:
+        return []
+    old_by_insert = {
+        key
+        for feat in _compare_feature_rows(older)
+        if _by_insert_mode(feat) and (key := _feature_compare_key(feat))
+    }
+    became: list[str] = []
+    seen: set[str] = set()
+    for feat in _compare_feature_rows(newer):
+        key = _feature_compare_key(feat)
+        if not key or key in seen or not _by_insert_mode(feat) or key in old_by_insert:
+            continue
+        seen.add(key)
+        became.append(_feature_outline_label(feat))
+    lines = ["Insert mode:", f"- {head}"]
+    if became:
+        lines += ["Features suppressed by insert mode:", *[f"- {item}" for item in became]]
+    return lines
+
+
 def format_snapshot_compare_diff_text(
     older_snapshot: dict[str, Any] | None,
     newer_snapshot: dict[str, Any] | None,
@@ -1776,6 +1903,14 @@ def format_snapshot_compare_diff_text(
     for title, items in (
         ("Features removed", feat_removed),
         ("Features added", feat_added),
+    ):
+        _extend_section(lines, _bullet_block(title, items))
+    # Status / suppressed per feature and Insert mode apply to parts AND assemblies, also when
+    # the Structure is the authority for what was added or removed (above).
+    for block in (_insert_mode_diff_lines(older, newer), _feature_state_diff_lines(older, newer)):
+        if block:
+            _extend_section(lines, block)
+    for title, items in (
         ("Dimensions removed", dim_removed),
         ("Dimensions changed (same symbol)", dim_changed),
         ("Dimensions added", dim_added),
