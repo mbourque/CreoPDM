@@ -338,3 +338,8 @@ def test_both_screens_use_the_one_baseline_open():
     assert "mod.openBaselineVersion = openBaselineVersion;" in shared
     module = _read("src", "creopdm", "static", "js", "baselines.js")
     assert "openBaselineFile" in module and "window.CreoJS" not in module  # no second copy of the open
+
+
+def test_the_frozen_note_on_a_baseline_file_does_not_touch_the_open_button():
+    css = _read("src", "creopdm", "static", "css", "app.css")
+    assert "#version-banner { margin: 0.75rem 0 0.5rem; }" in css

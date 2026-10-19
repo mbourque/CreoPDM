@@ -1462,6 +1462,8 @@ button.forgot-password-btn,
   margin: 0; padding: 0.45rem 0.7rem; border-radius: 6px; background: #eef5fa;
   border: 1px solid #c2d9e8; color: #1f4f68; font-size: 0.88rem;
 }
+/* Details of a file in a baseline: the note sits clear of the title row and the Open… button. */
+#version-banner { margin: 0.75rem 0 0.5rem; }
 /* File and baseline names read like the Files list (the global .filename-cell is monospace). */
 .baseline-name-cell {
   font-family: inherit; font-size: inherit; text-align: left;
