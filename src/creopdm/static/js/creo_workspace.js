@@ -13,6 +13,8 @@ window.__creopdmModules.creo_workspace = {
     const publishBusyMessage = shell.publishBusyMessage;
     const metadataBusyText = shell.metadataBusyText;
     const readError = shell.readError;
+    const showError = shell.showError;
+    const $ = shell.$;
     const postAction = shell.postAction;
     const agentBase = shell.agentBase;
     const agentAuthHeaders = shell.agentAuthHeaders;
@@ -284,6 +286,38 @@ window.__creopdmModules.creo_workspace = {
       }
     }
 
+    /** Tell the user which files got no metadata, and why that usually is. */
+    function noteCollectFailures(failed, fromOpen) {
+      if (!failed.length) return;
+      const shown = failed.slice(0, 3).map((target) => target.filename).join(", ");
+      const more = failed.length > 3 ? `, +${failed.length - 3} more` : "";
+      const needsModels = failed.some((target) => /\.(drw|asm)$/i.test(target.filename));
+      const reason = fromOpen
+        ? "Creo did not report the model in its session."
+        : "Creo could not read the file.";
+      const hint = needsModels
+        ? " A drawing or assembly needs the models it uses to be in the product."
+        : "";
+      const text = `Metadata was not collected for ${shown}${more}. ${reason}${hint} Collect it again once that is fixed.`;
+      showError($("#toolbar-error"), text);
+      // A reload right after Add / Check in would clear the message: keep it for the next page,
+      // but never past the moment it was meant for.
+      try {
+        window.sessionStorage.setItem("creopdmNotice", text);
+        window.setTimeout(() => {
+          try {
+            if (window.sessionStorage.getItem("creopdmNotice") === text) {
+              window.sessionStorage.removeItem("creopdmNotice");
+            }
+          } catch {
+            /* ignore */
+          }
+        }, 8000);
+      } catch {
+        /* private mode / blocked storage */
+      }
+    }
+
     async function pushCreoMetadataForItems(items, options) {
       const opts = options && typeof options === "object" ? options : {};
       const collectStartedAt = Date.now();
@@ -306,6 +340,7 @@ window.__creopdmModules.creo_workspace = {
           .filter((item) => item.uuid && item.filename && isCreoMetadataCandidate(item.filename))
       );
       let saved = 0;
+      const savedIds = new Set();
       if (!targets.length || !canGatherCreoMetadata()) return saved;
       // Add uploads to the vault only — it does not fill the product agent cache.
       // Collect must use cleaned vault tips (not the pick-folder source), so rematerialize
@@ -420,6 +455,7 @@ window.__creopdmModules.creo_workspace = {
           );
           if (response.ok) {
             saved += 1;
+            savedIds.add(target.uuid);
             // Check In / Open tip capture — force so Modified row paint cannot skip.
             await postAiSnapshotFromGather(target.uuid, target.versionId || null, snapshot, {
               force: true,
@@ -430,6 +466,11 @@ window.__creopdmModules.creo_workspace = {
           /* soft-fail — metadata is best-effort */
         }
       }
+      // A file the Toolkit could not read leaves no metadata: say so instead of staying silent.
+      noteCollectFailures(
+        targets.filter((target) => !savedIds.has(target.uuid)),
+        sessionOnly
+      );
       // Add -> Collect passes audit:true. Open and Check-in collect quietly (one file at a time,
       // and Check-in already has its own audit row), so they never write a summary.
       if (opts.audit && !sessionOnly) {
