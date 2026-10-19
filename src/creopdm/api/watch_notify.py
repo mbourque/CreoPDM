@@ -27,8 +27,13 @@ def notify_product_watchers(
     filenames: list[str],
     object_uuid: str | None = None,
     comment: str | None = None,
+    what: str | None = None,
+    what_label: str = "Files",
 ) -> None:
-    """Fan out one summary email to watchers (excludes the actor). Failures stay logged."""
+    """Fan out one summary email to watchers (excludes the actor). Failures stay logged.
+
+    ``what`` replaces the Files line (a baseline is not a file): ``what_label: what``.
+    """
     auth_user = getattr(request.state, "auth_user", None)
     if not isinstance(auth_user, User):
         auth_user = None
@@ -44,6 +49,8 @@ def notify_product_watchers(
         base_url=str(request.base_url),
         object_uuid=object_uuid,
         comment=comment,
+        what=what,
+        what_label=what_label,
         email_enabled=bool(ctx.settings.email.enabled),
     )
 

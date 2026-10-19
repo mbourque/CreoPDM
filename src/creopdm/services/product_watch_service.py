@@ -161,6 +161,8 @@ class ProductWatchService:
         base_url: str,
         object_uuid: str | None = None,
         comment: str | None = None,
+        what: str | None = None,
+        what_label: str = "Files",
         email_enabled: bool,
     ) -> None:
         if not email_enabled:
@@ -210,7 +212,7 @@ class ProductWatchService:
             f"Action: {action}\n"
             f"By: {actor_label}\n"
             f"When: {when}\n"
-            f"Files: {files_block}\n"
+            f"{what_label}: {what if what else files_block}\n"
             f"{comment_block}"
             f"\nOpen: {link}\n"
         )

@@ -354,4 +354,21 @@ def create_baseline(
         baseline_type=payload.baseline_type,
         git_tag=payload.git_tag,
     )
+    from creopdm.api.watch_notify import notify_product_watchers
+
+    # Watchers hear about a new baseline like they do about a check-in or a revision.
+    notify_product_watchers(
+        request,
+        ctx,
+        db,
+        product,
+        action="Baseline created",
+        filenames=[],
+        what=(
+            f"{baseline.name} ({baseline.member_count} file"
+            f"{'' if baseline.member_count == 1 else 's'})"
+        ),
+        what_label="Baseline",
+        comment=(payload.description or "").strip() or None,
+    )
     return baseline_to_response(baseline, product.uuid, product.name)
