@@ -395,7 +395,7 @@
 
     {% if can_view_baselines %}
     <section class="tab-panel" id="panel-baselines" data-product="{{ selected.uuid }}" hidden>
-      <div class="baselines-head">
+      <div class="baselines-head" id="baselines-head">
         <p class="muted small">A baseline is an exact, frozen snapshot of this product: the version of every file at the moment it was created. Later check-ins and revisions never change it.</p>
         <label class="choice baselines-archived-toggle" title="Archived baselines are hidden by default. They stay readable and keep protecting their versions.">
           <input type="checkbox" id="baselines-show-archived">
@@ -406,7 +406,7 @@
                 title="Capture the exact current version of every file in this product.">Create Baseline…</button>
         {% endif %}
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap" id="baselines-table-wrap">
         <table class="grid" id="baselines-table">
           <thead>
             <tr>
@@ -416,12 +416,43 @@
               <th data-sort="members">Members</th>
               <th data-sort="created">Created</th>
               <th data-sort="by">Created by</th>
+              <th><span class="sr-only">Details</span></th>
             </tr>
           </thead>
           <tbody>
-            <tr class="empty-row"><td colspan="6">Open this tab to load baselines.</td></tr>
+            <tr class="empty-row"><td colspan="7">Open this tab to load baselines.</td></tr>
           </tbody>
         </table>
+      </div>
+      <div class="baseline-browse" id="baseline-browse" hidden>
+        <nav class="baseline-crumbs" aria-label="Breadcrumb">
+          <button type="button" class="baseline-open" id="baseline-browse-back" title="Back to the list of baselines">Baselines</button>
+          <span aria-hidden="true">›</span>
+          <strong id="baseline-browse-title">Baseline</strong>
+        </nav>
+        <div class="baseline-frozen baseline-browse-banner">
+          <span id="baseline-browse-meta">Frozen snapshot: the exact versions captured. Read-only.</span>
+          <span class="baseline-browse-actions">
+            <button type="button" class="btn" id="baseline-browse-details" title="Structure, Git, integrity and compare for this baseline.">Details…</button>
+            <button type="button" class="btn" id="baseline-browse-download" title="Download this baseline's exact versions to a read-only folder on this PC.">Download…</button>
+            <button type="button" class="btn" id="baseline-browse-compare" title="See what changed between this baseline and the product today.">Compare with current</button>
+          </span>
+        </div>
+        <p class="error" id="baseline-browse-error" hidden></p>
+        <div class="table-wrap baseline-members-wrap">
+          <table class="grid" id="baseline-browse-table">
+            <thead>
+              <tr>
+                <th data-sort="name">Name</th>
+                <th data-sort="rev">Version</th>
+                <th data-sort="state">State</th>
+                <th data-sort="type">Type</th>
+                <th data-sort="now">Compared with current</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
     </section>
     {% endif %}

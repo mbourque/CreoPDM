@@ -22,7 +22,9 @@ def test_every_column_of_the_three_tables_is_a_sortable_header():
     ):
         head = template[template.index(f'id="{table}"') :]
         head = head[: head.index("</thead>")]
-        assert len(re.findall(r"<th[ >]", head)) == len(keys), table
+        # the product list also has one unsortable column: the Details… buttons
+        extra = 1 if table == "baselines-table" else 0
+        assert len(re.findall(r"<th[ >]", head)) == len(keys) + extra, table
         for key in keys:
             assert f'data-sort="{key}"' in head, (table, key)
 

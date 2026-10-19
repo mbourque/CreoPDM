@@ -74,7 +74,7 @@ window.__creopdmModules.baselines = {
       if (!body) return;
       if (!items.length) {
         body.innerHTML =
-          '<tr class="empty-row"><td colspan="6">No baselines yet. Create one to freeze this product’s current configuration.</td></tr>';
+          '<tr class="empty-row"><td colspan="7">No baselines yet. Create one to freeze this product’s current configuration.</td></tr>';
         return;
       }
       body.innerHTML = items
@@ -93,12 +93,17 @@ window.__creopdmModules.baselines = {
             <td>${esc(item.member_count)}</td>
             <td title="${esc(item.created_at || "")}">${esc(formatWhen(item.created_at))}</td>
             <td>${esc(item.created_by)}</td>
+            <td class="baseline-details-cell"><button type="button" class="btn baseline-details-btn" data-baseline-details="${esc(
+              item.uuid
+            )}" title="Structure, Git, integrity, compare and download for this baseline">Details…</button></td>
           </tr>`;
         })
         .join("");
     }
 
     async function loadBaselinesTab() {
+      // Opening the tab (or the "N Baselines" pill) always lands on the list.
+      leaveBrowse();
       const pid = productId();
       const body = $("#baselines-table tbody");
       if (!pid || !body) return;
@@ -115,9 +120,128 @@ window.__creopdmModules.baselines = {
         // The tab and the pill count what is in everyday use, not archived baselines.
         paintCounts(list.filter((item) => item.status !== "ARCHIVED").length);
       } catch (err) {
-        body.innerHTML = `<tr class="empty-row"><td colspan="6">Could not load baselines (${esc(
+        body.innerHTML = `<tr class="empty-row"><td colspan="7">Could not load baselines (${esc(
           err?.message || "error"
         )}).</td></tr>`;
+      }
+    }
+
+    // ---- The files of one baseline, shown in the Baselines tab itself (read-only) ----------
+    let browseUuid = "";
+    let browseData = [];
+    let browseInfo = null;
+
+    function showBrowse(on) {
+      for (const id of ["baselines-head", "baselines-table-wrap"]) {
+        const el = $(`#${id}`);
+        if (el) el.hidden = on;
+      }
+      const pane = $("#baseline-browse");
+      if (pane) pane.hidden = !on;
+    }
+
+    /** Keep the address in step so a refresh or a shared link opens the same baseline. */
+    function setBaselineParam(uuid) {
+      try {
+        const url = new URL(window.location.href);
+        if (uuid) {
+          url.searchParams.set("tab", "baselines");
+          url.searchParams.set("baseline", uuid);
+        } else {
+          url.searchParams.delete("baseline");
+          if (url.searchParams.get("tab") === "baselines") url.searchParams.delete("tab");
+        }
+        window.history.replaceState(window.history.state, "", url);
+      } catch {
+        /* the address is a convenience only */
+      }
+    }
+
+    function leaveBrowse() {
+      browseUuid = "";
+      showBrowse(false);
+      setBaselineParam("");
+    }
+
+    function paintBrowse() {
+      const body = $("#baseline-browse-table tbody");
+      if (!body) return;
+      if (!browseData.length) {
+        body.innerHTML = '<tr class="empty-row"><td colspan="5">This baseline has no files.</td></tr>';
+        return;
+      }
+      body.innerHTML = sortedRows("browse", browseData)
+        .map((m) => {
+          const newer = m.status === "OUT_OF_DATE";
+          const now = newer ? `Newer: ${esc(m.current_display_version || "—")}` : "Same version";
+          return `<tr data-version="${esc(m.version_uuid)}" data-object="${esc(m.object_uuid)}">
+            <td class="baseline-name-cell">${versionLink(browseInfo, m)}${
+              m.relative_path && m.relative_path !== m.filename
+                ? `<div class="muted small">${esc(m.relative_path)}</div>`
+                : ""
+            }</td>
+            <td>${esc(m.display_version)}</td>
+            <td>${esc(stateLabel(m.lifecycle_state))}</td>
+            <td>${esc(String(m.object_type || "").replace(/^CREO_/, "").toLowerCase() || "—")}</td>
+            <td class="${newer ? "is-newer" : ""}">${now}</td>
+          </tr>`;
+        })
+        .join("");
+    }
+
+    /** Show the exact versions of one baseline in the tab (the list steps aside). */
+    async function browseBaseline(baselineUuid) {
+      if (!baselineUuid) return;
+      browseUuid = baselineUuid;
+      openBaselineUuid = baselineUuid;
+      browseData = [];
+      browseInfo = null;
+      resetSorts();
+      showBrowse(true);
+      setBaselineParam(baselineUuid);
+      showError($("#baseline-browse-error"), "");
+      const title = $("#baseline-browse-title");
+      const meta = $("#baseline-browse-meta");
+      const row = $(`#baselines-table tr[data-baseline="${CSS.escape(baselineUuid)}"]`);
+      if (title) title.textContent = row?.querySelector(".baseline-open")?.textContent || "Baseline";
+      if (meta) meta.textContent = "Loading…";
+      const body = $("#baseline-browse-table tbody");
+      if (body) body.innerHTML = '<tr class="empty-row"><td colspan="5">Loading…</td></tr>';
+      try {
+        const [baselineResp, membersResp] = await Promise.all([
+          fetch(`/api/baselines/${encodeURIComponent(baselineUuid)}`),
+          fetch(`/api/baselines/${encodeURIComponent(baselineUuid)}/members`),
+        ]);
+        if (browseUuid !== baselineUuid) return; // the user went elsewhere meanwhile
+        if (!baselineResp.ok) throw new Error(await readError(baselineResp));
+        if (!membersResp.ok) throw new Error(await readError(membersResp));
+        browseInfo = await baselineResp.json();
+        const members = await membersResp.json();
+        browseData = Array.isArray(members) ? members : [];
+        if (title) title.textContent = browseInfo.name || "Baseline";
+        if (meta) {
+          meta.textContent =
+            `Frozen snapshot, read-only · ${titleCase(browseInfo.status)} · ` +
+            `${titleCase(browseInfo.baseline_type)}${browseInfo.release_label ? ` ${browseInfo.release_label}` : ""} · ` +
+            `${browseInfo.member_count} file${browseInfo.member_count === 1 ? "" : "s"} · ` +
+            `created ${formatWhen(browseInfo.created_at)} by ${browseInfo.created_by}` +
+            (browseInfo.status === "ARCHIVED" ? " · Archived" : "");
+        }
+        paintBrowse();
+      } catch (err) {
+        if (browseUuid !== baselineUuid) return;
+        // A baseline that is gone or not allowed: back to the list, with the reason.
+        leaveBrowse();
+        await loadBaselinesTab();
+        const body = $("#baselines-table tbody");
+        if (body && !body.querySelector(".empty-row")) {
+          body.insertAdjacentHTML(
+            "afterbegin",
+            `<tr class="empty-row"><td colspan="7">That baseline could not be opened (${esc(
+              err?.message || "error"
+            )}).</td></tr>`
+          );
+        }
       }
     }
 
@@ -235,7 +359,7 @@ window.__creopdmModules.baselines = {
 
     // ---- sortable columns (Files, Structure, Compare): click a header, click again to reverse ----
     // Sorting is done on the rows already loaded, so it is instant and never asks the server again.
-    const sorts = { baselines: null, files: null, structure: null, compare: null }; // { key, dir } or null (server order)
+    const sorts = { baselines: null, browse: null, files: null, structure: null, compare: null }; // { key, dir } or null (server order)
     let baselineList = [];
     const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
     let filesData = [];
@@ -305,8 +429,12 @@ window.__creopdmModules.baselines = {
       return [...rows].sort((x, y) => state.dir * (compare(x, y) || 0));
     }
 
+    // The in-tab file list sorts on the same columns as the dialog's Files table.
+    COLUMNS.browse = COLUMNS.files;
+
     const SORT_TABLE_IDS = {
       "baselines-table": "baselines",
+      "baseline-browse-table": "browse",
       "baseline-members-table": "files",
       "baseline-structure-table": "structure",
       "baseline-compare-table": "compare",
@@ -958,6 +1086,7 @@ window.__creopdmModules.baselines = {
     $("#baseline-ws-open")?.addEventListener("click", () => void openCopyFolder());
 
     mod.openBaselineMembers = openBaselineMembers;
+    mod.browseBaseline = browseBaseline;
     mod.loadBaselinesTab = loadBaselinesTab;
     mod.openCreateBaselineDialog = openCreateBaselineDialog;
 
@@ -973,12 +1102,47 @@ window.__creopdmModules.baselines = {
     });
 
     $("#baselines-table")?.addEventListener("click", (event) => {
-      // A button, not <a href="#">: the page-wide link handler soft-navigates every anchor,
+      // Buttons, not <a href="#">: the page-wide link handler soft-navigates every anchor,
       // and "#" is this very page, so an anchor here reloaded the Files tab.
-      const link = event.target instanceof Element ? event.target.closest("[data-open-baseline]") : null;
+      const target = event.target instanceof Element ? event.target : null;
+      const details = target?.closest("[data-baseline-details]");
+      if (details) {
+        event.preventDefault();
+        void openBaselineMembers(details.getAttribute("data-baseline-details") || "");
+        return;
+      }
+      const link = target?.closest("[data-open-baseline]");
       if (!link) return;
       event.preventDefault();
-      void openBaselineMembers(link.getAttribute("data-open-baseline") || "");
+      void browseBaseline(link.getAttribute("data-open-baseline") || "");
+    });
+
+    $("#baseline-browse-back")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      void loadBaselinesTab();
+    });
+    $("#baseline-browse-details")?.addEventListener("click", () => {
+      if (browseUuid) void openBaselineMembers(browseUuid);
+    });
+    $("#baseline-browse-compare")?.addEventListener("click", async () => {
+      if (!browseUuid) return;
+      await openBaselineMembers(browseUuid);
+      setBaselineView("compare");
+      void loadCompareChoices();
+    });
+    $("#baseline-browse-download")?.addEventListener("click", async () => {
+      if (!browseUuid) return;
+      openBaselineUuid = browseUuid;
+      await openAddToWorkspace();
+    });
+    $("#baseline-browse")?.addEventListener("click", (event) => {
+      const th = event.target instanceof Element ? event.target.closest("#baseline-browse-table th[data-sort]") : null;
+      if (!th) return;
+      const key = th.getAttribute("data-sort") || "";
+      const current = sorts.browse;
+      sorts.browse = current && current.key === key ? { key, dir: -current.dir } : { key, dir: 1 };
+      paintSortHeaders("browse");
+      paintBrowse();
     });
 
     $("#baseline-tag-retry")?.addEventListener("click", async (event) => {
