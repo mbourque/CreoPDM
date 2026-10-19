@@ -252,32 +252,6 @@ window.__creopdmModules.baselines = {
       return match ? match[1].toLowerCase() : "";
     }
 
-    /** Everything the baseline records about itself, at a glance (the dialog has the long form). */
-    function paintAbout(info) {
-      const host = $("#baseline-about-body");
-      if (!host) return;
-      const rows = [];
-      const add = (label, value) => {
-        if (value === null || value === undefined || value === "") return;
-        rows.push(`<dt>${esc(label)}</dt><dd>${esc(value)}</dd>`);
-      };
-      add("Description", info.description);
-      add("Created", `${formatWhen(info.created_at)} by ${info.created_by}`);
-      add("Repository commit", info.git_commit_sha ? String(info.git_commit_sha).slice(0, 12) : "");
-      if (info.git_tag_name) {
-        add("Git tag", `${info.git_tag_name}${info.git_tag_status ? ` (${titleCase(info.git_tag_status)})` : ""}`);
-      }
-      if (info.structure_indexed === false) {
-        add("Structure", "Not captured: Where Used had not been built for this product when it was made.");
-      } else {
-        const links = Number(info.dependency_count || 0);
-        const open = Number(info.unresolved_dependency_count || 0);
-        add("Structure", `${links} link${links === 1 ? "" : "s"}${open ? `, ${open} unresolved` : ""}`);
-      }
-      add("Immutable", "Yes. Later check-ins and revisions never change what this baseline shows.");
-      host.innerHTML = rows.join("");
-    }
-
     function paintBrowse() {
       const body = $("#baseline-browse-table tbody");
       if (!body) return;
@@ -374,7 +348,6 @@ window.__creopdmModules.baselines = {
             `created ${formatWhen(browseInfo.created_at)} by ${browseInfo.created_by}` +
             (browseInfo.status === "ARCHIVED" ? " · Archived" : "");
         }
-        paintAbout(browseInfo);
         paintBrowse();
       } catch (err) {
         if (browseUuid !== baselineUuid) return;
