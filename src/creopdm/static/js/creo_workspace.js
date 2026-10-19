@@ -229,9 +229,13 @@ window.__creopdmModules.creo_workspace = {
         const path = String(filePath || "").trim();
         const query = new URLSearchParams({ filename: tip });
         if (path) query.set("path", path);
+        // Parts and drawings read in seconds; only assemblies and manufacturing models may take
+        // long. A stuck file must not hold the rest of a Collect for two minutes.
+        const seconds = /\.(asm|mfg)$/i.test(tip) ? 120 : 40;
+        query.set("timeout", String(seconds));
         const snapResp = await fetch(`${base}/toolkit/snapshot?${query}`, {
           headers: agentAuthHeaders(),
-          signal: abortSignalAfter(120000),
+          signal: abortSignalAfter((seconds + 10) * 1000),
         });
         if (!snapResp.ok) {
           return {

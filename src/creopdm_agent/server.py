@@ -3400,8 +3400,12 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         domains: str = "",
         path: str = "",
         keep: str = "1",
+        timeout: float = 120.0,
     ) -> dict[str, object]:
         """Collect via Toolkit and map to a Creo.JS gather-shaped snapshot.
+
+        ``timeout`` (seconds, 10 to 180) is how long this one file may take: the page asks for a
+        shorter wait for parts and drawings, so one stuck file does not hold up the rest.
 
         No Creo.JS fallback here — if Toolkit is down or identity is missing, 502.
         Optional ``path`` is forwarded so Toolkit can silent-Retrieve (no window).
@@ -3427,7 +3431,8 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             q.append(f"fileName={quote(tip)}")
         if disk_path:
             q.append(f"path={quote(disk_path)}")
-        raw = _proxy_toolkit_get(f"/collect?{'&'.join(q)}", timeout=120.0)
+        limit = max(10.0, min(180.0, float(timeout or 120.0)))
+        raw = _proxy_toolkit_get(f"/collect?{'&'.join(q)}", timeout=limit)
         # Always pass tip — Toolkit identity often omits file_name / uses filename.
         snapshot = map_toolkit_collect_to_snapshot(raw, fallback_filename=tip)
         if not snapshot:
