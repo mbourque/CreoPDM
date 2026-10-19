@@ -60,9 +60,11 @@ def test_a_name_browses_and_details_opens_the_dialog():
     assert 'void browseBaseline(link.getAttribute("data-open-baseline") || "")' in module
     assert 'data-baseline-details="' in module
     assert 'void openBaselineMembers(details.getAttribute("data-baseline-details") || "")' in module
-    # Opening the tab (or the "N Baselines" pill) always lands on the list.
-    assert "async function loadBaselinesTab() {\n      // Opening the tab" in module.replace("\r\n", "\n")
-    assert "function leaveBrowse()" in module and "leaveBrowse();" in module
+    # An open baseline stays open through the tab and the "N Baselines" pill; only the
+    # breadcrumb returns to the list.
+    assert "An open baseline stays open" in module and "function leaveBrowse()" in module
+    back = module.split('$("#baseline-browse-back")', 1)[1][:200]
+    assert "leaveBrowse();" in back and "loadBaselinesTab()" in back
     # The address follows the open baseline so refresh and shared links work.
     assert 'url.searchParams.set("baseline", uuid)' in module and "history.replaceState" in module
     # A baseline that cannot be opened (deleted, no access) falls back to the list with a reason.
@@ -75,8 +77,46 @@ def test_a_link_with_a_baseline_opens_its_files():
     app = _read("src", "creopdm", "static", "js", "app.js")
     assert 'new URLSearchParams(window.location.search).get("baseline")' in app
     assert "m.browseBaseline?.(linkedBaseline)" in app
-    # the pill still just opens the tab (which shows the list)
+    # the pill opens the tab, which keeps whichever baseline is open
     assert 'data-tab-link' in app and "loadBaselinesTab?.()" in app
+
+
+def test_baseline_files_act_like_files_rows():
+    module = _read("src", "creopdm", "static", "js", "baselines.js")
+    # Files-page rows: the page's own selection, pills and hover preview work on them.
+    assert 'class="object-row baseline-file-row"' in module
+    for attribute in ("data-object-type", "data-extension", "data-content-hash", "data-detail",
+                      "data-top-level-assembly"):
+        assert attribute in module, attribute
+    painter = module.split("function paintBrowse", 1)[1].split("async function browseBaseline", 1)[0]
+    # The name must not carry the live Open class (that would open the CURRENT file).
+    assert "thumb-preview-target" in painter and "object-open" not in painter
+    # Top level assemblies come from the baseline's own frozen structure, drawings excluded.
+    assert "function topLevelAssemblyVersions(" in module and '"CREO_ASSEMBLY"' in module
+    app = _read("src", "creopdm", "static", "js", "app.js")
+    assert 'tab === "baselines" && document.getElementById("baseline-browse")?.hidden === false' in app
+    assert 'querySelector("#baseline-browse-table")?.addEventListener("click", onFileTableClick)' in app
+    assert 'querySelector("#baseline-browse-table")?.addEventListener("dblclick", onFileTableDblclick)' in app
+    assert "typeIconHtml," in app and "refreshTabMetrics," in app  # shared with baselines.js
+
+
+def test_a_name_opens_the_file_from_the_downloaded_baseline_and_details_is_the_footer_button():
+    module = _read("src", "creopdm", "static", "js", "baselines.js")
+    assert "async function openBaselineFile(" in module
+    # materialize through the agent (skipped when already installed and unchanged), then open
+    assert '"/baseline-workspace/check"' in module and '"/baseline-workspace"' in module
+    assert "overwrite: false" in module  # never replaces files on this PC silently
+    assert "window.CreoJS.openModel(dir, member.filename" in module and 'mode: "association"' in module
+    assert "Start creopdm-agent on this PC" in module
+    # a click opens after a beat so a double-click can open Details instead
+    assert "}, 280);" in module and '"dblclick", cancelPendingBaselineOpen' in module
+    # footer: only Details, only with exactly one row selected
+    assert "selectedBrowseRows().length === 1" in module
+    page = _read("src", "creopdm", "templates", "app.html")
+    assert 'id="baseline-browse-file-details"' in page and "Baseline details…" in page
+    css = _read("src", "creopdm", "static", "css", "app.css")
+    assert "body.is-baseline-browse footer.toolbar .toolbar-actions > :not(#baseline-browse-file-details)" in css
+    assert ".baseline-browse { flex: 1 1 auto; min-height: 0;" in css  # the table scrolls in the pane
 
 
 def test_browse_pane_styles_exist():

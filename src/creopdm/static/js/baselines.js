@@ -102,8 +102,8 @@ window.__creopdmModules.baselines = {
     }
 
     async function loadBaselinesTab() {
-      // Opening the tab (or the "N Baselines" pill) always lands on the list.
-      leaveBrowse();
+      // An open baseline stays open (also through the "N Baselines" pill): only the breadcrumb
+      // returns to the list.
       const pid = productId();
       const body = $("#baselines-table tbody");
       if (!pid || !body) return;
@@ -127,9 +127,21 @@ window.__creopdmModules.baselines = {
     }
 
     // ---- The files of one baseline, shown in the Baselines tab itself (read-only) ----------
+    // The rows are Files-page rows (".object-row" with the same data-* attributes), so the
+    // page's own selection, pills (counts, filter, select) and hover preview work on them.
     let browseUuid = "";
     let browseData = [];
     let browseInfo = null;
+    let pendingOpen = 0;
+
+    function browseVisible() {
+      const pane = $("#baseline-browse");
+      return Boolean(pane && !pane.hidden);
+    }
+
+    function baselinesTabActive() {
+      return document.querySelector(".tabs .tab.is-active")?.getAttribute("data-tab") === "baselines";
+    }
 
     function showBrowse(on) {
       for (const id of ["baselines-head", "baselines-table-wrap"]) {
@@ -140,7 +152,7 @@ window.__creopdmModules.baselines = {
       if (pane) pane.hidden = !on;
     }
 
-    /** Keep the address in step so a refresh or a shared link opens the same baseline. */
+    /** Keep the address in step so a refresh, Back or a shared link opens the same baseline. */
     function setBaselineParam(uuid) {
       try {
         const url = new URL(window.location.href);
@@ -157,10 +169,60 @@ window.__creopdmModules.baselines = {
       }
     }
 
+    /**
+     * What the page shows follows the tab: on the Baselines tab with a baseline open the Files
+     * toolbar gives way to the one button that applies (Details), on other tabs nothing of
+     * this view leaks out. The open baseline is remembered while another tab is shown.
+     */
+    function syncBrowseChrome() {
+      const on = Boolean(browseUuid) && baselinesTabActive();
+      showBrowse(on);
+      document.body.classList.toggle("is-baseline-browse", on);
+      setBaselineParam(on ? browseUuid : "");
+      syncFooterDetails();
+    }
+
+    function selectedBrowseRows() {
+      return [...document.querySelectorAll("#baseline-browse-table tbody tr.object-row.is-selected")].filter(
+        (row) => !row.hidden && row.style.display !== "none"
+      );
+    }
+
+    /** The footer shows Details only while exactly one file is selected. */
+    function syncFooterDetails() {
+      const button = $("#baseline-browse-file-details");
+      if (!button) return;
+      button.hidden = !(browseVisible() && selectedBrowseRows().length === 1);
+    }
+
+    /** Back to the list: only the breadcrumb does this. */
     function leaveBrowse() {
       browseUuid = "";
-      showBrowse(false);
-      setBaselineParam("");
+      browseData = [];
+      browseInfo = null;
+      syncBrowseChrome();
+      shell.refreshTabMetrics?.();
+    }
+
+    function topLevelAssemblyVersions(members, edges) {
+      const typeOf = new Map(members.map((m) => [m.version_uuid, String(m.object_type || "").toUpperCase()]));
+      const used = new Set();
+      for (const edge of edges) {
+        // Drawings referring to a model do not make it a sub-assembly.
+        if (typeOf.get(edge.parent_version_uuid) === "CREO_ASSEMBLY" && edge.child_version_uuid) {
+          used.add(edge.child_version_uuid);
+        }
+      }
+      return new Set(
+        members
+          .filter((m) => String(m.object_type || "").toUpperCase() === "CREO_ASSEMBLY" && !used.has(m.version_uuid))
+          .map((m) => m.version_uuid)
+      );
+    }
+
+    function fileExtension(name) {
+      const match = /\.([a-z0-9_+]+)(?:\.\d+)?$/i.exec(String(name || ""));
+      return match ? match[1].toLowerCase() : "";
     }
 
     function paintBrowse() {
@@ -168,14 +230,38 @@ window.__creopdmModules.baselines = {
       if (!body) return;
       if (!browseData.length) {
         body.innerHTML = '<tr class="empty-row"><td colspan="5">This baseline has no files.</td></tr>';
+        shell.refreshTabMetrics?.();
+        syncFooterDetails();
         return;
       }
+      const tops = topLevelAssemblyVersions(browseData, browseEdges);
       body.innerHTML = sortedRows("browse", browseData)
         .map((m) => {
           const newer = m.status === "OUT_OF_DATE";
           const now = newer ? `Newer: ${esc(m.current_display_version || "—")}` : "Same version";
-          return `<tr data-version="${esc(m.version_uuid)}" data-object="${esc(m.object_uuid)}">
-            <td class="baseline-name-cell">${versionLink(browseInfo, m)}${
+          const ext = fileExtension(m.filename);
+          const type = String(m.object_type || "").toUpperCase();
+          const detail =
+            browseInfo?.product_uuid && m.object_uuid && m.version_uuid
+              ? `/products/${encodeURIComponent(browseInfo.product_uuid)}/objects/${encodeURIComponent(
+                  m.object_uuid
+                )}/versions/${encodeURIComponent(m.version_uuid)}`
+              : "";
+          const icon = shell.typeIconHtml ? shell.typeIconHtml({ objectType: type, extension: ext }) : "";
+          return `<tr class="object-row baseline-file-row" data-uuid="${esc(m.object_uuid)}" data-version="${esc(
+            m.version_uuid
+          )}" data-filename="${esc(m.filename)}" data-object-type="${esc(type)}" data-extension="${esc(
+            ext ? `.${ext}` : ""
+          )}" data-content-hash="${esc(m.content_hash || "")}"${detail ? ` data-detail="${esc(detail)}"` : ""}${
+            tops.has(m.version_uuid) ? ' data-top-level-assembly="1"' : ""
+          }>
+            <td class="baseline-name-cell"><span class="name-with-icon">${icon}<button type="button" class="baseline-file-open thumb-preview-target" data-filename="${esc(
+              m.filename
+            )}" data-extension="${esc(ext ? `.${ext}` : "")}" data-object-type="${esc(type)}" data-content-hash="${esc(
+              m.content_hash || ""
+            )}" title="Open exactly ${esc(m.display_version)} (double-click for its details)">${esc(
+              m.filename
+            )}</button></span>${
               m.relative_path && m.relative_path !== m.filename
                 ? `<div class="muted small">${esc(m.relative_path)}</div>`
                 : ""
@@ -187,7 +273,11 @@ window.__creopdmModules.baselines = {
           </tr>`;
         })
         .join("");
+      shell.refreshTabMetrics?.();
+      syncFooterDetails();
     }
+
+    let browseEdges = [];
 
     /** Show the exact versions of one baseline in the tab (the list steps aside). */
     async function browseBaseline(baselineUuid) {
@@ -195,10 +285,10 @@ window.__creopdmModules.baselines = {
       browseUuid = baselineUuid;
       openBaselineUuid = baselineUuid;
       browseData = [];
+      browseEdges = [];
       browseInfo = null;
       resetSorts();
-      showBrowse(true);
-      setBaselineParam(baselineUuid);
+      syncBrowseChrome();
       showError($("#baseline-browse-error"), "");
       const title = $("#baseline-browse-title");
       const meta = $("#baseline-browse-meta");
@@ -208,9 +298,10 @@ window.__creopdmModules.baselines = {
       const body = $("#baseline-browse-table tbody");
       if (body) body.innerHTML = '<tr class="empty-row"><td colspan="5">Loading…</td></tr>';
       try {
-        const [baselineResp, membersResp] = await Promise.all([
+        const [baselineResp, membersResp, edgesResp] = await Promise.all([
           fetch(`/api/baselines/${encodeURIComponent(baselineUuid)}`),
           fetch(`/api/baselines/${encodeURIComponent(baselineUuid)}/members`),
+          fetch(`/api/baselines/${encodeURIComponent(baselineUuid)}/dependencies`),
         ]);
         if (browseUuid !== baselineUuid) return; // the user went elsewhere meanwhile
         if (!baselineResp.ok) throw new Error(await readError(baselineResp));
@@ -218,6 +309,8 @@ window.__creopdmModules.baselines = {
         browseInfo = await baselineResp.json();
         const members = await membersResp.json();
         browseData = Array.isArray(members) ? members : [];
+        const edges = edgesResp.ok ? await edgesResp.json() : [];
+        browseEdges = Array.isArray(edges) ? edges : [];
         if (title) title.textContent = browseInfo.name || "Baseline";
         if (meta) {
           meta.textContent =
@@ -243,6 +336,89 @@ window.__creopdmModules.baselines = {
           );
         }
       }
+    }
+
+    /**
+     * Open one file of the baseline the way Files opens a file: put the baseline's exact files on
+     * this PC (read-only folder, skipped when it is already there and unchanged), then open the
+     * file from that folder in the Creo session, or with Windows when this is not Creo's browser.
+     */
+    async function openBaselineFile(row) {
+      const info = browseInfo;
+      const member = browseData.find((m) => m.version_uuid === row?.dataset?.version);
+      const errorEl = $("#baseline-browse-error");
+      showError(errorEl, "");
+      if (!info || !member) return;
+      const agent = await shell.probeCreoAgent();
+      if (!agent) {
+        showError(
+          errorEl,
+          "Start creopdm-agent on this PC so the baseline's files can be downloaded before opening."
+        );
+        return;
+      }
+      let folder = "";
+      try {
+        await shell.withBusy("Preparing the baseline…", async () => {
+          if (info.workspace_folder) {
+            const check = await agentJson("/baseline-workspace/check", info, { folder: info.workspace_folder });
+            const b = check.body || {};
+            if (check.ok && b.installed && !(b.missing?.length || 0) && !(b.modified?.length || 0)) {
+              folder = b.path || "";
+            }
+          }
+          if (folder) return;
+          const response = await fetch(`/api/baselines/${encodeURIComponent(info.uuid)}/workspace-manifest`);
+          if (!response.ok) throw new Error(await readError(response));
+          const manifest = await response.json();
+          const result = await agentJson("/baseline-workspace", info, { manifest, overwrite: false });
+          if (!result.ok) {
+            const conflicts = result.body?.detail?.conflicts;
+            throw new Error(
+              Array.isArray(conflicts) && conflicts.length
+                ? "The baseline's folder on this PC has files that differ from the baseline. Use Download… and replace them first."
+                : agentMessage(result, "The baseline could not be put on this PC.")
+            );
+          }
+          folder = result.body?.path || "";
+        });
+      } catch (err) {
+        showError(errorEl, err?.message || "The baseline could not be put on this PC.");
+        return;
+      }
+      if (!folder) {
+        showError(errorEl, "The agent did not say where the baseline is.");
+        return;
+      }
+      const fullPath = shell.joinLocalWorkspacePath(folder, member.relative_path || member.filename);
+      const dir = String(fullPath).replace(/[\\/][^\\/]*$/, "");
+      const creoModel = ["prt", "asm", "drw"].includes(fileExtension(member.filename));
+      try {
+        if (creoModel && shell.hostedCreoJS?.() && shell.creoOpenMode?.() === "embedded") {
+          await shell.withBusy("Opening in Creo…", async () => {
+            await shell.whenCreoJSReady();
+            const opened = await window.CreoJS.openModel(dir, member.filename, "", member.filename, fullPath);
+            const text = opened == null ? "" : String(opened);
+            if (text.indexOf("CREOPDM_ERROR:") === 0) throw new Error(text.slice("CREOPDM_ERROR:".length));
+          });
+          return;
+        }
+        await shell.withBusy("Opening…", async () => {
+          const response = await fetch(`${shell.agentBase()}/open`, {
+            method: "POST",
+            headers: shell.agentAuthHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify({ path: fullPath, mode: "association" }),
+          });
+          if (!response.ok) throw new Error(await readError(response));
+        });
+      } catch (err) {
+        showError(errorEl, err?.message || "The file could not be opened.");
+      }
+    }
+
+    function cancelPendingBaselineOpen() {
+      if (pendingOpen) window.clearTimeout(pendingOpen);
+      pendingOpen = 0;
     }
 
     /** The exact versions captured, read through the stored version ids (not the current ones). */
@@ -1087,6 +1263,7 @@ window.__creopdmModules.baselines = {
 
     mod.openBaselineMembers = openBaselineMembers;
     mod.browseBaseline = browseBaseline;
+    mod.syncBrowseChrome = syncBrowseChrome;
     mod.loadBaselinesTab = loadBaselinesTab;
     mod.openCreateBaselineDialog = openCreateBaselineDialog;
 
@@ -1119,11 +1296,42 @@ window.__creopdmModules.baselines = {
 
     $("#baseline-browse-back")?.addEventListener("click", (event) => {
       event.preventDefault();
+      leaveBrowse();
       void loadBaselinesTab();
     });
     $("#baseline-browse-details")?.addEventListener("click", () => {
       if (browseUuid) void openBaselineMembers(browseUuid);
     });
+    // A click on a file name opens it (after a beat, so a double-click can open Details instead);
+    // selection itself is the Files page's own handler.
+    $("#baseline-browse-table")?.addEventListener("click", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      const link = target?.closest(".baseline-file-open");
+      if (!link || event.shiftKey || event.ctrlKey || event.metaKey) return;
+      const row = link.closest("tr.object-row");
+      if (!row) return;
+      cancelPendingBaselineOpen();
+      pendingOpen = window.setTimeout(() => {
+        pendingOpen = 0;
+        void openBaselineFile(row);
+      }, 280);
+    });
+    $("#baseline-browse-table")?.addEventListener("dblclick", cancelPendingBaselineOpen);
+    $("#baseline-browse-file-details")?.addEventListener("click", () => {
+      const rows = selectedBrowseRows();
+      const href = rows.length === 1 ? rows[0].dataset.detail : "";
+      if (href) shell.leavePage(href);
+    });
+    // The footer button follows the selection (the Files page marks rows with .is-selected).
+    const browseBody = $("#baseline-browse-table tbody");
+    if (browseBody && typeof MutationObserver === "function") {
+      new MutationObserver(syncFooterDetails).observe(browseBody, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["class"],
+        childList: true,
+      });
+    }
     $("#baseline-browse-compare")?.addEventListener("click", async () => {
       if (!browseUuid) return;
       await openBaselineMembers(browseUuid);

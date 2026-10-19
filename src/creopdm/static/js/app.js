@@ -1225,6 +1225,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         || document.getElementById("panel-checked-out")
         || document;
     }
+    // A baseline's files (Baselines tab) are listed like Files: the pills count and filter them.
+    if (tab === "baselines" && document.getElementById("baseline-browse")?.hidden === false) {
+      return document.getElementById("baseline-browse-table") || document;
+    }
     return document.getElementById("object-table")
       || document.getElementById("panel-files")
       || document;
@@ -3988,6 +3992,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   document.querySelector("#object-table")?.addEventListener("click", onFileTableClick);
   document.querySelector("#object-table")?.addEventListener("dblclick", onFileTableDblclick);
+  // A baseline's files select / open Details like Files rows (the name opens through baselines.js).
+  document.querySelector("#baseline-browse-table")?.addEventListener("click", onFileTableClick);
+  document.querySelector("#baseline-browse-table")?.addEventListener("dblclick", onFileTableDblclick);
   document.querySelector("#checked-out-table")?.addEventListener("click", onFileTableClick);
   document.querySelector("#checked-out-table")?.addEventListener("dblclick", onFileTableDblclick);
   document.querySelector("#modified-table")?.addEventListener("click", onFileTableClick);
@@ -7779,7 +7786,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       else if (name === "modified") void loadModifiedTab();
       else if (name === "checked-out") void loadCheckedOutTab();
       else if (name === "baselines") {
-        void initJobModule("baselines", window.__creopdmShell).then((m) => m.loadBaselinesTab?.());
+        void initJobModule("baselines", window.__creopdmShell).then(async (m) => {
+          await m.loadBaselinesTab?.();
+          m.syncBrowseChrome?.();
+          refreshTabMetrics();
+        });
       }
       else if (name === "where-used") void loadWhereUsedTab();
       else if (name === "snapshot" || name === "compare-revisions") {
@@ -7790,6 +7801,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       else refreshTabMetrics();
       syncSearchFormVisibility();
       syncDetailToolbar();
+      // The open baseline's toolbar/address follow the tab (leaving the tab keeps the baseline).
+      if (name !== "baselines") window.__creopdmModules?.baselines?.syncBrowseChrome?.();
       // Keep list tab ready for Details → Back (Details boot must not consume it).
       if (LIST_RESTORE_TABS.has(String(name || "")) && document.querySelector("#object-table")) {
         persistListTabState(name);
@@ -8260,6 +8273,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     eventEl,
     currentProductId,
     assertProductAllows,
+    typeIconHtml,
+    refreshTabMetrics,
     agentBase,
     agentAuthHeaders,
     agentPdmAuth,
