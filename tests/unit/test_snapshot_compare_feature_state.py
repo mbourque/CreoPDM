@@ -171,3 +171,32 @@ def test_the_header_prints_the_exact_count_of_features_insert_mode_suppressed():
     text = _diff(_part(BASE), _part(newer, {"active": True, "after_feature_id": 10, "after_feature_name": "BASE_EXTRUDE"}))
     assert "Features suppressed by insert mode (3):" in text
     assert text.split("Features suppressed by insert mode (3):", 1)[1].count("\n- ") >= 3
+
+
+def test_the_mass_tab_and_the_comparison_print_the_same_digits():
+    from creopdm.utils.mass_format import format_mass_value
+
+    # the values from the wedge.prt revision that looked like a mismatch
+    assert format_mass_value(0.000262950643831) == "0.000262951"
+    assert format_mass_value(196231.823755) == "196232"
+    assert format_mass_value(38929.9590464) == "38930"
+    assert format_mass_value(1.34e-09) == "1.34e-09"
+    assert format_mass_value(0) == "0"
+    assert format_mass_value([0, 17.1781988664, -13.8974935639]) == "[0, 17.1782, -13.8975]"
+    older = {"identity": {"model_type": "PART", "filename": "wedge.prt"}, "mass": {"mass": 0.000224892431, "volume": 167830.172}}
+    newer = {"identity": {"model_type": "PART", "filename": "wedge.prt"}, "mass": {"mass": 0.000262950643831, "volume": 196231.823755}}
+    text = _diff(older, newer)
+    assert "- mass: 0.000224892 → 0.000262951" in text and "- volume: 167830 → 196232" in text
+
+
+def test_the_details_page_uses_the_same_formatter_for_every_mass_value():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    page = (root / "src" / "creopdm" / "templates" / "object_detail.html").read_text(encoding="utf-8")
+    panel = page.split('id="panel-mass"', 1)[1].split("</section>", 1)[0]
+    for field in ("mass.mass", "mass.volume", "mass.surface_area", "mass.density",
+                  "mass.gravity_center[0]", "mass.principal_moments[2]"):
+        assert field + "|mass_num" in panel, field
+    pages = (root / "src" / "creopdm" / "api" / "pages.py").read_text(encoding="utf-8")
+    assert 'templates.env.filters["mass_num"] = format_mass_value' in pages

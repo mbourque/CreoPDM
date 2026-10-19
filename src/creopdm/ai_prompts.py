@@ -9,6 +9,7 @@ from typing import Any
 from creopdm.exceptions import ValidationAppError
 from creopdm.toolkit_snapshot import nest_drawing_inventory_by_sheet
 from creopdm.utils.bom_match import normalize_bom_compare_filename
+from creopdm.utils.mass_format import format_mass_value
 
 # Creo pattern members often land as "Feature 15775" / IFX_ID_* with empty type.
 # Sending hundreds of those to Ollama blew the context so Ask AI said "no changes"
@@ -2045,18 +2046,8 @@ def _mass_props(snapshot: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _format_mass_scalar(value: Any) -> str:
-    if isinstance(value, (list, tuple)):
-        parts: list[str] = []
-        for item in value:
-            try:
-                parts.append(f"{float(item):.9g}")
-            except (TypeError, ValueError):
-                parts.append(str(item).strip())
-        return "[" + ", ".join(parts) + "]"
-    try:
-        return f"{float(value):.9g}"
-    except (TypeError, ValueError):
-        return str(value).strip()
+    """6 significant digits, the same text the Details Mass tab shows (shared formatter)."""
+    return format_mass_value(value)
 
 
 def _mass_outline_lines(snapshot: dict[str, Any]) -> list[str]:

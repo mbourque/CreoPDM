@@ -29,6 +29,7 @@ from creopdm.constants import APP_NAME, APP_VERSION, ObjectType, SIDEBAR_COLLAPS
 from creopdm.context import AppContext
 from creopdm.exceptions import PermissionDeniedError, ProductNotFoundError
 from creopdm.permissions import caps_dict
+from creopdm.utils.mass_format import format_mass_value
 from creopdm.services.metadata_service import normalize_feature_rows
 from creopdm.utils.bom_match import bom_generic_label, bom_lookup_keys, format_bom_qty
 from creopdm.utils.classify import (
@@ -202,10 +203,12 @@ def render(request: Request, name: str, context: dict) -> HTMLResponse:
     templates.env.filters["local_time_pretty"] = format_local_pretty
     templates.env.filters["byte_size"] = format_byte_size
     templates.env.filters["bom_qty"] = format_bom_qty
+    templates.env.filters["mass_num"] = format_mass_value
     templates.env.globals["local_time"] = format_local
     templates.env.globals["local_time_pretty"] = format_local_pretty
     templates.env.globals["byte_size"] = format_byte_size
     templates.env.globals["bom_qty"] = format_bom_qty
+    templates.env.globals["mass_num"] = format_mass_value
     auth_user = getattr(request.state, "auth_user", None)
     caps = caps_dict(request)
     ctx = getattr(request.app.state, "ctx", None)

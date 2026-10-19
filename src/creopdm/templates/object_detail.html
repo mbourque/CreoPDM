@@ -296,13 +296,13 @@
           <tr><td>Material</td><td>{{ materials.current }}</td></tr>
           {% endif %}
           {% if mass and mass.mass is not none %}
-          <tr><td>Mass</td><td>{{ mass.mass }}{% if units.mass %} {{ units.mass }}{% endif %}</td></tr>
+          <tr><td>Mass</td><td>{{ mass.mass|mass_num }}{% if units.mass %} {{ units.mass }}{% endif %}</td></tr>
           {% endif %}
           {% if mass and mass.volume is not none %}
-          <tr><td>Volume</td><td>{{ mass.volume }}</td></tr>
+          <tr><td>Volume</td><td>{{ mass.volume|mass_num }}</td></tr>
           {% endif %}
           {% if mass and mass.density is not none %}
-          <tr><td>Density</td><td>{{ mass.density }}</td></tr>
+          <tr><td>Density</td><td>{{ mass.density|mass_num }}</td></tr>
           {% endif %}
         </tbody>
       </table>
@@ -452,15 +452,15 @@
     <table class="grid inventory-table">
       <thead><tr><th>Field</th><th>Value</th></tr></thead>
       <tbody>
-        {% if mass.mass is not none %}<tr><td>Mass</td><td>{{ mass.mass }}{% if units.mass %} {{ units.mass }}{% endif %}</td></tr>{% endif %}
-        {% if mass.volume is not none %}<tr><td>Volume</td><td>{{ mass.volume }}</td></tr>{% endif %}
-        {% if mass.surface_area is not none %}<tr><td>Surface area</td><td>{{ mass.surface_area }}</td></tr>{% endif %}
-        {% if mass.density is not none %}<tr><td>Density</td><td>{{ mass.density }}</td></tr>{% endif %}
+        {% if mass.mass is not none %}<tr><td>Mass</td><td>{{ mass.mass|mass_num }}{% if units.mass %} {{ units.mass }}{% endif %}</td></tr>{% endif %}
+        {% if mass.volume is not none %}<tr><td>Volume</td><td>{{ mass.volume|mass_num }}</td></tr>{% endif %}
+        {% if mass.surface_area is not none %}<tr><td>Surface area</td><td>{{ mass.surface_area|mass_num }}</td></tr>{% endif %}
+        {% if mass.density is not none %}<tr><td>Density</td><td>{{ mass.density|mass_num }}</td></tr>{% endif %}
         {% if mass.gravity_center %}
-        <tr><td>Center of gravity</td><td>{{ mass.gravity_center[0] }}, {{ mass.gravity_center[1] }}, {{ mass.gravity_center[2] }}</td></tr>
+        <tr><td>Center of gravity</td><td>{{ mass.gravity_center[0]|mass_num }}, {{ mass.gravity_center[1]|mass_num }}, {{ mass.gravity_center[2]|mass_num }}</td></tr>
         {% endif %}
         {% if mass.principal_moments %}
-        <tr><td>Principal moments</td><td>{{ mass.principal_moments[0] }}, {{ mass.principal_moments[1] }}, {{ mass.principal_moments[2] }}</td></tr>
+        <tr><td>Principal moments</td><td>{{ mass.principal_moments[0]|mass_num }}, {{ mass.principal_moments[1]|mass_num }}, {{ mass.principal_moments[2]|mass_num }}</td></tr>
         {% endif %}
       </tbody>
     </table>

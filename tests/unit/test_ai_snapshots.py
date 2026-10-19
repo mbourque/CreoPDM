@@ -1498,8 +1498,8 @@ def test_snapshot_compare_prompt_requires_saved_text():
     assert mass_merged["units"]["mass"] == "kg"
     mass_outline = format_snapshot_compare_text(mass_merged)
     assert "Mass properties:" in mass_outline
-    # Outline uses .9g rounding (same as Modifications Mass properties lines).
-    assert "mass: 1.64961177 kg" in mass_outline
+    # Outline uses 6 significant digits: the same text the Details Mass tab shows.
+    assert "mass: 1.64961 kg" in mass_outline
     assert "1.64961176644" not in mass_outline.split("Mass properties:", 1)[-1]
 
 
