@@ -1,5 +1,7 @@
 window.__creopdmBoot = function creopdmBoot(options = {}) {
   const soft = Boolean(options.soft);
+  // A baseline view hides pills and toolbar buttons through body classes; a new page starts clean.
+  document.body?.classList.remove("is-baseline-browse", "is-baseline-list");
   window.__creopdmAbort?.abort();
   const pageAbort = new AbortController();
   window.__creopdmAbort = pageAbort;

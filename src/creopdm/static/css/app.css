@@ -1553,6 +1553,11 @@ button.forgot-password-btn,
 .baseline-browse > .table-wrap { flex: 1 1 auto; min-height: 0; }
 .version-row.is-viewed td { background: #e7f1f6; font-weight: 600; }
 .baseline-crumbs { display: flex; align-items: center; gap: 0.5rem; margin: 0.2rem 0 0.5rem; }
+/* The list of baselines: nothing to filter or act on, so no pills and no Files toolbar. */
+body.is-baseline-list #metric-filters,
+body.is-baseline-list #selection-summary { display: none !important; }
+body.is-baseline-list footer.toolbar .toolbar-actions { display: none !important; }
+body.is-baseline-list footer.toolbar { padding-top: 0; padding-bottom: 0; }
 /* One baseline open: the Files toolbar gives way to the single Details button. */
 body.is-baseline-browse footer.toolbar .toolbar-actions > :not(#baseline-browse-file-details) { display: none !important; }
 button.baseline-file-open {

@@ -182,6 +182,8 @@ window.__creopdmModules.baselines = {
       const on = Boolean(browseUuid) && baselinesTabActive();
       showBrowse(on);
       document.body.classList.toggle("is-baseline-browse", on);
+      // The list of baselines has no files to filter or act on: no pills, no Files toolbar.
+      document.body.classList.toggle("is-baseline-list", baselinesTabActive() && !browseUuid);
       setBaselineParam(on ? browseUuid : "");
       syncFooterDetails();
     }
