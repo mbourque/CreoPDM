@@ -484,8 +484,9 @@ def test_metadata_gear_items_require_creo_session():
     collect_all = _between(
         meta_js, "async function runCollectAllMetadata(", "async function runRebuildAllMetadata("
     )
-    assert "clear-creo-metadata" in collect_all
-    assert "Discarding Creo metadata" in collect_all
+    # Rebuild no longer wipes up front: each model is REPLACED when its new read succeeds.
+    assert "clear-creo-metadata" not in collect_all
+    assert "replace: rebuild" in collect_all and "Preparing to rebuild metadata" in collect_all
     util = (ROOT / "src" / "creopdm" / "services" / "utilities_service.py").read_text(
         encoding="utf-8"
     )
@@ -3054,7 +3055,7 @@ def test_collect_all_and_rebuild_refuse_when_agent_or_toolkit_is_down():
     # Preflight happens before the confirm dialog and before clear-creo-metadata.
     assert "collectPreflightMessage()" in run
     assert run.index("collectPreflightMessage()") < run.index("confirmCollectMetadata(")
-    assert run.index("collectPreflightMessage()") < run.index("clear-creo-metadata")
+    assert run.index("collectPreflightMessage()") < run.index("replace: rebuild")
     resume = meta.split("async function resumeMetadataCollectIfNeeded", 1)[1]
     assert "collectPreflightMessage()" in resume
     assert "The CreoPDM agent is not running on this PC" in meta

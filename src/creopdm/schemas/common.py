@@ -1164,6 +1164,9 @@ class CreoBomNode(BaseModel):
 
 class CreoMetadataRequest(BaseModel):
     version_id: str | None = None
+    # Rebuild: replace this version's metadata instead of merging into it, so values that no longer
+    # exist (a deleted parameter, a removed feature) do not linger. Only a successful read sends it.
+    replace: bool = False
     identity: dict[str, object] | None = None
     parameters: list[CreoParamPayload] = Field(default_factory=list)
     materials: dict[str, object] | None = None

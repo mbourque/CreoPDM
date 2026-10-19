@@ -271,6 +271,9 @@ class MetadataService:
                 details={"object_id": object_uuid},
             )
 
+        if payload.replace:
+            self._clear_version_metadata(session, version)
+
         if payload.identity is not None:
             identity = dict(payload.identity)
             normalize_creo_identity(identity)
@@ -341,6 +344,27 @@ class MetadataService:
 
         session.flush()
         return self.get(session, object_uuid, version.uuid)
+
+    @staticmethod
+    def _clear_version_metadata(session: Session, version: ObjectVersion) -> None:
+        """Empty one version's collected metadata (never the file rows or Where Used links)."""
+        from creopdm.models.ai_snapshot import ObjectVersionSnapshot
+
+        for column in (
+            "identity_json",
+            "materials_json",
+            "units_json",
+            "mass_json",
+            "family_table_json",
+            "features_json",
+            "bom_json",
+        ):
+            setattr(version, column, None)
+        session.execute(delete(Parameter).where(Parameter.version_id == version.id))
+        session.execute(
+            delete(ObjectVersionSnapshot).where(ObjectVersionSnapshot.version_id == version.id)
+        )
+        session.flush()
 
     def get(
         self,

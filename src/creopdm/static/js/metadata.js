@@ -411,7 +411,7 @@ window.__creopdmModules.metadata = {
       const skipped = Math.max(0, Number(alreadySkipped) || 0);
       if (!(dialog instanceof HTMLDialogElement) || !form || !lead) {
         const fallback = rebuild
-          ? `Discard Creo metadata only (files stay), then collect again for ${total} model(s)?`
+          ? `Read Creo metadata again for ${total} model(s) and replace what is stored? A model that cannot be read keeps its metadata.`
           : `Collect Creo metadata for ${total} model(s)?`;
         return Promise.resolve(window.confirm(fallback));
       }
@@ -420,7 +420,7 @@ window.__creopdmModules.metadata = {
       }
       if (rebuild) {
         lead.textContent =
-          `Discard collected Creo metadata only (product files, vault, and Where Used stay), then capture parameters, materials, units, features, and BOM/structure again for all ${total} Creo model(s). ` +
+          `Read parameters, materials, units, features, and BOM/structure again for all ${total} Creo model(s) and replace what is stored (product files, vault, and Where Used stay). A model that cannot be read keeps its previous metadata. ` +
           "Each model is collected via the Creo Toolkit (agent → Toolkit). Mass is stored for parts when Toolkit returns it.";
       } else {
         lead.textContent =
@@ -564,6 +564,7 @@ window.__creopdmModules.metadata = {
           // body (not pushCreoMetadataForItems), so it must carry the sketch too.
           sketch: snapshot.sketch && typeof snapshot.sketch === "object" ? snapshot.sketch : null,
         };
+        if (opts.replace) body.replace = true;
         if (!body.mass) delete body.mass;
         if (!body.sketch) delete body.sketch;
         try {
@@ -732,6 +733,7 @@ window.__creopdmModules.metadata = {
             deferErase: true,
             featureNames: true,
             pendingErase,
+            replace: Boolean(state.replace),
           });
           if (result.ok && String(result.reason || "") === "left local modifications") {
             // A newer local save (for example test-sec.sec.1) exists: Check In first.
@@ -786,6 +788,38 @@ window.__creopdmModules.metadata = {
           });
           await new Promise((resolve) => window.setTimeout(resolve, 0));
         }
+        // A first failure is sometimes timing (the Toolkit busy, a model not yet in session):
+        // read each failed file once more before giving up on it.
+        if (failedFiles.length && !metadataCollectJob.cancel) {
+          const again = failedFiles.splice(0, failedFiles.length);
+          for (let i = 0; i < again.length; i += 1) {
+            if (metadataCollectJob.cancel) {
+              failedFiles.push(...again.slice(i));
+              break;
+            }
+            const target = targets.find((item) => item.filename === again[i].filename);
+            if (!target) {
+              failedFiles.push(again[i]);
+              continue;
+            }
+            setBusyMessage(`Reading failed files again… ${i + 1} of ${again.length}: ${target.filename}`);
+            const retry = await pushOneCreoMetadataTarget(target, {
+              deferErase: true,
+              featureNames: true,
+              pendingErase,
+              replace: Boolean(state.replace),
+            });
+            if (retry.ok) {
+              captured += 1;
+              failed = Math.max(0, failed - 1);
+            } else {
+              failedFiles.push({
+                filename: target.filename,
+                detail: String(retry.detail || retry.reason || again[i].detail || "skipped"),
+              });
+            }
+          }
+        }
         await flushPendingMetadataErase(pendingErase);
         if (typeof window.CreoJS?.eraseUndisplayedModelsQuiet === "function") {
           try {
@@ -795,7 +829,7 @@ window.__creopdmModules.metadata = {
           }
         }
         const doneBits = [`${captured} saved`];
-        if (failed) doneBits.push(`${failed} skipped`);
+        if (failed) doneBits.push(`${failed} could not be read`);
         if (expectedSkipped) doneBits.push(`${expectedSkipped} harness skipped`);
         if (leftLocal) {
           doneBits.push(
@@ -951,29 +985,10 @@ window.__creopdmModules.metadata = {
         // Metadata JSON / parameters / AI snaps only — never file rows or Where Used edges.
         // Keep this busy overlay through rematerialize/Collect — clearBusy+reopen raced the
         // dialog "close" handler into Cancelling metadata collection… at 0 of N.
-        setBusy("Discarding Creo metadata…");
+        setBusy("Preparing to rebuild metadata…");
         busyOwned = true;
-        try {
-          const clearResponse = await fetch(
-            `/api/products/${encodeURIComponent(productId)}/clear-creo-metadata`,
-            { method: "POST" }
-          );
-          if (!clearResponse.ok) {
-            showError(
-              $("#toolbar-error"),
-              `Could not discard metadata: ${await readError(clearResponse)}`
-            );
-            clearBusy();
-            return;
-          }
-        } catch (err) {
-          showError(
-            $("#toolbar-error"),
-            `Could not discard metadata: ${err?.message || err || "request failed"}`
-          );
-          clearBusy();
-          return;
-        }
+        // Nothing is discarded up front: each model's metadata is REPLACED when its new read
+        // succeeds, so a model that cannot be read keeps what it had.
         // Drop a paused Collect so we do not resume a stale skip-list mid-rebuild.
         saveMetadataCollectState(null);
       }
@@ -984,6 +999,7 @@ window.__creopdmModules.metadata = {
         index: 0,
         captured: 0,
         failed: 0,
+        replace: rebuild,
         targets,
         message: `Collecting Creo metadata… 0 of ${targets.length}`,
         updatedAt: Date.now(),

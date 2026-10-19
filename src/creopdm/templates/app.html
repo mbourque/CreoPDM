@@ -90,7 +90,7 @@
                     title="Index vault assemblies/drawings into Where Used links on the server (no Creo session required).">Rebuild Where Used</button>
             <button type="button" class="product-settings-item creo-session-only" role="menuitem" id="rebuild-metadata-btn"
                     data-product="{{ selected.uuid }}" hidden
-                    title="Discard collected Creo metadata only (files and Where Used stay), then capture metadata again for every Creo tip.">Rebuild metadata</button>
+                    title="Read the metadata of every Creo tip again and replace what is stored (files and Where Used stay). A model that cannot be read keeps its previous metadata.">Rebuild metadata</button>
             {% endif %}
             {% if product_ui.show_delete_product %}
             <button type="button" class="product-settings-item is-danger" role="menuitem" id="delete-product-btn"
@@ -652,7 +652,7 @@
     <h2>Rebuild metadata</h2>
     <p id="collect-metadata-lead"></p>
     <p class="warn-note" id="collect-metadata-warn" hidden></p>
-    <p class="muted small">Discards collected Creo metadata only — product files, vault, and Where Used stay. Requires Creo’s embedded browser (Connected) plus creopdm-agent with Toolkit. Cancel or Resume from the toolbar if it pauses.</p>
+    <p class="muted small">Replaces collected Creo metadata model by model — product files, vault, and Where Used stay, and a model that cannot be read keeps what it had. Requires Creo’s embedded browser (Connected) plus creopdm-agent with Toolkit. Cancel or Resume from the toolbar if it pauses.</p>
     <div class="dialog-actions">
       <button type="button" class="btn" id="collect-metadata-cancel">Cancel</button>
       <button type="submit" class="btn btn-primary" id="collect-metadata-start">Start</button>
