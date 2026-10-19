@@ -274,6 +274,8 @@ Or: `python -m creopdm_agent` / `python -m creopdm_agent --tray`.
 
 ### Shareable tray EXE (no Python on the Creo PC)
 
+**You can skip building it:** a prebuilt `creopdm-agent-tray.exe` is included in this repo, in the `dist/` folder. Use it as it is (copy it to the Creo PC, or publish it for download as described below). Rebuild only after changing the agent code (the build steps follow).
+
 On a Windows machine that already has this repo’s venv:
 
 ```powershell

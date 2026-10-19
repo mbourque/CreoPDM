@@ -12,7 +12,8 @@ pytest-tmp-*/
 .coverage
 htmlcov/
 pytest-last.log
-dist/
+dist/*
+!dist/creopdm-agent-tray.exe
 build/
 *.spec
 .idea/
