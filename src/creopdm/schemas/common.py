@@ -346,6 +346,8 @@ class BaselineMemberResponse(BaseModel):
     filename: str
     relative_path: str
     object_type: str | None = None
+    # What the Files list shows in its Type column for this file.
+    type_label: str = ""
     revision: str
     iteration: int
     display_version: str

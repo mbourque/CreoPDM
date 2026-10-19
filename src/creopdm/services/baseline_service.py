@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import uuid as uuidlib
 from datetime import datetime, timezone
@@ -38,6 +39,7 @@ from creopdm.product_state import (
 )
 from creopdm.services.git_service import GitService
 from creopdm.services.lock_manager import ProductLockManager
+from creopdm.utils.classify import type_label_maps
 from creopdm.utils.identity import CurrentUserProvider
 from creopdm.utils.metadata_snapshot import snapshot_versions
 
@@ -215,6 +217,10 @@ class BaselineService:
             .where(BaselineMember.baseline_id == baseline.id)
             .order_by(BaselineMember.relative_path.asc(), BaselineMember.id.asc())
         ).all()
+        try:
+            names, extensions = type_label_maps(self._config.type_labels()) if self._config else ({}, {})
+        except Exception:
+            names, extensions = {}, {}
         out: list[dict] = []
         for member, version, obj, cur in rows:
             same = obj.current_version_id == member.object_version_id
@@ -226,6 +232,9 @@ class BaselineService:
                     "filename": member.filename,
                     "relative_path": member.relative_path,
                     "object_type": member.object_type,
+                    # The Type column of the Files list (PART, SHEETMETAL, a custom label …), read
+                    # from the metadata the baseline copied, so it never moves with later collects.
+                    "type_label": self._type_label(member, version, names, extensions),
                     # Everything else from the exact captured version row.
                     "revision": version.revision,
                     "iteration": version.iteration,
@@ -240,6 +249,25 @@ class BaselineService:
                 }
             )
         return out
+
+    @staticmethod
+    def _type_label(member: BaselineMember, version: ObjectVersion, names: dict, extensions: dict) -> str:
+        from creopdm.utils.classify import display_type_label
+        from creopdm.utils.creo_model_class import files_list_type_from_identity_json
+
+        identity_json = None
+        if member.metadata_json:
+            try:
+                identity = json.loads(member.metadata_json).get("identity")
+            except (ValueError, AttributeError):
+                identity = None
+            identity_json = json.dumps(identity) if identity else None
+        if identity_json is None and not member.metadata_json:
+            identity_json = version.identity_json  # a baseline made before metadata was copied
+        meta_type = files_list_type_from_identity_json(identity_json) if identity_json else ""
+        return meta_type or display_type_label(
+            member.filename, member.object_type or "", names=names, extensions=extensions
+        )
 
     def current_configuration(self, session: Session, product: Product) -> list[dict]:
         """The product as it is now, in the same shape as ``members``: every file's CURRENT

@@ -224,3 +224,33 @@ def test_the_dialog_file_links_keep_the_baseline_so_details_stays_frozen():
     link = module.split("function versionLink", 1)[1].split("return `<a", 1)[0]
     assert "?baseline=${encodeURIComponent(info.uuid)}" in link
 
+
+
+@requires_git
+def test_members_carry_the_files_list_type_label_from_the_copied_metadata(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client, "Gearbox")
+    shaft = objects["shaft.prt"]
+    posted = auth_client.post(
+        f"/api/objects/{shaft['uuid']}/creo-metadata",
+        json={"identity": {"model_type": "PART", "model_role": "SHEETMETAL"}},
+    )
+    assert posted.status_code == 200, posted.text
+    live = next(o for o in auth_client.get(f"/api/products/{product['uuid']}/objects").json()
+                if o["filename"] == "shaft.prt")
+    baseline = _create(auth_client, product, "Design Review 01").json()
+    members = {m["filename"]: m for m in auth_client.get(f"/api/baselines/{baseline['uuid']}/members").json()}
+    # the very label the Files list shows for that file ...
+    assert members["shaft.prt"]["type_label"] == live["type_label"] != ""
+    # ... and a file with no metadata falls back to the usual label, never to an empty cell
+    assert members["gear.prt"]["type_label"]
+    # recollecting later does not move what the baseline shows
+    auth_client.post(f"/api/objects/{shaft['uuid']}/creo-metadata", json={"identity": {"model_type": "MFG"}})
+    again = {m["filename"]: m for m in auth_client.get(f"/api/baselines/{baseline['uuid']}/members").json()}
+    assert again["shaft.prt"]["type_label"] == live["type_label"]
+
+
+def test_the_baseline_tables_show_the_type_label():
+    module = _read("src", "creopdm", "static", "js", "baselines.js")
+    assert "function typeText(m)" in module and "m.type_label" in module
+    assert module.count("typeText(m)") >= 3  # browse rows, dialog rows, sorting

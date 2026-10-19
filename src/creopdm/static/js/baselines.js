@@ -295,7 +295,7 @@ window.__creopdmModules.baselines = {
             }</td>
             <td>${esc(m.display_version)}</td>
             <td>${esc(stateLabel(m.lifecycle_state))}</td>
-            <td>${esc(String(m.object_type || "").replace(/^CREO_/, "").toLowerCase() || "—")}</td>
+            <td>${esc(typeText(m))}</td>
             <td class="${newer ? "is-newer" : ""}">${now}</td>
           </tr>`;
         })
@@ -588,6 +588,11 @@ window.__creopdmModules.baselines = {
     const byText = (get) => (x, y) => collator.compare(String(get(x) ?? ""), String(get(y) ?? ""));
     const byNumber = (get) => (x, y) => Number(get(x) ?? 0) - Number(get(y) ?? 0);
     const CHANGE_ORDER = { VERSION_CHANGED: 0, ADDED: 1, REMOVED: 2, UNCHANGED: 3 };
+    /** The Files list's Type column for a member (PART, SHEETMETAL, a custom label …). */
+    function typeText(m) {
+      return String(m.type_label || "").trim() || String(m.object_type || "").replace(/^CREO_/, "") || "—";
+    }
+
     const COLUMNS = {
       // The product's Baselines tab. Created sorts as the ISO timestamp text (oldest first).
       baselines: {
@@ -604,7 +609,7 @@ window.__creopdmModules.baselines = {
         name: byText((m) => m.filename),
         rev: (x, y) => compareVersions(x.display_version, y.display_version),
         state: byText((m) => stateLabel(m.lifecycle_state)),
-        type: byText((m) => String(m.object_type || "").replace(/^CREO_/, "")),
+        type: byText((m) => typeText(m)),
         // "Same version" first, then the files the product has moved on from (by what it has now).
         now: (x, y) =>
           (x.status === "OUT_OF_DATE") - (y.status === "OUT_OF_DATE") ||
@@ -833,7 +838,7 @@ window.__creopdmModules.baselines = {
             }</td>
             <td>${esc(m.display_version)}</td>
             <td>${esc(stateLabel(m.lifecycle_state))}</td>
-            <td>${esc(String(m.object_type || "").replace(/^CREO_/, "").toLowerCase() || "—")}</td>
+            <td>${esc(typeText(m))}</td>
             <td class="${newer ? "is-newer" : ""}">${now}</td>
           </tr>`;
         })
