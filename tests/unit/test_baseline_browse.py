@@ -223,3 +223,13 @@ def test_the_dialog_file_links_keep_the_baseline_so_details_stays_frozen():
     module = _read("src", "creopdm", "static", "js", "baselines.js")
     link = module.split("function versionLink", 1)[1].split("return `<a", 1)[0]
     assert "?baseline=${encodeURIComponent(info.uuid)}" in link
+
+
+def test_the_browse_view_has_an_about_section_with_what_the_baseline_records():
+    page = _read("src", "creopdm", "templates", "app.html")
+    assert 'id="baseline-about"' in page and "About this baseline" in page
+    module = _read("src", "creopdm", "static", "js", "baselines.js")
+    painter = module.split("function paintAbout", 1)[1].split("function paintBrowse", 1)[0]
+    for label in ("Description", "Created", "Repository commit", "Git tag", "Structure", "Immutable"):
+        assert f'"{label}"' in painter, label
+    assert "paintAbout(browseInfo);" in module
