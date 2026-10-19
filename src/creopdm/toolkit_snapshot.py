@@ -530,6 +530,11 @@ def toolkit_snapshot_reject_reason(
     tip = str(fallback_filename or "").strip()
     if not isinstance(payload, dict):
         return "toolkit_snapshot_unusable: empty Toolkit response"
+    if payload.get("ok") is False and str(payload.get("error_code") or "") == "newer_release":
+        # The Toolkit could not load a model saved in a newer Creo than the session.
+        saved = str(payload.get("file_release") or "").strip() or "?"
+        running = str(payload.get("session_release") or "").strip() or "?"
+        return f"newer_release: saved in Creo {saved}; this session is {running}"
     if payload.get("ok") is False:
         err = payload.get("error") or payload.get("message") or ""
         domains = payload.get("domains")

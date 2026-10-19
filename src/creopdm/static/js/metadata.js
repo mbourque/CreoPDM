@@ -531,6 +531,8 @@ window.__creopdmModules.metadata = {
             ok: false,
             reason: String(snapshot.__error),
             detail: String(snapshot.__detail || ""),
+            // The Toolkit itself said the model is from a newer Creo: never retried.
+            newerRelease: snapshot.__error === "newer_release",
           };
         }
         if (!snapshot) return { ok: false, reason: "gather_failed" };

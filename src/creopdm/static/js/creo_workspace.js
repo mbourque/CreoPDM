@@ -282,10 +282,19 @@ window.__creopdmModules.creo_workspace = {
           signal: abortSignalAfter((seconds + 10) * 1000),
         });
         if (!snapResp.ok) {
-          return {
-            __error: "toolkit_snapshot_failed",
-            __detail: await readToolkitAgentError(snapResp, `HTTP ${snapResp.status}`),
-          };
+          const detail = await readToolkitAgentError(snapResp, `HTTP ${snapResp.status}`);
+          if (/newer_release/i.test(detail)) {
+            // The Toolkit refused a model saved in a newer Creo: name both releases, do not retry.
+            const m = /saved in Creo ([\d.]+); this session is ([\d.]+)/i.exec(detail);
+            return {
+              __error: "newer_release",
+              __detail: m
+                ? `${tip} was saved in Creo ${m[1]}, but this Creo session is ${m[2]}. ` +
+                  "A model saved in a newer Creo cannot be opened in an older one."
+                : `${tip} was saved in a newer Creo than this session. A model saved in a newer Creo cannot be opened in an older one.`,
+            };
+          }
+          return { __error: "toolkit_snapshot_failed", __detail: detail };
         }
         const body = await snapResp.json();
         const snapshot = body?.snapshot;
@@ -551,8 +560,14 @@ window.__creopdmModules.creo_workspace = {
             snapshot = await gatherCreoMetadataForFilename(target.filename, "", {
               featureNames,
             });
-            if (snapshot && snapshot.__error) snapshot = null;
-            if (snapshot) break;
+            if (snapshot && snapshot.__error) {
+              if (snapshot.__error === "newer_release") {
+                target.detail = snapshot.__detail;
+                target.newerRelease = true;
+              }
+              snapshot = null;
+            }
+            if (snapshot || target.newerRelease) break; // a newer file never appears in this session
             if (round < sessionWaitRounds) {
               await new Promise((resolve) => window.setTimeout(resolve, sessionWaitMs));
             }
@@ -569,7 +584,13 @@ window.__creopdmModules.creo_workspace = {
           snapshot = await gatherCreoMetadataForFilename(target.filename, filePath, {
             featureNames,
           });
-          if (snapshot && snapshot.__error) snapshot = null;
+          if (snapshot && snapshot.__error) {
+            if (snapshot.__error === "newer_release") {
+              target.detail = snapshot.__detail;
+              target.newerRelease = true;
+            }
+            snapshot = null;
+          }
         }
         if (!snapshot) continue;
         const identityName = String(

@@ -92,3 +92,32 @@ def test_the_release_reaches_the_pages_that_need_it():
     assert "creoRelease: String(row.creo_release || row.current_version?.creo_release" in _read("metadata.js")
     schema = (ROOT / "src" / "creopdm" / "schemas" / "common.py").read_text(encoding="utf-8")
     assert "creo_release: str | None = None" in schema.split("class BaselineMemberResponse", 1)[1][:900]
+
+
+def test_a_toolkit_refusal_for_a_newer_file_names_both_releases_and_is_not_retried():
+    from creopdm.toolkit_snapshot import map_toolkit_collect_to_snapshot, toolkit_snapshot_reject_reason
+
+    payload = {
+        "ok": False,
+        "error_code": "newer_release",
+        "file_release": "13.4.1.0",
+        "session_release": "11.0.8.0",
+        "error": "newer_release: wedgenew.prt was saved in Creo 13.4.1.0; this session is 11.0.8.0 (ProMdlFiletypeLoad=-16)",
+    }
+    assert map_toolkit_collect_to_snapshot(payload, fallback_filename="wedgenew.prt") is None
+    assert toolkit_snapshot_reject_reason(payload, fallback_filename="wedgenew.prt") == (
+        "newer_release: saved in Creo 13.4.1.0; this session is 11.0.8.0"
+    )
+    # other failures keep their old reasons
+    assert toolkit_snapshot_reject_reason({"ok": False, "error": "file not found"}).startswith(
+        "toolkit_collect_failed: file not found"
+    )
+    shared = _read("creo_workspace.js")
+    assert '__error: "newer_release"' in shared and "saved in Creo ([\d.]+); this session is ([\d.]+)" in shared
+    assert 'snapshot.__error === "newer_release"' in shared
+    assert 'newerRelease: snapshot.__error === "newer_release"' in _read("metadata.js")
+
+
+def test_the_session_release_is_read_where_the_agent_puts_it():
+    # the real reply through the agent: {"toolkit": {"creo": {"release": "11.0.8.0"}}}
+    assert 'healthBody?.toolkit?.creo?.release' in _read("creo_workspace.js")
