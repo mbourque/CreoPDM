@@ -61,7 +61,7 @@ def test_insert_mode_turned_on_lists_what_it_suppressed_and_is_not_a_user_suppre
     mode = {"active": True, "after_feature_id": 20, "after_feature_name": "HOLE_1"}
     text = _diff(_part(BASE), _part(newer, mode))
     assert "- Insert mode on: after HOLE_1 (20)" in text
-    block = text.split("Features suppressed by insert mode:", 1)[1]
+    block = text.split("Features suppressed by insert mode (", 1)[1]
     assert "- ROUND_1 (30)" in block and "- SHELL_1 (40)" in block
     # those rows are NOT reported as the user suppressing them
     assert "Features status changed" not in text
@@ -80,7 +80,7 @@ def test_insert_mode_moved_and_off():
     moved = _diff(_part(after_hole, mode_a), _part(after_base, mode_b))
     assert "- Insert mode moved: after BASE_EXTRUDE (10) (was after HOLE_1 (20))" in moved
     # only the feature that was not already suppressed by insert mode became suppressed
-    block = moved.split("Features suppressed by insert mode:", 1)[1]
+    block = moved.split("Features suppressed by insert mode (", 1)[1]
     assert "- HOLE_1 (20)" in block and "ROUND_1" not in block
 
     off = _diff(_part(after_hole, mode_a), _part(BASE))
@@ -162,3 +162,12 @@ def test_the_page_sends_insert_mode_with_the_snapshot():
     body = app.split("function aiSnapshotBodyFromGather", 1)[1].split("function objectAiSnapshotTipIsStale", 1)[0]
     assert "...(insertMode ? { insert_mode: insertMode } : {})," in body
     assert "gatherSnapshot?.insert_mode" in body and "ai.insert_mode" in body
+
+
+def test_the_header_prints_the_exact_count_of_features_insert_mode_suppressed():
+    newer = [dict(f) for f in BASE]
+    for row in newer[1:]:
+        row.update(status="SUPPRESSED", suppressed=True, after_insert=True)
+    text = _diff(_part(BASE), _part(newer, {"active": True, "after_feature_id": 10, "after_feature_name": "BASE_EXTRUDE"}))
+    assert "Features suppressed by insert mode (3):" in text
+    assert text.split("Features suppressed by insert mode (3):", 1)[1].count("\n- ") >= 3

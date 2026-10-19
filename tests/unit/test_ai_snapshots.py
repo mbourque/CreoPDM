@@ -693,6 +693,7 @@ def test_snapshot_tab_template_and_docs():
     assert "never treat them as Features removed" in prompt
     assert "Features status changed" in prompt and "2a. Insert mode on / off / moved" in prompt
     assert "the one exception: how many features Insert mode suppressed" in prompt
+    assert "never count the list yourself" in prompt and "Do not write ranges" in prompt
     assert "overflow-x: hidden" in css
     assert ".ai-snapshot-result-para" in css
     assert 'div class="ai-snapshot-result-body"' in html or "<div class=\"ai-snapshot-result-body\"" in html

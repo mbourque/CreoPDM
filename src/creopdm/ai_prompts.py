@@ -1784,7 +1784,11 @@ def _insert_mode_diff_lines(older: dict[str, Any], newer: dict[str, Any]) -> lis
         became.append(_feature_outline_label(feat))
     lines = ["Insert mode:", f"- {head}"]
     if became:
-        lines += ["Features suppressed by insert mode:", *[f"- {item}" for item in became]]
+        # The count is printed, so a model reading this never has to count a long list itself.
+        lines += [
+            f"Features suppressed by insert mode ({len(became)}):",
+            *[f"- {item}" for item in became],
+        ]
     return lines
 
 
