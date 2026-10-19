@@ -1560,6 +1560,9 @@ body.is-baseline-list #metric-filters,
 body.is-baseline-list #selection-summary { display: none !important; }
 body.is-baseline-list footer.toolbar .toolbar-actions { display: none !important; }
 body.is-baseline-list footer.toolbar { padding-top: 0; padding-bottom: 0; }
+/* One baseline open: the product gear (Rename, Rebuild …) acts on the live product, not on a
+   frozen snapshot, so it is not offered here. */
+body.is-baseline-browse #product-settings { display: none !important; }
 /* One baseline open: the Files toolbar gives way to the single Details button. */
 body.is-baseline-browse footer.toolbar .toolbar-actions > :not(#baseline-browse-file-details) { display: none !important; }
 button.baseline-file-open {
