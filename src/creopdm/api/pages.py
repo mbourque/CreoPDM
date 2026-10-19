@@ -684,7 +684,11 @@ def _object_detail_page(
                 candidate = ctx.baselines.get(db, baseline_uuid)
                 if candidate.product_id == product.id:
                     baseline_row = candidate
-                    from_baseline = {"uuid": candidate.uuid, "name": candidate.name}
+                    from_baseline = {
+                        "uuid": candidate.uuid,
+                        "name": candidate.name,
+                        "workspace_folder": ctx.baselines.workspace_folder(candidate),
+                    }
             except Exception:
                 baseline_row = None
                 from_baseline = None
@@ -729,6 +733,7 @@ def _object_detail_page(
             "created_at": version.created_at,
             "comment": version.comment,
             "content_hash": version.content_hash,
+            "relative_path": version.relative_path or obj.relative_path,
             "git_commit": version.git_commit_hash,
             "baseline": from_baseline,
         }

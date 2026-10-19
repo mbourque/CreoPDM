@@ -97,13 +97,14 @@
     <div>
       <div class="detail-title-row">
         <h1 class="detail-filename">{{ object.filename }}</h1>
-        {% if product_ui.show_open and not version_view %}
+        {% if product_ui.show_open and (not version_view or from_baseline) %}
         <button type="button" class="btn detail-open-btn" id="detail-open-btn"
                 data-uuid="{{ object.uuid }}"
+                {% if version_view and from_baseline %}data-baseline="{{ from_baseline.uuid }}" data-product="{{ product.uuid }}" data-workspace-folder="{{ from_baseline.workspace_folder }}" data-relative-path="{{ version_view.relative_path }}"{% endif %}
                 data-filename="{{ object.filename }}"
                 data-can-checkout="{% if object.can_checkout %}1{% else %}0{% endif %}"
                 data-owned="{% if object.owned_by_me %}1{% else %}0{% endif %}"
-                title="Open this file in Creo or its Windows associated program.">Open…</button>
+                title="{% if version_view %}Open exactly this version of the file, from a read-only copy of the baseline on this PC.{% else %}Open this file in Creo or its Windows associated program.{% endif %}">Open…</button>
         {% endif %}
       </div>
     </div>
@@ -133,6 +134,7 @@
     <strong>{{ version_view.current_display }}</strong>; <a href="/products/{{ product.uuid }}/objects/{{ object.uuid }}">open the current version</a>.{% endif %}
   </p>
   {% if metadata_note %}<p class="muted small" id="metadata-note">{{ metadata_note }}</p>{% endif %}
+  <p class="error" id="toolbar-error" hidden></p>
   {% endif %}
 
   <div class="tabs" role="tablist">

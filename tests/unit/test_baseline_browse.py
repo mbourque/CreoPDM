@@ -105,11 +105,15 @@ def test_baseline_files_act_like_files_rows():
 def test_a_name_opens_the_file_from_the_downloaded_baseline_and_details_is_the_footer_button():
     module = _read("src", "creopdm", "static", "js", "baselines.js")
     assert "async function openBaselineFile(" in module
+    # the open itself is shared (creo_workspace.js): the file list and the Details page both use it
+    assert "shell.openBaselineVersion(browseInfo, member)" in module
+    shared = _read("src", "creopdm", "static", "js", "creo_workspace.js")
+    body = shared.split("async function openBaselineVersion", 1)[1].split("function noteCollectFailures", 1)[0]
     # materialize through the agent (skipped when already installed and unchanged), then open
-    assert '"/baseline-workspace/check"' in module and '"/baseline-workspace"' in module
-    assert "overwrite: false" in module  # never replaces files on this PC silently
-    assert "window.CreoJS.openModel(dir, member.filename" in module and 'mode: "association"' in module
-    assert "Start creopdm-agent on this PC" in module
+    assert '"/baseline-workspace/check"' in body and '"/baseline-workspace"' in body
+    assert "overwrite: false" in body  # never replaces files on this PC silently
+    assert "window.CreoJS.openModel(dir, member.filename" in body and 'mode: "association"' in body
+    assert "Start creopdm-agent on this PC" in body
     # a click opens after a beat so a double-click can open Details instead
     assert "}, 280);" in module and '"dblclick", cancelPendingBaselineOpen' in module
     # footer: only Details, only with exactly one row selected
@@ -301,3 +305,36 @@ def test_an_open_baseline_shows_only_the_pills_that_work_on_its_files():
     app = _read("src", "creopdm", "templates", "app.html")
     for key in ("files", "cad_models", "creo_parts", "assemblies", "drawings", "documents", "other", "top_level_assemblies"):
         assert f'data-filter="{key}"' in app, key
+
+
+@requires_git
+def test_the_details_page_of_a_baseline_file_opens_the_baseline_model(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client, "Gearbox")
+    baseline = _create(auth_client, product, "Design Review 01").json()
+    member = auth_client.get(f"/api/baselines/{baseline['uuid']}/members").json()[0]
+    base = f"/products/{product['uuid']}/objects/{member['object_uuid']}/versions/{member['version_uuid']}"
+
+    page = auth_client.get(base, params={"baseline": baseline["uuid"]}).text
+    assert 'id="detail-open-btn"' in page  # the same Open… as on a Files Details page
+    assert f'data-baseline="{baseline["uuid"]}"' in page and f'data-product="{product["uuid"]}"' in page
+    assert "data-workspace-folder=" in page and "data-relative-path=" in page
+    assert "Open exactly this version of the file" in page
+    assert 'id="toolbar-error"' in page  # where an open problem is shown on this page
+
+    # outside a baseline an old version has nothing safe to open, so no Open…
+    assert 'id="detail-open-btn"' not in auth_client.get(base).text
+    # the live Details page keeps the normal Open…
+    live = auth_client.get(f"/products/{product['uuid']}/objects/{member['object_uuid']}").text
+    assert 'id="detail-open-btn"' in live and "data-baseline=" not in live
+
+
+def test_both_screens_use_the_one_baseline_open():
+    app = _read("src", "creopdm", "static", "js", "app.js")
+    handler = app.split('document.querySelector("#detail-open-btn")?.addEventListener', 1)[1][:1200]
+    assert "if (btn.dataset.baseline) {" in handler and "await openBaselineVersion(" in handler
+    assert "async function openBaselineVersion(info, member)" in app and "    openBaselineVersion,\n" in app.replace("\r\n", "\n")
+    shared = _read("src", "creopdm", "static", "js", "creo_workspace.js")
+    assert "mod.openBaselineVersion = openBaselineVersion;" in shared
+    module = _read("src", "creopdm", "static", "js", "baselines.js")
+    assert "openBaselineFile" in module and "window.CreoJS" not in module  # no second copy of the open

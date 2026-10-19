@@ -4851,6 +4851,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return (await withCreoWorkspace()).attachCollectLocalPaths(productId, targets);
   }
 
+  /** Open one file of a baseline (exact version, read-only copy on this PC). "" = opened. */
+  async function openBaselineVersion(info, member) {
+    const gate = await assertProductAllows(info?.product_uuid || currentProductId(), "download");
+    if (!gate.ok) return "";
+    return (await withCreoWorkspace()).openBaselineVersion(info, member);
+  }
+
   async function noteCollectFailures(failed, fromOpen) {
     if (!Array.isArray(failed) || !failed.length) return;
     return (await withCreoWorkspace()).noteCollectFailures(failed, fromOpen);
@@ -8185,6 +8192,20 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const btn = event.currentTarget;
     const id = btn?.dataset?.uuid;
     if (!id) return;
+    if (btn.dataset.baseline) {
+      // A file of a baseline: open that exact version, not today's file.
+      showError($("#toolbar-error"), "");
+      const message = await openBaselineVersion(
+        {
+          uuid: btn.dataset.baseline,
+          product_uuid: btn.dataset.product || "",
+          workspace_folder: btn.dataset.workspaceFolder || "",
+        },
+        { filename: btn.dataset.filename || "", relative_path: btn.dataset.relativePath || "" }
+      );
+      if (message) showError($("#toolbar-error"), message);
+      return;
+    }
     await openPdmObjectFromUi(id, {
       dataset: {
         filename: btn.getAttribute("data-filename") || btn.dataset.filename || id,
@@ -8288,6 +8309,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     typeIconHtml,
     refreshTabMetrics,
     noteCollectFailures,
+    openBaselineVersion,
     agentBase,
     agentAuthHeaders,
     agentPdmAuth,

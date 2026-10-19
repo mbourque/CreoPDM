@@ -386,82 +386,14 @@ window.__creopdmModules.baselines = {
       }
     }
 
-    /**
-     * Open one file of the baseline the way Files opens a file: put the baseline's exact files on
-     * this PC (read-only folder, skipped when it is already there and unchanged), then open the
-     * file from that folder in the Creo session, or with Windows when this is not Creo's browser.
-     */
+    /** A click on a file name: the shared baseline open (also used by the Details page). */
     async function openBaselineFile(row) {
-      const info = browseInfo;
       const member = browseData.find((m) => m.version_uuid === row?.dataset?.version);
       const errorEl = $("#baseline-browse-error");
       showError(errorEl, "");
-      if (!info || !member) return;
-      const agent = await shell.probeCreoAgent();
-      if (!agent) {
-        showError(
-          errorEl,
-          "Start creopdm-agent on this PC so the baseline's files can be downloaded before opening."
-        );
-        return;
-      }
-      let folder = "";
-      try {
-        await shell.withBusy("Preparing the baseline…", async () => {
-          if (info.workspace_folder) {
-            const check = await agentJson("/baseline-workspace/check", info, { folder: info.workspace_folder });
-            const b = check.body || {};
-            if (check.ok && b.installed && !(b.missing?.length || 0) && !(b.modified?.length || 0)) {
-              folder = b.path || "";
-            }
-          }
-          if (folder) return;
-          const response = await fetch(`/api/baselines/${encodeURIComponent(info.uuid)}/workspace-manifest`);
-          if (!response.ok) throw new Error(await readError(response));
-          const manifest = await response.json();
-          const result = await agentJson("/baseline-workspace", info, { manifest, overwrite: false });
-          if (!result.ok) {
-            const conflicts = result.body?.detail?.conflicts;
-            throw new Error(
-              Array.isArray(conflicts) && conflicts.length
-                ? "The baseline's folder on this PC has files that differ from the baseline. Use Download… and replace them first."
-                : agentMessage(result, "The baseline could not be put on this PC.")
-            );
-          }
-          folder = result.body?.path || "";
-        });
-      } catch (err) {
-        showError(errorEl, err?.message || "The baseline could not be put on this PC.");
-        return;
-      }
-      if (!folder) {
-        showError(errorEl, "The agent did not say where the baseline is.");
-        return;
-      }
-      const fullPath = shell.joinLocalWorkspacePath(folder, member.relative_path || member.filename);
-      const dir = String(fullPath).replace(/[\\/][^\\/]*$/, "");
-      const creoModel = ["prt", "asm", "drw"].includes(fileExtension(member.filename));
-      try {
-        if (creoModel && shell.hostedCreoJS?.() && shell.creoOpenMode?.() === "embedded") {
-          await shell.withBusy("Opening in Creo…", async () => {
-            await shell.whenCreoJSReady();
-            const opened = await window.CreoJS.openModel(dir, member.filename, "", member.filename, fullPath);
-            const text = opened == null ? "" : String(opened);
-            if (text.indexOf("CREOPDM_ERROR:") === 0) throw new Error(text.slice("CREOPDM_ERROR:".length));
-          });
-          return;
-        }
-        await shell.withBusy("Opening…", async () => {
-          const response = await fetch(`${shell.agentBase()}/open`, {
-            method: "POST",
-            headers: shell.agentAuthHeaders({ "Content-Type": "application/json" }),
-            body: JSON.stringify({ path: fullPath, mode: "association" }),
-          });
-          if (!response.ok) throw new Error(await readError(response));
-        });
-      } catch (err) {
-        showError(errorEl, err?.message || "The file could not be opened.");
-      }
+      if (!browseInfo || !member) return;
+      const message = await shell.openBaselineVersion(browseInfo, member);
+      if (message) showError(errorEl, message);
     }
 
     function cancelPendingBaselineOpen() {

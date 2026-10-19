@@ -290,6 +290,101 @@ window.__creopdmModules.creo_workspace = {
       }
     }
 
+    /**
+     * Open one file of a baseline the way Files opens a file: put the baseline's exact files on this
+     * PC (a read-only folder; skipped when it is already there and unchanged), then open the file
+     * from that folder in the Creo session, or with Windows when this is not Creo's browser.
+     * Shared by the baseline's file list and by the Details page of a baseline file.
+     * Returns "" when the file was opened, otherwise the message to show.
+     */
+    async function openBaselineVersion(info, member) {
+      if (!info || !member || !member.filename) return "That file is not part of the baseline.";
+      const agent = await probeCreoAgent();
+      if (!agent) {
+        return "Start creopdm-agent on this PC so the baseline's files can be downloaded before opening.";
+      }
+      const agentJson = async (path, extra) => {
+        const response = await fetch(`${agentBase()}${path}`, {
+          method: "POST",
+          headers: agentAuthHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({
+            pdm_url: window.location.origin,
+            product_id: info.product_uuid || currentProductId(),
+            vault_folder: currentVaultFolder(),
+            ...agentPdmAuth(),
+            ...extra,
+          }),
+        });
+        let body = null;
+        try {
+          body = await response.json();
+        } catch {
+          body = null;
+        }
+        return { ok: response.ok, body };
+      };
+      const agentMessage = (result, fallback) => {
+        const detail = result.body?.detail;
+        if (detail && typeof detail === "object") return detail.message || fallback;
+        return (typeof detail === "string" && detail) || fallback;
+      };
+      let folder = "";
+      try {
+        await withBusy("Preparing the baseline…", async () => {
+          if (info.workspace_folder) {
+            const check = await agentJson("/baseline-workspace/check", { folder: info.workspace_folder });
+            const b = check.body || {};
+            if (check.ok && b.installed && !(b.missing?.length || 0) && !(b.modified?.length || 0)) {
+              folder = b.path || "";
+            }
+          }
+          if (folder) return;
+          const response = await fetch(`/api/baselines/${encodeURIComponent(info.uuid)}/workspace-manifest`);
+          if (!response.ok) throw new Error(await readError(response));
+          const manifest = await response.json();
+          const result = await agentJson("/baseline-workspace", { manifest, overwrite: false });
+          if (!result.ok) {
+            const conflicts = result.body?.detail?.conflicts;
+            throw new Error(
+              Array.isArray(conflicts) && conflicts.length
+                ? "The baseline's folder on this PC has files that differ from the baseline. Use Download… and replace them first."
+                : agentMessage(result, "The baseline could not be put on this PC.")
+            );
+          }
+          folder = result.body?.path || "";
+        });
+      } catch (err) {
+        return err?.message || "The baseline could not be put on this PC.";
+      }
+      if (!folder) return "The agent did not say where the baseline is.";
+      const fullPath = joinLocalWorkspacePath(folder, member.relative_path || member.filename);
+      const dir = String(fullPath).replace(/[\\/][^\\/]*$/, "");
+      const extension = (/\.([a-z0-9_+]+)(?:\.\d+)?$/i.exec(member.filename) || [])[1] || "";
+      const creoModel = ["prt", "asm", "drw"].includes(extension.toLowerCase());
+      try {
+        if (creoModel && shell.hostedCreoJS?.() && shell.creoOpenMode?.() === "embedded") {
+          await withBusy("Opening in Creo…", async () => {
+            await whenCreoJSReady();
+            const opened = await window.CreoJS.openModel(dir, member.filename, "", member.filename, fullPath);
+            const text = opened == null ? "" : String(opened);
+            if (text.indexOf("CREOPDM_ERROR:") === 0) throw new Error(text.slice("CREOPDM_ERROR:".length));
+          });
+          return "";
+        }
+        await withBusy("Opening…", async () => {
+          const response = await fetch(`${agentBase()}/open`, {
+            method: "POST",
+            headers: agentAuthHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify({ path: fullPath, mode: "association" }),
+          });
+          if (!response.ok) throw new Error(await readError(response));
+        });
+      } catch (err) {
+        return err?.message || "The file could not be opened.";
+      }
+      return "";
+    }
+
     /** Tell the user which files got no metadata, and why that usually is. */
     function noteCollectFailures(failed, fromOpen) {
       if (!failed.length) return;
@@ -800,6 +895,7 @@ window.__creopdmModules.creo_workspace = {
     mod.ensureToolkitAgentHealthy = ensureToolkitAgentHealthy;
     mod.pushCreoMetadataForItems = pushCreoMetadataForItems;
     mod.noteCollectFailures = noteCollectFailures;
+    mod.openBaselineVersion = openBaselineVersion;
     mod.captureCreoMetadataAfterOpen = captureCreoMetadataAfterOpen;
     mod.rematerializeCheckedInLocalTips = rematerializeCheckedInLocalTips;
     mod.materializeViaAgent = materializeViaAgent;
