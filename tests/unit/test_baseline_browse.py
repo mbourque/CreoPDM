@@ -217,3 +217,9 @@ def test_a_file_without_collected_metadata_says_so_in_the_baseline(auth_client, 
     base = f"/products/{product['uuid']}/objects/{member['object_uuid']}/versions/{member['version_uuid']}"
     page = auth_client.get(base, params={"baseline": baseline["uuid"]}).text
     assert 'id="metadata-note"' in page and "No Creo metadata was kept with this baseline" in page
+
+
+def test_the_dialog_file_links_keep_the_baseline_so_details_stays_frozen():
+    module = _read("src", "creopdm", "static", "js", "baselines.js")
+    link = module.split("function versionLink", 1)[1].split("return `<a", 1)[0]
+    assert "?baseline=${encodeURIComponent(info.uuid)}" in link

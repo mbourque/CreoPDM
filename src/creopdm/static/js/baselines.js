@@ -704,7 +704,9 @@ window.__creopdmModules.baselines = {
       if (!info?.product_uuid || !m.object_uuid || !m.version_uuid) return esc(m.filename);
       const href = `/products/${encodeURIComponent(info.product_uuid)}/objects/${encodeURIComponent(
         m.object_uuid
-      )}/versions/${encodeURIComponent(m.version_uuid)}`;
+      )}/versions/${encodeURIComponent(m.version_uuid)}${
+        info.uuid ? `?baseline=${encodeURIComponent(info.uuid)}` : ""
+      }`;
       return `<a class="baseline-version-link" href="${href}" title="Open exactly ${esc(
         m.display_version
       )}, even if the file has moved on">${esc(m.filename)}</a>`;
