@@ -1592,6 +1592,10 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
     overview = _between(detail, 'id="panel-overview"', 'id="panel-parameters"')
+    # The live page keeps its short Overview; an exact version (a baseline file) adds its own rows.
+    start = overview.index("{# version-rows #}")
+    end = overview.index("{# /version-rows #}") + len("{# /version-rows #}")
+    overview = overview[:start] + overview[end:]
     assert "<td>Revision</td>" not in overview
     assert "<td>Lifecycle</td>" not in overview
     assert "<td>Checked out by</td>" in overview

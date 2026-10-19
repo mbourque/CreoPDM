@@ -131,6 +131,9 @@ class BaselineMember(Base):
     iteration: Mapped[int] = mapped_column(Integer, nullable=False)
     lifecycle_state: Mapped[str | None] = mapped_column(String(32), nullable=True)
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # The version's Creo metadata (identity, parameters, materials, mass, features, BOM …) as it was
+    # when the baseline was made. NULL: made before this was kept, or none had been collected.
+    metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     baseline: Mapped[Baseline] = relationship(back_populates="members")
 

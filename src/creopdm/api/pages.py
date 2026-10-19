@@ -605,16 +605,158 @@ def object_detail(
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> HTMLResponse:
+    return _object_detail_page(request, ctx, db, product_id, object_id)
+
+
+def _frozen_where_used(ctx: AppContext, db: Session, baseline, version_uuid: str, product_uuid: str):
+    """Parents of one version as the baseline froze them, and whether it is a top-level assembly."""
+    members = {m["version_uuid"]: m for m in ctx.baselines.members(db, baseline)}
+    rows: list[dict] = []
+    used_by_assembly = False
+    for edge in ctx.baselines.dependencies(db, baseline):
+        if edge.get("child_version_uuid") != version_uuid:
+            continue
+        parent = members.get(edge["parent_version_uuid"]) or {}
+        if str(parent.get("object_type") or "").upper() == ObjectType.CREO_ASSEMBLY.value:
+            used_by_assembly = True
+        object_uuid = parent.get("object_uuid") or ""
+        rows.append(
+            {
+                "object_id": object_uuid,
+                "filename": edge["parent_filename"],
+                "relative_path": parent.get("relative_path") or "",
+                "type_label": str(parent.get("object_type") or "").replace("CREO_", "").title(),
+                "display_revision": edge.get("parent_display_version") or "",
+                "quantity": edge.get("quantity") or 1.0,
+                "dependency_type": edge.get("dependency_type") or "",
+                "href": (
+                    f"/products/{product_uuid}/objects/{object_uuid}/versions/"
+                    f"{edge['parent_version_uuid']}?baseline={baseline.uuid}"
+                    if object_uuid
+                    else ""
+                ),
+            }
+        )
+    return rows, used_by_assembly
+
+
+def _object_detail_page(
+    request: Request,
+    ctx: AppContext,
+    db: Session,
+    product_id: str,
+    object_id: str,
+    version_id: str | None = None,
+) -> HTMLResponse:
+    """Details of a file: its current state, or ONE exact version of it (``version_id``).
+
+    The exact-version form is what a baseline member opens: the same page and tabs, read from the
+    version's own stored metadata, never redirected to the current version.
+    """
+    from sqlalchemy import select
+
+    from creopdm.exceptions import ObjectNotFoundError
+    from creopdm.models.version import ObjectVersion
+
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     product = load_accessible_product(request, ctx, db, product_id)
     obj = ctx.objects.get_object(db, object_id)
+    version = None
+    from_baseline = None
+    baseline_row = None
+    if version_id:
+        if obj.product_id != product.id:
+            raise ObjectNotFoundError("Object not found in this product.", details={"object": object_id})
+        version = db.scalar(
+            select(ObjectVersion).where(
+                ObjectVersion.uuid == (version_id or "").strip(),
+                ObjectVersion.object_id == obj.id,
+            )
+        )
+        if version is None:
+            raise ObjectNotFoundError(
+                "That version does not belong to this file.", details={"version": version_id}
+            )
+        # Opened from a baseline's file list: breadcrumbs lead back, Where Used is the frozen one.
+        baseline_uuid = (request.query_params.get("baseline") or "").strip()
+        if baseline_uuid and caps_dict(request).get("can_view_baselines"):
+            try:
+                candidate = ctx.baselines.get(db, baseline_uuid)
+                if candidate.product_id == product.id:
+                    baseline_row = candidate
+                    from_baseline = {"uuid": candidate.uuid, "name": candidate.name}
+            except Exception:
+                baseline_row = None
+                from_baseline = None
     history = ctx.objects.object_history(db, object_id)
     payload = present_object(ctx, db, obj)
+    version_view = None
+    if version is not None:
+        from creopdm.api.serializers import version_to_response
+        from creopdm.constants import LifecycleState
+
+        current = obj.current_version
+        display = f"{version.revision}.{version.iteration}"
+        # The file as it was at this version: nothing about checkout or the vault applies.
+        payload = payload.model_copy(
+            update={
+                "revision": version.revision,
+                "iteration": version.iteration,
+                "display_revision": display,
+                "lifecycle_state": version.lifecycle_state or LifecycleState.IN_WORK.value,
+                "creo_release": version.creo_release,
+                "checkout_status": "",
+                "checkout_user": None,
+                "checkout_since": None,
+                "owned_by_me": False,
+                "modified_locally": False,
+                "can_checkout": False,
+                "can_checkin": False,
+                "can_revise": False,
+                "updated_at": version.created_at,
+                "current_version": version_to_response(version),
+            }
+        )
+        version_view = {
+            "uuid": version.uuid,
+            "display": display,
+            "is_current": current is not None and current.id == version.id,
+            "current_display": f"{current.revision}.{current.iteration}" if current is not None else "",
+            "lifecycle_label": (version.lifecycle_state or LifecycleState.IN_WORK.value)
+            .replace("_", " ")
+            .title(),
+            "created_by": version.created_by,
+            "created_at": version.created_at,
+            "comment": version.comment,
+            "content_hash": version.content_hash,
+            "git_commit": version.git_commit_hash,
+            "baseline": from_baseline,
+        }
     is_assembly = obj.object_type == ObjectType.CREO_ASSEMBLY.value
     is_part = obj.object_type == ObjectType.CREO_PART.value
     is_creo = obj.object_type.startswith("CREO_")
-    pending = ctx.workspaces.pending_workspace_save(product, obj)
-    metadata = ctx.metadata.get(db, object_id)
+    pending = ctx.workspaces.pending_workspace_save(product, obj) if version is None else None
+    metadata_note = ""
+    if baseline_row is not None and version is not None:
+        # A baseline shows the metadata it copied when it was made, never today's.
+        from creopdm.models.baseline import BaselineMember
+
+        member = db.scalar(
+            select(BaselineMember).where(
+                BaselineMember.baseline_id == baseline_row.id,
+                BaselineMember.object_version_id == version.id,
+            )
+        )
+        metadata = ctx.metadata.response_from_snapshot(
+            obj.uuid, version.uuid, member.metadata_json if member is not None else None
+        )
+        if not metadata.captured:
+            metadata_note = (
+                "No Creo metadata was kept with this baseline for this file: none had been "
+                "collected for this version when the baseline was made."
+            )
+    else:
+        metadata = ctx.metadata.get(db, object_id, version.uuid if version is not None else None)
     # Where Used is only meaningful for Creo Models (Settings → Creo Models chip list).
     show_where_used = matches_cad_models(
         str(obj.filename or ""),
@@ -623,16 +765,29 @@ def object_detail(
     )
     # Dependency + BOM only — vault byte scan is too slow on large products for SSR.
     # Where Used tab loads the full result (including vault scan) via API.
-    where_used = (
-        ctx.metadata.where_used(db, object_id, vault_scan=False)
-        if show_where_used
-        else None
-    )
+    where_used = None
+    where_used_rows: list = []
     is_top_level_assembly = False
-    if is_assembly and ctx.metadata.where_used_index_present(db, product.id):
-        is_top_level_assembly = str(obj.uuid) in set(
-            ctx.metadata.top_level_assembly_uuids(db, product.id)
+    if version is None:
+        where_used = (
+            ctx.metadata.where_used(db, object_id, vault_scan=False)
+            if show_where_used
+            else None
         )
+        where_used_rows = where_used.items if where_used is not None else []
+        if is_assembly and ctx.metadata.where_used_index_present(db, product.id):
+            is_top_level_assembly = str(obj.uuid) in set(
+                ctx.metadata.top_level_assembly_uuids(db, product.id)
+            )
+    elif baseline_row is not None and show_where_used:
+        # The structure the baseline froze: nothing is looked up in today's product.
+        where_used_rows, used_by_assembly = _frozen_where_used(
+            ctx, db, baseline_row, version.uuid, product.uuid
+        )
+        is_top_level_assembly = bool(is_assembly and not used_by_assembly)
+    else:
+        # A historical version outside a baseline has no frozen structure to show.
+        show_where_used = False
     identity = metadata.identity or {}
     # Creo 2D section (.sec): Toolkit sketch domain → Overview rows + Sketch tab.
     sketch_view = sketch_overview(metadata.sketch if isinstance(metadata.sketch, dict) else None)
@@ -670,7 +825,7 @@ def object_detail(
     show_structure_tab = bool(is_assembly)
     # Modifications tab when ≥1 saved snap: tip-only = pending NEW; 2+ = history compare.
     snapshot_count = (
-        ctx.ai_snapshots.count_with_snapshot(db, object_id) if is_creo else 0
+        ctx.ai_snapshots.count_with_snapshot(db, object_id) if is_creo and version is None else 0
     )
     show_snapshot_tab = bool(is_creo and snapshot_count >= 1)
     snapshot_tab_label = "Modifications"
@@ -724,7 +879,10 @@ def object_detail(
             "snapshot_tab_mode": snapshot_tab_mode,
             "bom": bom,
             "show_where_used": show_where_used,
-            "where_used": where_used.items if where_used is not None else [],
+            "where_used": where_used_rows,
+            "version_view": version_view,
+            "metadata_note": metadata_note,
+            "from_baseline": from_baseline,
             "workspace_path": str(ctx.workspaces.vault_for(product)),
             "workspace_folder": folder_of(obj.relative_path),
             "checkout_count": checkout_count,
@@ -749,71 +907,9 @@ def object_version_detail(
     ctx: AppContext = Depends(get_context),
 ) -> HTMLResponse:
     """One EXACT historical version, by its version uuid. Never redirects to the current version:
-    a baseline member opens the version it captured even when the file is at C.4 now."""
-    from sqlalchemy import select
-
-    from creopdm.constants import LifecycleState
-    from creopdm.exceptions import ObjectNotFoundError
-    from creopdm.models.version import ObjectVersion
-
-    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    product = load_accessible_product(request, ctx, db, product_id)
-    obj = ctx.objects.get_object(db, object_id)
-    if obj.product_id != product.id:
-        raise ObjectNotFoundError("Object not found in this product.", details={"object": object_id})
-    version = db.scalar(
-        select(ObjectVersion).where(
-            ObjectVersion.uuid == (version_id or "").strip(),
-            ObjectVersion.object_id == obj.id,
-        )
-    )
-    if version is None:
-        raise ObjectNotFoundError(
-            "That version does not belong to this file.", details={"version": version_id}
-        )
-    current = obj.current_version
-    display = f"{version.revision}.{version.iteration}"
-    # Opened from a baseline's file list: the breadcrumb leads back to that baseline's files.
-    from_baseline = None
-    baseline_uuid = (request.query_params.get("baseline") or "").strip()
-    if baseline_uuid and caps_dict(request).get("can_view_baselines"):
-        try:
-            candidate = ctx.baselines.get(db, baseline_uuid)
-            if candidate.product_id == product.id:
-                from_baseline = {"uuid": candidate.uuid, "name": candidate.name}
-        except Exception:
-            from_baseline = None
-    source = db.get(ObjectVersion, version.created_from_version_id) if version.created_from_version_id else None
-    try:
-        identity = json.loads(version.identity_json) if version.identity_json else {}
-    except ValueError:
-        identity = {}
-    identity_rows = [
-        (str(key).replace("_", " ").capitalize(), str(value))
-        for key, value in (identity.items() if isinstance(identity, dict) else [])
-        if value not in (None, "") and isinstance(value, (str, int, float, bool))
-    ]
-    return render(
-        request,
-        "object_version.html",
-        {
-            "app_name": APP_NAME,
-            "app_version": APP_VERSION,
-            **_creo_page(ctx),
-            "product": product_to_response(product),
-            "object": obj,
-            "version": version,
-            "display": display,
-            "is_current": current is not None and current.id == version.id,
-            "current_display": f"{current.revision}.{current.iteration}" if current is not None else "",
-            "lifecycle_label": (version.lifecycle_state or LifecycleState.IN_WORK.value)
-            .replace("_", " ")
-            .title(),
-            "created_from": f"{source.revision}.{source.iteration}" if source is not None else "",
-            "identity_rows": identity_rows,
-            "from_baseline": from_baseline,
-        },
-    )
+    a baseline member opens the version it captured even when the file is at C.4 now. It is the
+    ordinary Details page (same tabs), read from that version."""
+    return _object_detail_page(request, ctx, db, product_id, object_id, version_id)
 
 
 @router.get("/help")

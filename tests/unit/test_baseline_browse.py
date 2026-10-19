@@ -9,6 +9,8 @@ from fastapi.testclient import TestClient
 
 from creopdm.app import build_context, create_app
 from creopdm.config import ConfigManager
+from creopdm.models.baseline import BaselineMember
+from sqlalchemy import select
 from tests.conftest import requires_git
 from tests.unit.test_baselines import _create, _product, _signed_in_admin
 
@@ -161,3 +163,57 @@ def test_the_open_baseline_is_remembered_and_rows_link_back():
     page = _read("src", "creopdm", "templates", "app.html")
     footer = page[page.index('id="baseline-browse-file-details"') - 80 : page.index('id="baseline-browse-file-details"')]
     assert "btn-primary" not in footer  # a plain button, like the Files toolbar
+
+
+def _collect(auth_client, obj, *, parameter, value, material="STEEL"):
+    posted = auth_client.post(
+        f"/api/objects/{obj['uuid']}/creo-metadata",
+        json={
+            "identity": {"model_type": "PART", "common_name": "Shaft"},
+            "parameters": [{"name": parameter, "value": value}],
+            "materials": {"current": material, "available": [material]},
+        },
+    )
+    assert posted.status_code == 200, posted.text
+
+
+@requires_git
+def test_a_baseline_copies_the_metadata_and_shows_it_unchanged(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client, "Gearbox")
+    shaft = objects["shaft.prt"]
+    _collect(auth_client, shaft, parameter="DIAMETER", value="25", material="STEEL")
+    baseline = _create(auth_client, product, "Design Review 01").json()
+    member = next(
+        m for m in auth_client.get(f"/api/baselines/{baseline['uuid']}/members").json() if m["filename"] == "shaft.prt"
+    )
+
+    # The same version is collected again later: its own metadata changes ...
+    _collect(auth_client, shaft, parameter="DIAMETER", value="40", material="TITANIUM")
+    base = f"/products/{product['uuid']}/objects/{member['object_uuid']}/versions/{member['version_uuid']}"
+    live = auth_client.get(base).text
+    assert "40" in live and "TITANIUM" in live
+
+    # ... but the baseline shows what it copied when it was made.
+    frozen = auth_client.get(base, params={"baseline": baseline["uuid"]}).text
+    assert 'data-tab="parameters"' in frozen and "DIAMETER" in frozen
+    assert ">25<" in frozen.replace(" ", "").replace("\n", "") or "25" in frozen
+    assert "TITANIUM" not in frozen and "STEEL" in frozen
+    assert 'id="metadata-note"' not in frozen
+    # Rows are stored on the member itself.
+    with auth_ctx.session_factory() as db:
+        row = db.scalar(select(BaselineMember).where(BaselineMember.object_version_id.is_not(None)))
+        assert row is not None
+        stored = [m.metadata_json for m in db.scalars(select(BaselineMember))]
+        assert any(item and "STEEL" in item and "TITANIUM" not in item for item in stored)
+
+
+@requires_git
+def test_a_file_without_collected_metadata_says_so_in_the_baseline(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, _objects = _product(auth_client, "Gearbox")
+    baseline = _create(auth_client, product, "Design Review 01").json()
+    member = auth_client.get(f"/api/baselines/{baseline['uuid']}/members").json()[0]
+    base = f"/products/{product['uuid']}/objects/{member['object_uuid']}/versions/{member['version_uuid']}"
+    page = auth_client.get(base, params={"baseline": baseline["uuid"]}).text
+    assert 'id="metadata-note"' in page and "No Creo metadata was kept with this baseline" in page

@@ -67,6 +67,54 @@ class CheckinService:
     def set_connector(self, connector: CreoConnector) -> None:
         self._creo = connector
 
+    @staticmethod
+    def _carry_metadata(session: Session, source: ObjectVersion, new: ObjectVersion | None) -> None:
+        """A revert restores the very bytes of an older version, so its Creo metadata still holds:
+        carry it over instead of leaving the new version without any."""
+        if new is None or new.id == source.id or new.content_hash != source.content_hash:
+            return
+        for column in (
+            "identity_json",
+            "materials_json",
+            "units_json",
+            "mass_json",
+            "family_table_json",
+            "features_json",
+            "bom_json",
+        ):
+            if not getattr(new, column) and getattr(source, column):
+                setattr(new, column, getattr(source, column))
+        has_params = session.scalar(select(Parameter.id).where(Parameter.version_id == new.id).limit(1))
+        if has_params is None:
+            for row in session.scalars(select(Parameter).where(Parameter.version_id == source.id)):
+                session.add(
+                    Parameter(
+                        object_id=row.object_id,
+                        version_id=new.id,
+                        name=row.name,
+                        value=row.value,
+                        data_type=row.data_type,
+                        units=row.units,
+                        description=row.description,
+                        is_designated=row.is_designated,
+                    )
+                )
+        session.flush()
+
+    def set_metadata(self, metadata) -> None:
+        """Where Used is kept current by re-reading just the checked-in assembly / drawing."""
+        self._metadata = metadata
+
+    def _refresh_where_used(self, session: Session, product, obj: EngineeringObject) -> None:
+        metadata = getattr(self, "_metadata", None)
+        if metadata is None:
+            return
+        try:
+            metadata.refresh_where_used_for_parents(session, product, [obj])
+        except Exception:
+            # Never fail a check-in over the index: the full rebuild still repairs it.
+            logger.warning("Where Used refresh skipped for %s", obj.filename, exc_info=True)
+
     def preview(self, session: Session, object_uuid: str) -> dict[str, str | bool | list]:
         obj = self._objects.get_object(session, object_uuid)
         product = obj.product
@@ -291,6 +339,7 @@ class CheckinService:
             )
             logger.info("Checked in %s as %s.%s", obj.filename, obj.revision, new_iteration)
             session.refresh(obj)
+            self._refresh_where_used(session, product, obj)
             return obj
 
     def revert_to_version(
@@ -477,6 +526,8 @@ class CheckinService:
                 "restored_path": dest_rel,
             },
         )
+        self._refresh_where_used(session, product, restored)
+        self._carry_metadata(session, target, restored.current_version)
         return restored
 
     def preview_queue(self, session: Session, product) -> dict[str, str | bool | list]:

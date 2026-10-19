@@ -1740,7 +1740,7 @@ def test_baseline_member_rows_link_to_the_exact_version():
     module = (ROOT / "src" / "creopdm" / "static" / "js" / "baselines.js").read_text(encoding="utf-8")
     assert "function versionLink" in module and "/versions/${encodeURIComponent(m.version_uuid)}" in module
     assert "baseline-version-link" in module
-    template = (ROOT / "src" / "creopdm" / "templates" / "object_version.html").read_text(encoding="utf-8")
+    template = (ROOT / "src" / "creopdm" / "templates" / "object_detail.html").read_text(encoding="utf-8")
     assert "Historical version" in template and 'id="version-facts"' in template
 
 

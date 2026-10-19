@@ -39,6 +39,7 @@ from creopdm.product_state import (
 from creopdm.services.git_service import GitService
 from creopdm.services.lock_manager import ProductLockManager
 from creopdm.utils.identity import CurrentUserProvider
+from creopdm.utils.metadata_snapshot import snapshot_versions
 
 logger = get_logger("baselines")
 
@@ -634,7 +635,8 @@ class BaselineService:
             try:
                 session.add(baseline)
                 session.flush()
-                session.add_all(self._members(baseline, captured))
+                snapshots = snapshot_versions(session, [obj.current_version for obj in captured])
+                session.add_all(self._members(baseline, captured, snapshots))
                 session.flush()
                 edges = self._dependencies(session, baseline, product, captured)
                 session.add_all(edges)
@@ -1417,7 +1419,11 @@ class BaselineService:
         return out
 
     @staticmethod
-    def _members(baseline: Baseline, objects: list[EngineeringObject]) -> list[BaselineMember]:
+    def _members(
+        baseline: Baseline,
+        objects: list[EngineeringObject],
+        snapshots: dict[int, str] | None = None,
+    ) -> list[BaselineMember]:
         members: list[BaselineMember] = []
         for obj in objects:
             version = obj.current_version
@@ -1437,6 +1443,8 @@ class BaselineService:
                     or obj.lifecycle_state
                     or LifecycleState.IN_WORK.value,
                     content_hash=version.content_hash,
+                    # Copied now: later Collect runs never change what this baseline shows.
+                    metadata_json=(snapshots or {}).get(version.id) or None,
                 )
             )
         return members

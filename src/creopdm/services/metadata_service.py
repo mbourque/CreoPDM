@@ -18,6 +18,7 @@ from creopdm.models.dependency import Dependency
 from creopdm.models.object import EngineeringObject
 from creopdm.models.parameter import Parameter
 from creopdm.models.product import Product
+from creopdm.utils.metadata_snapshot import parameters_by_version, raw_from_version
 from creopdm.models.version import ObjectVersion
 from creopdm.product_state import ensure_product_allows
 from creopdm.schemas.common import (
@@ -352,11 +353,7 @@ class MetadataService:
         if version is None:
             return CreoMetadataResponse(object_id=obj.uuid, captured=False)
 
-        params = session.scalars(
-            select(Parameter)
-            .where(Parameter.version_id == version.id)
-            .order_by(Parameter.name.asc())
-        ).all()
+        params = parameters_by_version(session, [version.id]).get(version.id, [])
         deps = session.scalars(
             select(Dependency).where(Dependency.parent_object_id == obj.id)
         ).all()
@@ -380,16 +377,36 @@ class MetadataService:
                     dependency_type=edge.dependency_type or DependencyType.ASSEMBLY_MEMBER.value,
                 )
             )
+        return self._response_from_raw(
+            obj.uuid, version.uuid, raw_from_version(version, params), dep_payloads
+        )
 
-        identity = _loads(version.identity_json)
+    def response_from_snapshot(
+        self, object_uuid: str, version_uuid: str, snapshot_json: str | None
+    ) -> CreoMetadataResponse:
+        """The metadata a baseline copied for one member (nothing is read from the live version)."""
+        raw = _loads(snapshot_json) if snapshot_json else None
+        if not isinstance(raw, dict):
+            return CreoMetadataResponse(object_id=object_uuid, version_id=version_uuid, captured=False)
+        return self._response_from_raw(object_uuid, version_uuid, raw, [])
+
+    @staticmethod
+    def _response_from_raw(
+        object_uuid: str,
+        version_uuid: str,
+        raw: dict,
+        dep_payloads: list[CreoDependencyPayload],
+    ) -> CreoMetadataResponse:
+        params = raw.get("parameters") or []
+        identity = raw.get("identity")
         if isinstance(identity, dict):
             normalize_creo_identity(identity)
-        materials = _loads(version.materials_json)
-        bom = _loads(version.bom_json)
-        units = _loads(version.units_json)
-        mass = _loads(version.mass_json)
-        family_table = _loads(version.family_table_json)
-        features_raw = _loads(version.features_json)
+        materials = raw.get("materials")
+        bom = raw.get("bom")
+        units = raw.get("units")
+        mass = raw.get("mass")
+        family_table = raw.get("family_table")
+        features_raw = raw.get("features")
         features, structure, simp_reps, constraints, relations = unpack_features_json(
             features_raw
         )
@@ -411,17 +428,17 @@ class MetadataService:
             or dep_payloads
         )
         return CreoMetadataResponse(
-            object_id=obj.uuid,
-            version_id=version.uuid,
+            object_id=object_uuid,
+            version_id=version_uuid,
             identity=identity if isinstance(identity, dict) else None,
             parameters=[
                 CreoParamPayload(
-                    name=row.name,
-                    value=row.value,
-                    data_type=row.data_type or "STRING",
-                    units=row.units,
-                    description=row.description,
-                    is_designated=bool(row.is_designated),
+                    name=row["name"],
+                    value=row.get("value"),
+                    data_type=row.get("data_type") or "STRING",
+                    units=row.get("units"),
+                    description=row.get("description"),
+                    is_designated=bool(row.get("is_designated")),
                 )
                 for row in params
             ],
@@ -822,6 +839,42 @@ class MetadataService:
                 done=True,
             )
 
+        scanned: list[str] = []
+        # End the list_objects read transaction before vault I/O.
+        session.commit()
+        pending, missing, scanned = self._where_used_edges(product, objects, chunk)
+        edges_added, edges_existing = self.upsert_dependency_edges(
+            session, product.id, pending
+        )
+
+        next_offset = start + len(chunk)
+        done = next_offset >= total
+        if done:
+            # Strip false parents of project-root magnets after the full graph exists.
+            self.prune_assembly_name_magnets(session, product.id)
+        return RebuildWhereUsedResponse(
+            parents_total=total,
+            parents_processed=len(chunk),
+            next_offset=next_offset,
+            done=done,
+            edges_added=edges_added,
+            edges_existing=edges_existing,
+            parents_missing_vault=missing,
+            parents_scanned=scanned,
+        )
+
+    def _where_used_edges(
+        self,
+        product: Product,
+        objects: list[EngineeringObject],
+        chunk: list[EngineeringObject],
+    ) -> tuple[list[tuple[int, int, str]], int, list[str]]:
+        """Scan the vault bytes of ``chunk`` (assemblies / drawings) for the product files they use.
+
+        Returns ``(links, parents_missing_from_vault, scanned_filenames)`` without writing anything,
+        so a vault read never holds a database write lock. Shared by the full rebuild and the
+        per-file refresh after a check-in.
+        """
         # Map logical name.ext → object; unique stems → object (Creo often omits .prt).
         by_key: dict[str, EngineeringObject] = {}
         stem_to_rows: dict[str, list[EngineeringObject]] = {}
@@ -848,17 +901,9 @@ class MetadataService:
             unique_stems_only=True,
             blocked_stems=_WHERE_USED_STEM_BLOCKLIST,
         )
-        edges_added = 0
-        edges_existing = 0
         missing = 0
         scanned: list[str] = []
-        # Collect links while reading vault bytes — do not write until the scan
-        # for this chunk finishes, or SQLite holds a write lock across multi‑MB reads
-        # and hangs the rest of CreoPDM (status GET, UI, etc.).
         pending: list[tuple[int, int, str]] = []
-        # End the list_objects read transaction before vault I/O.
-        session.commit()
-
         for parent in chunk:
             scanned.append(parent.filename)
             try:
@@ -913,25 +958,39 @@ class MetadataService:
             for child_id in child_ids:
                 pending.append((parent.id, child_id, dep_type))
 
-        edges_added, edges_existing = self.upsert_dependency_edges(
-            session, product.id, pending
-        )
+        return pending, missing, scanned
 
-        next_offset = start + len(chunk)
-        done = next_offset >= total
-        if done:
-            # Strip false parents of project-root magnets after the full graph exists.
-            self.prune_assembly_name_magnets(session, product.id)
-        return RebuildWhereUsedResponse(
-            parents_total=total,
-            parents_processed=len(chunk),
-            next_offset=next_offset,
-            done=done,
-            edges_added=edges_added,
-            edges_existing=edges_existing,
-            parents_missing_vault=missing,
-            parents_scanned=scanned,
+    def refresh_where_used_for_parents(
+        self,
+        session: Session,
+        product: Product,
+        parents: list[EngineeringObject],
+    ) -> int:
+        """Re-read the links of just these assemblies / drawings (after a check-in or a revert).
+
+        Cheap: it reads only their own vault bytes, never the whole product. It does nothing
+        until the product's Where Used has been built once (a partial index would read as a
+        complete one). Returns the number of links the files now have.
+        """
+        wanted = [row for row in parents if needs_open_dependencies(row.object_type, row.filename)]
+        if not wanted or self._workspaces is None:
+            return 0
+        if not self.where_used_index_present(session, product.id):
+            return 0
+        objects = self._objects.list_objects(session, product.id)
+        pending, _missing, _scanned = self._where_used_edges(product, objects, wanted)
+        session.execute(
+            delete(Dependency).where(
+                Dependency.product_id == product.id,
+                Dependency.parent_object_id.in_([row.id for row in wanted]),
+                Dependency.dependency_type.in_(
+                    (DependencyType.ASSEMBLY_MEMBER.value, DependencyType.DRAWING_MODEL.value)
+                ),
+            )
         )
+        session.flush()
+        self.upsert_dependency_edges(session, product.id, pending)
+        return len(pending)
 
     def _resolve_version(
         self,
