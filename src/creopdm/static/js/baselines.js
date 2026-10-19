@@ -178,10 +178,28 @@ window.__creopdmModules.baselines = {
      * toolbar gives way to the one button that applies (Details), on other tabs nothing of
      * this view leaks out. The open baseline is remembered while another tab is shown.
      */
+    // Pills that mean nothing for a baseline's files: a baseline has no folder rows, checkouts or
+    // local edits, and the "N Baselines" chip points at the list we are in.
+    const PILLS_NOT_FOR_BASELINE_FILES = ["folders", "modified", "checked_out"];
+
+    function syncPills(on) {
+      document.querySelectorAll("#metric-filters .metric").forEach((btn) => {
+        const key = btn.getAttribute("data-filter") || "";
+        if (!PILLS_NOT_FOR_BASELINE_FILES.includes(key)) return;
+        // A filter left on would hide every baseline row: switch it off before hiding the pill.
+        if (on && (btn.getAttribute("data-mode") || "off") !== "off") btn.click();
+        const item = btn.closest("li");
+        if (item) item.hidden = on;
+      });
+      const chip = $("#baselines-pill-item");
+      if (chip) chip.hidden = on || Number($("#baselines-pill-count")?.textContent || 0) === 0;
+    }
+
     function syncBrowseChrome() {
       const on = Boolean(browseUuid) && baselinesTabActive();
       showBrowse(on);
       document.body.classList.toggle("is-baseline-browse", on);
+      syncPills(on);
       // The list of baselines has no files to filter or act on: no pills, no Files toolbar.
       document.body.classList.toggle("is-baseline-list", baselinesTabActive() && !browseUuid);
       setBaselineParam(on ? browseUuid : "");

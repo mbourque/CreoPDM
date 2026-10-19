@@ -287,3 +287,17 @@ def test_a_new_page_starts_without_the_baseline_view_classes():
     app = _read("src", "creopdm", "static", "js", "app.js")
     boot = app.split("window.__creopdmBoot = function creopdmBoot", 1)[1][:600]
     assert 'classList.remove("is-baseline-browse", "is-baseline-list")' in boot
+
+
+def test_an_open_baseline_shows_only_the_pills_that_work_on_its_files():
+    module = _read("src", "creopdm", "static", "js", "baselines.js")
+    assert 'const PILLS_NOT_FOR_BASELINE_FILES = ["folders", "modified", "checked_out"];' in module
+    painter = module.split("function syncPills", 1)[1].split("function syncBrowseChrome", 1)[0]
+    assert "item.hidden = on" in painter and "chip.hidden = on ||" in painter
+    # a filter left on is switched off first, so it cannot hide every baseline row
+    assert 'btn.click()' in painter
+    assert "syncPills(on);" in module
+    # the pills that do work are the Files-page ones (types, documents, other, top level assemblies)
+    app = _read("src", "creopdm", "templates", "app.html")
+    for key in ("files", "cad_models", "creo_parts", "assemblies", "drawings", "documents", "other", "top_level_assemblies"):
+        assert f'data-filter="{key}"' in app, key
