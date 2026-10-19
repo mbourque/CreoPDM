@@ -12,7 +12,7 @@ The user message has labeled blocks:
 Never swap OLD and NEW. Never claim a revision is missing when both outlines are present.
 
 Prefer Computed differences when present; do not contradict it.
-Every Computed differences section that is not "(none)" must appear in your comment — including Components removed, Components added, Components quantity changed, Features removed/added, Dimensions removed/changed/added, Material changed, Parameters removed/changed/added, Mass properties, Simplified representations, Assembly constraints, and Relations.
+Every Computed differences section that is not "(none)" must appear in your comment — including Components removed, Components added, Components quantity changed, Features removed/added, Insert mode and the features it suppressed, Features status changed, Dimensions removed/changed/added, Material changed, Parameters removed/changed/added, Mass properties, Simplified representations, Assembly constraints, and Relations.
 Do not stop after the simplified-reps, constraints, relations, or material sentence if other sections list real changes.
 
 Never say “snapshot,” “block,” “capture,” “recorded,” or “metadata.” Prefer everyday wording (added, removed, changed, active, increased, decreased).
@@ -70,6 +70,13 @@ Features:
 - If a feature instance was removed and its dims disappear, say the feature removal first; fold those dims into that sentence, still with value and units. Do not replace the removal with a bare-symbol list.
 - Patterns: PATTERN in OLD only = deleted; NEW only = added. Placeholder members are already collapsed — never list Feature NNNN / IFX_ID_*. Say “hole pattern” only if the outlines indicate holes. If any PATTERN add/delete exists, mention it.
 
+Insert mode and feature status (PART / ASSEMBLY):
+- "Insert mode on: after X" means the model tree was put into Insert mode after feature X: every feature after X is suppressed BY INSERT MODE, not by the engineer. "Insert mode off" means it was turned off. "Insert mode moved: after X (was after Y)" means the insert point moved.
+- "Features suppressed by insert mode" lists the features that became suppressed because of it. Say so in one sentence that names the insert point and lists those features with their exact outline labels. A count of those features is allowed here ("17 features").
+- Never say the engineer suppressed, deleted or removed those features, and never treat them as Features removed. They still exist; they are only suppressed by insert mode.
+- "Features status changed" lines such as HOLE_1 (20): active → suppressed mean the engineer suppressed (or resumed, or the status became failed) that feature. Name it exactly and say suppressed / resumed / failed.
+- When Insert mode changed and the mass properties, volume or surface area also changed, say the mass properties changed and that they follow the suppressed (or resumed) features, in one clause. Never invent the cause when no insert mode or status line is listed, and never invent numbers.
+
 Dimensions:
 - Walk by symbol for value/tolerance changes on symbols present in both.
 - Dimensions added (on NEW only, including when OLD Dimensions is (none)): repeat every line with its value and units. Do not shorten them to symbol names.
@@ -121,7 +128,7 @@ Relations (parts / assemblies):
 
 Hard bans:
 - Never invent feature removals/additions.
-- Never say “numerous/several features,” “unnamed patterns,” “placeholder features,” “reducing the feature count,” or any feature-count summary.
+- Never say “numerous/several features,” “unnamed patterns,” “placeholder features,” “reducing the feature count,” or any feature-count summary (the one exception: how many features Insert mode suppressed).
 - Never write “Feature 12345” or list placeholder member names.
 - Never claim “no significant dimension changes” if any dimension value or tolerance differs.
 - Never mention a dimension symbol without the value and units shown on that outline line. “with dimensions d0, d1, d2, d4, and d5” is invalid.
@@ -136,6 +143,8 @@ Hard bans:
 Compose when applicable (this order), only steps with real diffs:
 1. Components removed / added / quantity changed (from Computed differences)
 2. Feature removals/additions/renames (exact outline labels, with each added or removed feature’s dimensions, values, and units in that sentence)
+2a. Insert mode on / off / moved, with the features it suppressed (exact labels)
+2b. Features status changed (suppressed / resumed / failed)
 3. Pattern add/delete
 4. Remaining same-symbol dimension value/tolerance changes
 5. Material clear/assign/change (fold PTC_* material params into that sentence)
@@ -158,6 +167,7 @@ Before returning, verify:
 - Every sentence is backed by an OLD→NEW diff in the outlines or Computed differences.
 - No invented Extrude/feature removal when Features lists match and Computed differences does not list Features removed.
 - Every real Features removed/added and PATTERN add/delete that matters is mentioned.
+- When Computed differences has Insert mode lines, the comment names the insert point and the features it suppressed, and does not call them removed or user-suppressed. When it has Features status changed lines, each feature is mentioned.
 - No bare symbol list standing in for a dimension that has a value (added, removed, or changed).
 - Every added feature’s dimensions include the value and units from the outline, not only the feature name.
 - Every dimension symbol in the comment is followed by “=” and a unit. If any symbol is not, rewrite before returning.

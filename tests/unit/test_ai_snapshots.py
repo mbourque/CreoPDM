@@ -686,6 +686,13 @@ def test_snapshot_tab_template_and_docs():
     assert "include only the dimensions whose owner is that feature" in prompt
     assert "with dimensions d0, d1, d2, d4, and d5" in prompt
     assert "without the value and units" in prompt
+    # Insert mode and per-feature status: the model is told what they mean and not to call
+    # insert-mode-suppressed features removed or user-suppressed.
+    assert "Insert mode and feature status" in prompt
+    assert "suppressed BY INSERT MODE, not by the engineer" in prompt
+    assert "never treat them as Features removed" in prompt
+    assert "Features status changed" in prompt and "2a. Insert mode on / off / moved" in prompt
+    assert "the one exception: how many features Insert mode suppressed" in prompt
     assert "overflow-x: hidden" in css
     assert ".ai-snapshot-result-para" in css
     assert 'div class="ai-snapshot-result-body"' in html or "<div class=\"ai-snapshot-result-body\"" in html
