@@ -254,3 +254,20 @@ def test_the_baseline_tables_show_the_type_label():
     module = _read("src", "creopdm", "static", "js", "baselines.js")
     assert "function typeText(m)" in module and "m.type_label" in module
     assert module.count("typeText(m)") >= 3  # browse rows, dialog rows, sorting
+
+
+@requires_git
+def test_the_type_label_never_reads_the_live_version_metadata(auth_client, auth_ctx):
+    """A member with no copy gets the usual type, even if the version has metadata today."""
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client, "Gearbox")
+    shaft = objects["shaft.prt"]
+    baseline = _create(auth_client, product, "Design Review 01").json()  # no metadata collected yet
+    before = {m["filename"]: m for m in auth_client.get(f"/api/baselines/{baseline['uuid']}/members").json()}
+    posted = auth_client.post(
+        f"/api/objects/{shaft['uuid']}/creo-metadata",
+        json={"identity": {"model_type": "PART", "model_role": "SHEETMETAL"}},
+    )
+    assert posted.status_code == 200, posted.text
+    after = {m["filename"]: m for m in auth_client.get(f"/api/baselines/{baseline['uuid']}/members").json()}
+    assert after["shaft.prt"]["type_label"] == before["shaft.prt"]["type_label"]

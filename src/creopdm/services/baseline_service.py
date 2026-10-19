@@ -234,7 +234,7 @@ class BaselineService:
                     "object_type": member.object_type,
                     # The Type column of the Files list (PART, SHEETMETAL, a custom label …), read
                     # from the metadata the baseline copied, so it never moves with later collects.
-                    "type_label": self._type_label(member, version, names, extensions),
+                    "type_label": self._type_label(member, names, extensions),
                     # Everything else from the exact captured version row.
                     "revision": version.revision,
                     "iteration": version.iteration,
@@ -251,7 +251,12 @@ class BaselineService:
         return out
 
     @staticmethod
-    def _type_label(member: BaselineMember, version: ObjectVersion, names: dict, extensions: dict) -> str:
+    def _type_label(member: BaselineMember, names: dict, extensions: dict) -> str:
+        """The Files list's Type, from the metadata copied when the baseline was made ONLY.
+
+        Never from the live version row: collecting that version again later must not move what a
+        baseline shows. A member with no copy gets the file's usual type.
+        """
         from creopdm.utils.classify import display_type_label
         from creopdm.utils.creo_model_class import files_list_type_from_identity_json
 
@@ -262,8 +267,6 @@ class BaselineService:
             except (ValueError, AttributeError):
                 identity = None
             identity_json = json.dumps(identity) if identity else None
-        if identity_json is None and not member.metadata_json:
-            identity_json = version.identity_json  # a baseline made before metadata was copied
         meta_type = files_list_type_from_identity_json(identity_json) if identity_json else ""
         return meta_type or display_type_label(
             member.filename, member.object_type or "", names=names, extensions=extensions
