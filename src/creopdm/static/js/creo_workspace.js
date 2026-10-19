@@ -459,8 +459,27 @@ window.__creopdmModules.creo_workspace = {
       const detail = String(failed.find((target) => target.detail)?.detail || "").trim();
       const why = detail ? ` (${detail.slice(0, 160)})` : "";
       // Files from a newer Creo: the reason IS the explanation, without the generic wording.
-      const text = failed.every((target) => target.newerRelease)
-        ? `Metadata was not collected for ${shown}${more}: ${detail}`
+      let newerText = "";
+      if (failed.every((target) => target.newerRelease)) {
+        // One sentence for all of them (not the first file's reason): which releases, which session.
+        const saved = new Set();
+        const running = new Set();
+        failed.forEach((target) => {
+          const m = /saved in Creo (\d+(?:\.\d+)*),? but this Creo session is (\d+(?:\.\d+)*)/i.exec(target.detail || "");
+          if (m) {
+            saved.add(m[1]);
+            running.add(m[2]);
+          }
+        });
+        newerText =
+          saved.size && running.size === 1
+            ? `Metadata was not collected for ${shown}${more}: ${failed.length > 1 ? "these models were" : "this model was"} ` +
+              `saved in Creo ${[...saved].join(" / ")}, but this Creo session is ${[...running][0]}. ` +
+              "A model saved in a newer Creo cannot be opened in an older one."
+            : `Metadata was not collected for ${shown}${more}: ${detail}`;
+      }
+      const text = newerText
+        ? newerText
         : `Metadata was not collected for ${shown}${more}. ${reason}${why}${hint} Collect it again once that is fixed.`;
       showError($("#toolbar-error"), text);
       // A reload right after Add / Check in would clear the message: keep it for the next page,

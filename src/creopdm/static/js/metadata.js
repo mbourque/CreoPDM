@@ -835,7 +835,11 @@ window.__creopdmModules.metadata = {
           }
         }
         const doneBits = [`${captured} saved`];
-        if (failed) doneBits.push(`${failed} could not be read`);
+        // Files from a newer Creo are told apart from files that simply could not be read.
+        const newerCount = failedFiles.filter((item) => item.newerRelease).length;
+        const unreadable = Math.max(0, failed - newerCount);
+        if (unreadable) doneBits.push(`${unreadable} could not be read`);
+        if (newerCount) doneBits.push(`${newerCount} saved in a newer Creo than this session`);
         if (expectedSkipped) doneBits.push(`${expectedSkipped} harness skipped`);
         if (leftLocal) {
           doneBits.push(

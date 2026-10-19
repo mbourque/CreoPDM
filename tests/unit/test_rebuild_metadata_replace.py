@@ -82,7 +82,7 @@ def test_rebuild_replaces_per_model_retries_and_names_what_could_not_be_read():
     assert "replace: Boolean(state.replace)," in meta
     # one more read for the failures before the finish line, then they are named
     assert "Reading failed files again…" in meta
-    assert "`${failed} could not be read`" in meta and "noteCollectFailures(failedFiles, false)" in meta
+    assert "`${unreadable} could not be read`" in meta and "noteCollectFailures(failedFiles, false)" in meta
     assert "A model that cannot be read keeps its previous metadata." in meta
     page = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     assert "a model that cannot be read keeps what it had" in page

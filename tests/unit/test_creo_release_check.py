@@ -82,7 +82,11 @@ def test_the_notice_for_files_from_a_newer_creo_gives_the_reason_without_filler(
     shared = _read("creo_workspace.js")
     body = shared.split("function noteCollectFailures", 1)[1].split("async function pushCreoMetadataForItems", 1)[0]
     assert "failed.every((target) => target.newerRelease)" in body
-    assert "Metadata was not collected for ${shown}${more}: ${detail}" in body
+    # one sentence for all of them: the releases and the session, not only the first file's reason
+    assert '${failed.length > 1 ? "these models were" : "this model was"}' in body
+    assert "but this Creo session is ${[...running][0]}" in body
+    meta = _read("metadata.js")
+    assert "saved in a newer Creo than this session" in meta and "${unreadable} could not be read" in meta
 
 
 def test_the_release_reaches_the_pages_that_need_it():
