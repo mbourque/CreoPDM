@@ -75,7 +75,7 @@ def test_a_name_browses_and_details_opens_the_dialog():
 
 def test_a_link_with_a_baseline_opens_its_files():
     app = _read("src", "creopdm", "static", "js", "app.js")
-    assert 'new URLSearchParams(window.location.search).get("baseline")' in app
+    assert 'params.get("baseline")' in app and 'new URLSearchParams(window.location.search)' in app
     assert "m.browseBaseline?.(linkedBaseline)" in app
     # the pill opens the tab, which keeps whichever baseline is open
     assert 'data-tab-link' in app and "loadBaselinesTab?.()" in app
@@ -124,3 +124,40 @@ def test_browse_pane_styles_exist():
     for selector in (".baseline-crumbs", ".baseline-browse-banner", "#baseline-browse-table th[data-sort]",
                      '#baseline-browse-table th[aria-sort="ascending"]::after'):
         assert selector in css, selector
+
+
+@requires_git
+def test_the_version_page_has_breadcrumbs_back_to_the_baseline(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product, objects = _product(auth_client, "Gearbox")
+    baseline = _create(auth_client, product, "Design Review 01").json()
+    members = auth_client.get(f"/api/baselines/{baseline['uuid']}/members").json()
+    member = members[0]
+    base = f"/products/{product['uuid']}/objects/{member['object_uuid']}/versions/{member['version_uuid']}"
+
+    plain = auth_client.get(base).text
+    assert 'id="crumb-baseline"' not in plain  # opened from elsewhere: the old breadcrumb
+
+    page = auth_client.get(base, params={"baseline": baseline["uuid"]}).text
+    assert f'href="/?product={product["uuid"]}&amp;tab=baselines"' in page and 'id="crumb-baselines"' in page
+    assert f'tab=baselines&amp;baseline={baseline["uuid"]}' in page and "Design Review 01" in page
+    # a baseline of another product, or an unknown one, adds no link
+    other, _ = _product(auth_client, "Other", ("a.prt",))
+    other_baseline = _create(auth_client, other, "Other review").json()
+    wrong = auth_client.get(base, params={"baseline": other_baseline["uuid"]}).text
+    assert 'id="crumb-baseline"' not in wrong
+    assert 'id="crumb-baseline"' not in auth_client.get(base, params={"baseline": "nope"}).text
+
+
+def test_the_open_baseline_is_remembered_and_rows_link_back():
+    module = _read("src", "creopdm", "static", "js", "baselines.js")
+    assert 'const REMEMBER_KEY = "creopdm.openBaseline";' in module
+    assert "rememberBaseline(baselineUuid);" in module and 'rememberBaseline("");' in module
+    assert "const remembered = rememberedBaseline();" in module and "void browseBaseline(remembered);" in module
+    assert "?baseline=${encodeURIComponent(browseUuid)}" in module  # Details carries the baseline
+    assert "mod.showBaselineList" in module
+    app = _read("src", "creopdm", "static", "js", "app.js")
+    assert 'params.get("tab") === "baselines" && !linkedBaseline' in app and "m.showBaselineList?.()" in app
+    page = _read("src", "creopdm", "templates", "app.html")
+    footer = page[page.index('id="baseline-browse-file-details"') - 80 : page.index('id="baseline-browse-file-details"')]
+    assert "btn-primary" not in footer  # a plain button, like the Files toolbar

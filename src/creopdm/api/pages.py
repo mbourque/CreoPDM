@@ -773,6 +773,16 @@ def object_version_detail(
         )
     current = obj.current_version
     display = f"{version.revision}.{version.iteration}"
+    # Opened from a baseline's file list: the breadcrumb leads back to that baseline's files.
+    from_baseline = None
+    baseline_uuid = (request.query_params.get("baseline") or "").strip()
+    if baseline_uuid and caps_dict(request).get("can_view_baselines"):
+        try:
+            candidate = ctx.baselines.get(db, baseline_uuid)
+            if candidate.product_id == product.id:
+                from_baseline = {"uuid": candidate.uuid, "name": candidate.name}
+        except Exception:
+            from_baseline = None
     source = db.get(ObjectVersion, version.created_from_version_id) if version.created_from_version_id else None
     try:
         identity = json.loads(version.identity_json) if version.identity_json else {}
@@ -801,6 +811,7 @@ def object_version_detail(
             .title(),
             "created_from": f"{source.revision}.{source.iteration}" if source is not None else "",
             "identity_rows": identity_rows,
+            "from_baseline": from_baseline,
         },
     )
 

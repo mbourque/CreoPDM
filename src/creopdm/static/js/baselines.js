@@ -102,8 +102,12 @@ window.__creopdmModules.baselines = {
     }
 
     async function loadBaselinesTab() {
-      // An open baseline stays open (also through the "N Baselines" pill): only the breadcrumb
-      // returns to the list.
+      // An open baseline stays open (also through the "N Baselines" pill, and after Details or
+      // Back brought us to a fresh page): only the breadcrumb returns to the list.
+      if (!browseUuid) {
+        const remembered = rememberedBaseline();
+        if (remembered) void browseBaseline(remembered);
+      }
       const pid = productId();
       const body = $("#baselines-table tbody");
       if (!pid || !body) return;
@@ -196,7 +200,30 @@ window.__creopdmModules.baselines = {
     }
 
     /** Back to the list: only the breadcrumb does this. */
+    const REMEMBER_KEY = "creopdm.openBaseline";
+
+    function rememberBaseline(uuid) {
+      try {
+        const all = JSON.parse(window.sessionStorage.getItem(REMEMBER_KEY) || "{}");
+        if (uuid) all[productId()] = uuid;
+        else delete all[productId()];
+        window.sessionStorage.setItem(REMEMBER_KEY, JSON.stringify(all));
+      } catch {
+        /* private mode / blocked storage: the address still carries it */
+      }
+    }
+
+    function rememberedBaseline() {
+      try {
+        const all = JSON.parse(window.sessionStorage.getItem(REMEMBER_KEY) || "{}");
+        return String(all[productId()] || "");
+      } catch {
+        return "";
+      }
+    }
+
     function leaveBrowse() {
+      rememberBaseline("");
       browseUuid = "";
       browseData = [];
       browseInfo = null;
@@ -245,7 +272,7 @@ window.__creopdmModules.baselines = {
             browseInfo?.product_uuid && m.object_uuid && m.version_uuid
               ? `/products/${encodeURIComponent(browseInfo.product_uuid)}/objects/${encodeURIComponent(
                   m.object_uuid
-                )}/versions/${encodeURIComponent(m.version_uuid)}`
+                )}/versions/${encodeURIComponent(m.version_uuid)}?baseline=${encodeURIComponent(browseUuid)}`
               : "";
           const icon = shell.typeIconHtml ? shell.typeIconHtml({ objectType: type, extension: ext }) : "";
           return `<tr class="object-row baseline-file-row" data-uuid="${esc(m.object_uuid)}" data-version="${esc(
@@ -284,6 +311,7 @@ window.__creopdmModules.baselines = {
       if (!baselineUuid) return;
       browseUuid = baselineUuid;
       openBaselineUuid = baselineUuid;
+      rememberBaseline(baselineUuid);
       browseData = [];
       browseEdges = [];
       browseInfo = null;
@@ -1264,6 +1292,10 @@ window.__creopdmModules.baselines = {
     mod.openBaselineMembers = openBaselineMembers;
     mod.browseBaseline = browseBaseline;
     mod.syncBrowseChrome = syncBrowseChrome;
+    mod.showBaselineList = () => {
+      leaveBrowse();
+      return loadBaselinesTab();
+    };
     mod.loadBaselinesTab = loadBaselinesTab;
     mod.openCreateBaselineDialog = openCreateBaselineDialog;
 

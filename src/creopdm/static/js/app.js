@@ -7821,11 +7821,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   // A link with ?baseline=<uuid> (and a refresh while browsing one) opens that baseline's files.
   {
-    const linkedBaseline = new URLSearchParams(window.location.search).get("baseline");
+    const params = new URLSearchParams(window.location.search);
+    const linkedBaseline = params.get("baseline");
+    // ?tab=baselines alone (the "Baselines" breadcrumb) means the list of baselines.
+    const wantList = params.get("tab") === "baselines" && !linkedBaseline;
     const baselinesTab = document.querySelector('.tabs .tab[data-tab="baselines"]');
-    if (linkedBaseline && baselinesTab) {
+    if ((linkedBaseline || wantList) && baselinesTab) {
       baselinesTab.click();
-      void initJobModule("baselines", window.__creopdmShell).then((m) => m.browseBaseline?.(linkedBaseline));
+      void initJobModule("baselines", window.__creopdmShell).then((m) =>
+        linkedBaseline ? m.browseBaseline?.(linkedBaseline) : m.showBaselineList?.()
+      );
     }
   }
 

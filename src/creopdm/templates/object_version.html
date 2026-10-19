@@ -5,9 +5,17 @@
   <nav class="crumb">
     <a href="/?product={{ product.uuid }}">{{ product.name }}</a>
     <span>/</span>
+    {% if from_baseline %}
+    <a href="/?product={{ product.uuid }}&amp;tab=baselines" id="crumb-baselines">Baselines</a>
+    <span>/</span>
+    <a href="/?product={{ product.uuid }}&amp;tab=baselines&amp;baseline={{ from_baseline.uuid }}" id="crumb-baseline">{{ from_baseline.name }}</a>
+    <span>/</span>
+    <span>{{ version.filename or object.filename }} {{ display }}</span>
+    {% else %}
     <a href="/products/{{ product.uuid }}/objects/{{ object.uuid }}">{{ object.filename }}</a>
     <span>/</span>
     <span>{{ display }}</span>
+    {% endif %}
   </nav>
 
   <header class="detail-head">
