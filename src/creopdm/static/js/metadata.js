@@ -36,6 +36,7 @@ window.__creopdmModules.metadata = {
     const materializeCheckedOutToAgentCache = shell.materializeCheckedOutToAgentCache;
     const gatherCreoMetadataForFilename = shell.gatherCreoMetadataForFilename;
     const noteCollectFailures = shell.noteCollectFailures;
+    const newerReleaseMessage = shell.newerReleaseMessage;
     const ensureToolkitAgentReady = shell.ensureToolkitAgentReady;
     const postAiSnapshotFromGather = shell.postAiSnapshotFromGather;
     const reconcileProductLifecycleChrome = shell.reconcileProductLifecycleChrome;
@@ -500,6 +501,9 @@ window.__creopdmModules.metadata = {
       // Bulk Collect: tip-only prepare, no empty-session probe, defer Erase, skip
       // feature.name reads (Open session capture fills renamed Features later).
       const opts = options && typeof options === "object" ? options : {};
+      // A model saved in a newer Creo than this session cannot be read: no download, no Toolkit call.
+      const tooNew = await newerReleaseMessage(target.filename, target.creoRelease);
+      if (tooNew) return { ok: false, reason: "newer_release", detail: tooNew, newerRelease: true };
       try {
         let filePath = looksLikeLocalWindowsPath(target.path) ? target.path : "";
         if (!filePath) {
@@ -751,7 +755,7 @@ window.__creopdmModules.metadata = {
             } else {
               failed += 1;
               lastReason = detail;
-              failedFiles.push({ filename: target.filename, detail });
+              failedFiles.push({ filename: target.filename, detail, newerRelease: Boolean(result.newerRelease) });
             }
             // Lifecycle / validation: stop immediately — do not Creo-walk the rest.
             const locked =
@@ -798,7 +802,7 @@ window.__creopdmModules.metadata = {
               break;
             }
             const target = targets.find((item) => item.filename === again[i].filename);
-            if (!target) {
+            if (!target || again[i].newerRelease) {
               failedFiles.push(again[i]);
               continue;
             }
@@ -963,6 +967,7 @@ window.__creopdmModules.metadata = {
           path: "",
           relativePath: String(row.relative_path || "").trim(),
           versionId: String(row.current_version?.uuid || row.version_id || "").trim(),
+          creoRelease: String(row.creo_release || row.current_version?.creo_release || "").trim(),
           // Lets Collect tell a numbered copy of the vault tip from a real local edit.
           contentHash: String(row.current_version?.content_hash || "").trim().toLowerCase(),
         }))

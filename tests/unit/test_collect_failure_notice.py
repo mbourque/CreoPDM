@@ -45,7 +45,7 @@ def test_no_stub_identity_is_saved_for_an_unreadable_file():
 def test_a_manual_collect_names_the_files_it_skipped_with_the_toolkit_reason():
     metadata = (ROOT / "src" / "creopdm" / "static" / "js" / "metadata.js").read_text(encoding="utf-8")
     assert "const failedFiles = [];" in metadata
-    assert "failedFiles.push({ filename: target.filename, detail });" in metadata
+    assert "failedFiles.push({ filename: target.filename, detail, newerRelease: Boolean(result.newerRelease) });" in metadata
     assert "if (failedFiles.length) await noteCollectFailures(failedFiles, false);" in metadata
     assert "const noteCollectFailures = shell.noteCollectFailures;" in metadata
     # harness (expected) skips and files left for Check In are not failures

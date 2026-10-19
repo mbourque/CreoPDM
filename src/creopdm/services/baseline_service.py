@@ -235,6 +235,7 @@ class BaselineService:
                     # The Type column of the Files list (PART, SHEETMETAL, a custom label …), read
                     # from the metadata the baseline copied, so it never moves with later collects.
                     "type_label": self._type_label(member, names, extensions),
+                    "creo_release": version.creo_release,
                     # Everything else from the exact captured version row.
                     "revision": version.revision,
                     "iteration": version.iteration,

@@ -348,6 +348,8 @@ class BaselineMemberResponse(BaseModel):
     object_type: str | None = None
     # What the Files list shows in its Type column for this file.
     type_label: str = ""
+    # The Creo release this exact version was saved in (a newer Creo is needed to open it).
+    creo_release: str | None = None
     revision: str
     iteration: int
     display_version: str

@@ -1,3 +1,24 @@
+/**
+ * Creo release strings (``13.4.1.0``) and the rule "a model saved in a newer Creo cannot be opened
+ * in an older one". Kept at file level so it can be tested without a browser.
+ */
+window.__creopdmCreoRelease = (function () {
+  function parse(text) {
+    const match = /(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?/.exec(String(text || ""));
+    if (!match) return null;
+    return [match[1], match[2], match[3], match[4]].map((part) => (part === undefined ? 0 : Number(part)));
+  }
+  /** True when the file's release is later than the session's in major or minor (13.4 vs 13.3). */
+  function newerThanSession(fileRelease, sessionRelease) {
+    const file = parse(fileRelease);
+    const session = parse(sessionRelease);
+    if (!file || !session) return false; // unknown on either side: never block
+    if (file[0] !== session[0]) return file[0] > session[0];
+    return file[1] > session[1];
+  }
+  return { parse, newerThanSession };
+})();
+
 window.__creopdmModules = window.__creopdmModules || {};
 window.__creopdmModules.creo_workspace = {
   /**
@@ -163,6 +184,25 @@ window.__creopdmModules.creo_workspace = {
     // Toolkit /health once per ~60s — Collect all was paying this every tip.
     let _toolkitHealthOkUntil = 0;
 
+    let _creoSessionRelease = "";
+
+    /**
+     * "" when the file can be used in this Creo session, otherwise why not (a model saved in a
+     * newer release cannot be opened in an older one). Nothing is blocked when either release is
+     * unknown, so an older Toolkit behaves as before.
+     */
+    async function newerReleaseMessage(filename, fileRelease) {
+      const saved = String(fileRelease || "").trim();
+      if (!saved) return "";
+      await ensureToolkitAgentHealthy();
+      const session = _creoSessionRelease;
+      if (!window.__creopdmCreoRelease.newerThanSession(saved, session)) return "";
+      return (
+        `${filename || "The file"} was saved in Creo ${saved}, but this Creo session is ${session}. ` +
+        "A model saved in a newer Creo cannot be opened in an older one."
+      );
+    }
+
     async function ensureToolkitAgentHealthy(options) {
       // force: Collect all / Rebuild must not trust a cached "ok" (the agent may have stopped).
       if (options && options.force) _toolkitHealthOkUntil = 0;
@@ -199,6 +239,10 @@ window.__creopdmModules.creo_workspace = {
           };
         }
         _toolkitHealthOkUntil = Date.now() + 60000;
+        // The Toolkit reports the running Creo release in /health ("creo": {"release": "13.4.1.0"});
+        // an older Toolkit does not, and then nothing is ever blocked on release.
+        const reported = String(healthBody?.toolkit?.creo?.release || "").trim();
+        if (reported) _creoSessionRelease = reported;
         return { ok: true };
       } catch (exc) {
         _toolkitHealthOkUntil = 0;
@@ -299,6 +343,11 @@ window.__creopdmModules.creo_workspace = {
      */
     async function openBaselineVersion(info, member) {
       if (!info || !member || !member.filename) return "That file is not part of the baseline.";
+      if (/\.(prt|asm|drw)(?:\.\d+)?$/i.test(member.filename) && shell.hostedCreoJS?.() && shell.creoOpenMode?.() === "embedded") {
+        // Before anything is downloaded: a model from a newer Creo cannot open in this session.
+        const tooNew = await newerReleaseMessage(member.filename, member.creo_release);
+        if (tooNew) return tooNew;
+      }
       const agent = await probeCreoAgent();
       if (!agent) {
         return "Start creopdm-agent on this PC so the baseline's files can be downloaded before opening.";
@@ -400,7 +449,10 @@ window.__creopdmModules.creo_workspace = {
       // A manual Collect knows the Toolkit's own reason for the first file: show it.
       const detail = String(failed.find((target) => target.detail)?.detail || "").trim();
       const why = detail ? ` (${detail.slice(0, 160)})` : "";
-      const text = `Metadata was not collected for ${shown}${more}. ${reason}${why}${hint} Collect it again once that is fixed.`;
+      // Files from a newer Creo: the reason IS the explanation, without the generic wording.
+      const text = failed.every((target) => target.newerRelease)
+        ? `Metadata was not collected for ${shown}${more}: ${detail}`
+        : `Metadata was not collected for ${shown}${more}. ${reason}${why}${hint} Collect it again once that is fixed.`;
       showError($("#toolbar-error"), text);
       // A reload right after Add / Check in would clear the message: keep it for the next page,
       // but never past the moment it was meant for.
@@ -438,6 +490,7 @@ window.__creopdmModules.creo_workspace = {
               item?.relativePath || item?.relative_path || ""
             ).trim(),
             versionId: String(item?.version_id || item?.current_version?.uuid || "").trim(),
+            creoRelease: String(item?.creo_release || item?.current_version?.creo_release || "").trim(),
           }))
           .filter((item) => item.uuid && item.filename && isCreoMetadataCandidate(item.filename))
       );
@@ -483,6 +536,13 @@ window.__creopdmModules.creo_workspace = {
           publishBusyMessage(metadataBusyText(i + 1, targets.length, target.filename));
         }
         let snapshot = null;
+        // A model saved in a newer Creo than this session cannot be read: say so, do not try.
+        const tooNew = await newerReleaseMessage(target.filename, target.creoRelease);
+        if (tooNew) {
+          target.detail = tooNew;
+          target.newerRelease = true;
+          continue;
+        }
         // Open (sessionOnly / wait rounds): model is already in Creo — gather by
         // tip name only. Add / Check In / batch: go straight to path= (one /collect).
         // Empty-session probes logged retrieved=0 total=0ms and doubled every tip.
@@ -896,6 +956,7 @@ window.__creopdmModules.creo_workspace = {
     mod.pushCreoMetadataForItems = pushCreoMetadataForItems;
     mod.noteCollectFailures = noteCollectFailures;
     mod.openBaselineVersion = openBaselineVersion;
+    mod.newerReleaseMessage = newerReleaseMessage;
     mod.captureCreoMetadataAfterOpen = captureCreoMetadataAfterOpen;
     mod.rematerializeCheckedInLocalTips = rematerializeCheckedInLocalTips;
     mod.materializeViaAgent = materializeViaAgent;

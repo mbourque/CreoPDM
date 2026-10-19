@@ -4858,6 +4858,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return (await withCreoWorkspace()).openBaselineVersion(info, member);
   }
 
+  /** "" = this file can be used in the running Creo; otherwise why not (saved in a newer Creo). */
+  async function newerReleaseMessage(filename, fileRelease) {
+    if (!String(fileRelease || "").trim() || !canGatherCreoMetadata()) return "";
+    return (await withCreoWorkspace()).newerReleaseMessage(filename, fileRelease);
+  }
+
   async function noteCollectFailures(failed, fromOpen) {
     if (!Array.isArray(failed) || !failed.length) return;
     return (await withCreoWorkspace()).noteCollectFailures(failed, fromOpen);
@@ -5073,6 +5079,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           relative_path: item.relative_path || item.relativePath || "",
           version_id: item.version_id || "",
           current_version: item.current_version || null,
+          creo_release: item.creo_release || "",
         }));
     }
     if (result.uuid && result.filename) {
@@ -8317,6 +8324,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     refreshTabMetrics,
     noteCollectFailures,
     openBaselineVersion,
+    newerReleaseMessage,
     agentBase,
     agentAuthHeaders,
     agentPdmAuth,

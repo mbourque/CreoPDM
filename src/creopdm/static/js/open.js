@@ -12,6 +12,7 @@ window.__creopdmModules.open = {
     const mod = window.__creopdmModules.open;
     const $ = shell.$;
     const showError = shell.showError;
+    const newerReleaseMessage = shell.newerReleaseMessage;
     const withBusy = shell.withBusy;
     const setBusyMessage = shell.setBusyMessage;
     const withTimeout = shell.withTimeout;
@@ -453,6 +454,16 @@ window.__creopdmModules.open = {
           ""
         );
         if (!prepared) return null;
+
+        // A model saved in a newer Creo than this session cannot be opened: say so up front,
+        // before anything is downloaded or Creo is asked to try.
+        if (prepared.creo_object || prepared.open_with_creo) {
+          const tooNew = await newerReleaseMessage(prepared.filename, prepared.creo_release);
+          if (tooNew) {
+            showError($("#toolbar-error"), tooNew);
+            return null;
+          }
+        }
 
         // Every Creo-openable model must land in the local workspace before open.
         let openSpec = prepared;
