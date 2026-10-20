@@ -705,7 +705,7 @@ Comments let people talk about a product, a file, one exact version or a baselin
 | **Ctrl+V** an image, drop a file on the box, or **Attach image** | Show a chip (thumbnail, name, size, ×); up to **4** images of 5 MB (PNG, JPEG, GIF, WebP); send waits for uploads | Accept SVG or corrupt files; keep EXIF/GPS metadata; serve an image to someone without product access |
 | **Right-click** a single file row | Offer **Comment…** (one file, and `comments.add`): open its Discussion tab with the comment box focused | Offer it for a folder, several rows or a role without `comments.add` |
 | Click an image in a comment | Open a larger view with Previous / Next and **Download** | |
-| **Reply** | Add to the same thread (one level) and tell the thread's author | Notify yourself |
+| **Reply** | Offered once someone else is in the thread (it started with someone else, or someone else replied); add to the same thread (one level) and tell the thread's author | Offer Reply on a thread only you have written; notify yourself |
 | **Edit** your comment | Mark it "edited"; add/remove images; tell only people newly mentioned | Let anyone else edit it |
 | **Delete** (your own, or anyone's with `comments.admin`) | Remove the text and images at once; leave "This comment was deleted." where replies remain | Remove the audit rows |
 | **Resolve** a thread (with an optional note) | Allowed for the thread's author, anyone mentioned in it, or `comments.resolve`; record who, when, the note and the version; tell the originator and everyone mentioned | Tell the person who resolved it |

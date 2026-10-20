@@ -111,6 +111,8 @@ def test_comments_module_wires_mentions_images_and_resolve():
     for needle in ('addEventListener("paste"', 'addEventListener("drop"', "Attach image", "MAX_IMAGES = 4", 'download'):
         assert needle in text, needle
     assert "/comment-attachments?filename=" in text and "5 * 1024 * 1024" in text
+    # Reply only once someone else is in the thread (not to your own lone comment)
+    assert "const othersTalked = live.some((c) => !c.can_edit)" in text
     # resolve / reopen / edit / delete / reply
     for act in ("resolve", "reopen", "edit", "delete", "reply"):
         assert f'data-act="{act}"' in text, act

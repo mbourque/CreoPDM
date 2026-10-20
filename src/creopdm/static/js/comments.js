@@ -495,7 +495,12 @@ window.__creopdmModules.comments = {
             `${thread.resolution_note ? ` — ${esc(thread.resolution_note)}` : ""}</div>`
           : "";
         const actions = [];
-        if (!thread.deleted && canAdd) actions.push(`<button type="button" class="cm-link" data-act="reply">Reply</button>`);
+        // Replying to a thread only you have written adds nothing (edit it instead): Reply appears
+        // once someone else is in the conversation. can_edit is true only for your own comments.
+        const othersTalked = live.some((c) => !c.can_edit);
+        if (!thread.deleted && canAdd && othersTalked) {
+          actions.push(`<button type="button" class="cm-link" data-act="reply">Reply</button>`);
+        }
         if (thread.can_resolve && !thread.deleted) {
           actions.push(
             resolved
