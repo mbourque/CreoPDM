@@ -185,7 +185,8 @@ def test_mentionable_lists_only_the_audience_and_never_email(auth_client, auth_c
     _restrict(auth_client, auth_ctx, "bob", [])  # no product access at all
     out = auth_client.get(f"/api/products/{product['uuid']}/mentionable")
     names = {row["username"] for row in out.json()}
-    assert {"admin", "eng", "view"} <= names and "bob" not in names
+    assert {"eng", "view"} <= names and "bob" not in names
+    assert "admin" not in names  # you cannot tag yourself
     assert "example.com" not in out.text
     narrowed = auth_client.get(f"/api/products/{product['uuid']}/mentionable", params={"q": "en"}).json()
     assert [row["username"] for row in narrowed] == ["eng"]

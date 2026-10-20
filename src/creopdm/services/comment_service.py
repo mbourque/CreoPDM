@@ -234,10 +234,20 @@ class CommentService:
         return names
 
     # ------------------------------------------------------------------ mentions
-    def mentionable(self, db: Session, product: Product, query: str = "", limit: int = 30) -> list[dict]:
+    def mentionable(
+        self,
+        db: Session,
+        product: Product,
+        query: str = "",
+        limit: int = 30,
+        exclude_user_id: int | None = None,
+    ) -> list[dict]:
+        """People the author can @mention: the product's audience, never the author."""
         needle = (query or "").strip().lower().lstrip("@")
         out: list[dict] = []
         for user in self._accounts.product_audience(db, product):
+            if exclude_user_id is not None and user.id == exclude_user_id:
+                continue
             username = str(user.username or "")
             display = str(user.display_name or "")
             if needle and needle not in username.lower() and needle not in display.lower():

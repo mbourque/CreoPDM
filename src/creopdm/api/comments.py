@@ -118,7 +118,7 @@ def mentionable_users(
     """People who can be @mentioned: the product's audience (never e-mail addresses)."""
     require_permission(request, ctx, PERMISSION_COMMENTS_ADD)
     product = load_accessible_product(request, ctx, db, product_id)
-    return ctx.comments.mentionable(db, product, q)
+    return ctx.comments.mentionable(db, product, q, exclude_user_id=build_actor(request, ctx).user_id)
 
 
 @router.post("/api/products/{product_id}/comments", status_code=201)
