@@ -215,6 +215,9 @@ window.__creopdmModules.notifications = {
       state.unread = Number(body.unread) || 0;
       paintBell();
       // Clear is offered only after Mark all read: nothing unread, something to clear.
+      // Mark all read needs something to mark; both buttons are hidden on an empty list.
+      const readAll = $("#notif-read-all");
+      if (readAll) readAll.hidden = !items.length;
       const clear = $("#notif-clear");
       if (clear) {
         clear.hidden = state.unread > 0 || !items.length;

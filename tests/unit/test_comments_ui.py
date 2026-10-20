@@ -131,6 +131,7 @@ def test_notifications_module_polls_dedupes_and_stops_on_403():
     assert 'new Set(["MENTION", "RESOLVED", "REOPENED"])' in text and "MAX_TOASTS = 3" in text
     # tab title and glyphs
     assert "document.title" in text and "discuss-glyph" in text
+    assert "readAll.hidden = !items.length" in text  # no Mark all read on an empty list
     # Clear is offered only once everything is read (and there is something to clear)
     assert "clear.hidden = state.unread > 0 || !items.length" in text and '"/api/notifications/clear"' in text
     # a refused product (403 on its summary) must not stop the poll
