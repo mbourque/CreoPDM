@@ -410,9 +410,9 @@ def test_comments_on_a_baseline_and_a_baseline_file(auth_client, auth_ctx):
     assert on_member.status_code == 201, on_member.text
     assert "in Design Review 01" in on_member.json()["target_name"]
     assert on_member.json()["version_display"]
-    missing = _post(
-        auth_client, product, "x", "BASELINE_MEMBER", f"{baseline['uuid']}/{objects['gear.prt']['uuid'][:-1]}0"
-    )
+    from uuid import uuid4
+
+    missing = _post(auth_client, product, "x", "BASELINE_MEMBER", f"{baseline['uuid']}/{uuid4()}")
     assert missing.status_code == 404
     other, _ = _product(auth_client, "Other", files=("z.prt",))
     assert _post(auth_client, other, "wrong product", "BASELINE", baseline["uuid"]).status_code == 404
