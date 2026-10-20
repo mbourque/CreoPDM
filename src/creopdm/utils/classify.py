@@ -341,6 +341,13 @@ def display_type_label(
         for token, label in names.items():
             if _matches_type_label_pattern(basename, original, token):
                 return label
+        # A multi-part extension (".sldasm.creo") matches the end of the whole file name, and the
+        # most specific (longest) one wins over a plain one (".creo").
+        for token in sorted(extensions, key=len, reverse=True):
+            if token.startswith(".") and token.count(".") > 1 and (
+                basename.endswith(token) or original.endswith(token)
+            ):
+                return extensions[token]
         suffix = Path(canonical).suffix.lower()
         custom = extensions.get(suffix)
         if custom:

@@ -1,3 +1,5 @@
+import pytest
+
 from creopdm.constants import DEFAULT_TYPE_LABELS, ObjectType
 from creopdm.utils.classify import (
     classify_filename,
@@ -319,3 +321,53 @@ def test_display_type_label_defaults_and_overrides():
     assert display_type_label("index.idx", "CAD", defaults) == "Instance Accelerator"
     assert display_type_label("fast.xas", "CAD", defaults) == "Instance Accelerator"
     assert display_type_label("fast.xpr", "CAD", defaults) == "Instance Accelerator"
+
+
+@pytest.mark.parametrize("entry", [".SLDPRT", ".sldprt", "SLDPRT", "*.SldPrt"])
+def test_type_label_extensions_ignore_case(entry):
+    """Settings → File types: ".SLDPRT" and ".sldprt" are the same entry, and so are the files."""
+    from creopdm.utils.classify import display_type_label
+
+    labels = [{"extension": entry, "label": "SolidWorks Part"}]
+    for filename in ("a.SLDPRT", "b.sldprt", "c.SldPrt"):
+        assert display_type_label(filename, "OTHER", labels) == "SolidWorks Part", (entry, filename)
+
+
+def test_type_label_file_name_entries_ignore_case():
+    from creopdm.utils.classify import display_type_label
+
+    labels = [{"extension": "ReviewRef.INF", "label": "Review reference"}]
+    assert display_type_label("reviewref.inf", "OTHER", labels) == "Review reference"
+    assert display_type_label("REVIEWREF.Inf", "OTHER", labels) == "Review reference"
+
+
+@pytest.mark.parametrize("entry", [".SLDPRT", ".sldprt", "SLDPRT", "*.SldPrt"])
+def test_type_label_extensions_ignore_case(entry):
+    """Settings -> File types: ".SLDPRT" and ".sldprt" are the same entry, and so are the files."""
+    from creopdm.utils.classify import display_type_label
+
+    labels = [{"extension": entry, "label": "SolidWorks Part"}]
+    for filename in ("a.SLDPRT", "b.sldprt", "c.SldPrt"):
+        assert display_type_label(filename, "OTHER", labels) == "SolidWorks Part", (entry, filename)
+
+
+def test_type_label_file_name_entries_ignore_case():
+    from creopdm.utils.classify import display_type_label
+
+    labels = [{"extension": "ReviewRef.INF", "label": "Review reference"}]
+    assert display_type_label("reviewref.inf", "OTHER", labels) == "Review reference"
+    assert display_type_label("REVIEWREF.Inf", "OTHER", labels) == "Review reference"
+
+
+def test_multi_part_extension_matches_the_end_of_the_file_name_and_wins_over_a_plain_one():
+    from creopdm.utils.classify import display_type_label
+
+    labels = [
+        {"extension": ".creo", "label": "Creo copy"},
+        {"extension": ".SLDASM.creo", "label": "SolidWorks Assembly (Creo copy)"},
+    ]
+    name = "WINDCHILL-424 Bulk Head Plate ASSY.SLDASM.creo"
+    assert display_type_label(name, "OTHER", labels) == "SolidWorks Assembly (Creo copy)"
+    assert display_type_label(name.upper(), "OTHER", labels) == "SolidWorks Assembly (Creo copy)"
+    assert display_type_label("x.SLDPRT.creo", "OTHER", labels) == "Creo copy"
+    assert display_type_label("a.sldasm", "OTHER", labels) == "Other"
