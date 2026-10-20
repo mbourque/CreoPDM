@@ -11,8 +11,6 @@ import hashlib
 import io
 from dataclasses import dataclass
 
-from PIL import Image, ImageOps, UnidentifiedImageError
-
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 MAX_IMAGES_PER_COMMENT = 4
 MAX_LONG_SIDE = 2400
@@ -42,7 +40,7 @@ class ProcessedImage:
     sha256: str
 
 
-def _encode(image: Image.Image, fmt: str) -> bytes:
+def _encode(image, fmt: str) -> bytes:
     buf = io.BytesIO()
     if fmt == "JPEG":
         image.convert("RGB").save(buf, "JPEG", quality=88, optimize=True)
@@ -56,6 +54,10 @@ def _encode(image: Image.Image, fmt: str) -> bytes:
 
 
 def process_image(raw: bytes) -> ProcessedImage:
+    try:
+        from PIL import Image, ImageOps, UnidentifiedImageError
+    except ImportError as exc:  # the server still starts without Pillow; only images are off
+        raise CommentImageError("Image upload is not available: Pillow is not installed on the server.") from exc
     if not raw:
         raise CommentImageError("The image is empty.")
     if len(raw) > MAX_IMAGE_BYTES:

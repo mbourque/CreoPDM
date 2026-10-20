@@ -2677,3 +2677,9 @@ body.is-file-drag #file-drop-overlay {
 .baseline-discussion-dialog { padding: 1rem 1.2rem; }
 .baseline-discussion-dialog .dialog-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
 .baseline-discussion-dialog .dialog-head h2 { margin: 0; font-size: 1.1rem; }
+/* Image viewer: padded, fits the screen, never scrolls sideways. */
+dialog.cm-lightbox { padding: 0.9rem 1rem 1rem; width: min(92vw, 1100px); max-width: 92vw; max-height: 92vh; overflow: hidden; box-sizing: border-box; border: 1px solid var(--line); border-radius: 8px; }
+dialog.cm-lightbox[open] { display: flex; flex-direction: column; gap: 0.6rem; }
+.cm-lightbox-bar { flex-wrap: wrap; margin-bottom: 0; }
+.cm-lightbox-name { overflow-wrap: anywhere; font-weight: 600; }
+.cm-lightbox-img { max-width: 100%; max-height: calc(92vh - 6rem); width: auto; height: auto; object-fit: contain; display: block; margin: 0 auto; }
