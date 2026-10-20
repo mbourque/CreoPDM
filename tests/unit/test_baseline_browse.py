@@ -350,3 +350,9 @@ def test_an_open_baseline_hides_the_product_gear():
     assert "body.is-baseline-browse #product-settings { display: none !important; }" in css
     page = _read("src", "creopdm", "templates", "app.html")
     assert 'id="product-settings"' in page  # the element the rule hides
+
+
+def test_baseline_names_in_the_list_are_not_bold():
+    css = _read("src", "creopdm", "static", "css", "app.css")
+    rule = css.split(".baseline-open {", 1)[1].split("}", 1)[0]
+    assert "font-weight: 400;" in rule and "font-weight: 700" not in rule

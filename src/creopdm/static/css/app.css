@@ -1540,7 +1540,7 @@ button.forgot-password-btn,
   appearance: none;
   -webkit-appearance: none;
   background: none; border: 0; padding: 0; margin: 0;
-  font: inherit; font-weight: 700; text-align: left;
+  font: inherit; font-weight: 400; text-align: left;
   color: var(--accent-2, #2f6f8f); cursor: pointer;
 }
 .baseline-open:hover, .baseline-open:focus-visible { text-decoration: underline; }
