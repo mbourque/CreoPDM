@@ -703,6 +703,7 @@ Comments let people talk about a product, a file, one exact version or a baselin
 | Type **@** in a comment box | Open a list of the product's people; each letter narrows it (username or display name); click, Enter or Tab inserts `@username`; Esc closes | Search or show e-mail addresses; list people without access, disabled users or yourself as notified |
 | Mention someone who has no access / does not exist | Keep the text, tell the author "Not notified (no access or no such user)" | Notify them in any channel |
 | **Ctrl+V** an image, drop a file on the box, or **Attach image** | Show a chip (thumbnail, name, size, ×); up to **4** images of 5 MB (PNG, JPEG, GIF, WebP); send waits for uploads | Accept SVG or corrupt files; keep EXIF/GPS metadata; serve an image to someone without product access |
+| **Right-click** a single file row | Offer **Comment…** (one file, and `comments.add`): open its Discussion tab with the comment box focused | Offer it for a folder, several rows or a role without `comments.add` |
 | Click an image in a comment | Open a larger view with Previous / Next and **Download** | |
 | **Reply** | Add to the same thread (one level) and tell the thread's author | Notify yourself |
 | **Edit** your comment | Mark it "edited"; add/remove images; tell only people newly mentioned | Let anyone else edit it |

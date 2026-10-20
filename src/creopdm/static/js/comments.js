@@ -656,6 +656,10 @@ window.__creopdmModules.comments = {
         );
       }
       void reload();
+      // "Comment…" from a right-click lands here ready to type.
+      if (new URLSearchParams(window.location.search).get("compose") === "1") {
+        composerHost.querySelector(".cm-input")?.focus();
+      }
       return { reload };
     }
 

@@ -141,6 +141,19 @@ def test_app_js_opens_the_discussion_tab_and_starts_notifications_only_when_allo
     assert re.search(r'get\("tab"\) === "discussion"', app)
 
 
+def test_right_click_comment_on_a_single_file_row():
+    menu = (JS / "files_context_menu.js").read_text(encoding="utf-8")
+    assert 'action: "comment"' in menu and 'label: "Comment…"' in menu
+    assert "canComment" in menu and "comment: caps.canComment" in menu
+    app = (JS / "app.js").read_text(encoding="utf-8")
+    assert 'action === "comment"' in app and "tab=discussion&compose=1" in app
+    assert 'dataset?.canAddComments === "1"' in app
+    # the comment box is focused when the page opens with compose=1
+    assert '"compose") === "1"' in (JS / "comments.js").read_text(encoding="utf-8")
+    # one file only, never a folder or a multi-selection (shared rules, Node-free check)
+    assert "canDetails && !one.isFolder" in menu
+
+
 def test_comments_and_bell_have_styles():
     css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
     for selector in (".notif-bell", ".toast-stack", ".discuss-glyph", ".cm-thread", ".cm-mention-list", ".cm-lightbox"):

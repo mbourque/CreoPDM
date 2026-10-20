@@ -22,6 +22,12 @@
       needsEmbedded: true,
     },
     {
+      action: "comment",
+      label: "Comment…",
+      title: "Write a comment on the selected file (opens its Discussion tab).",
+      needsEmbedded: true,
+    },
+    {
       action: "checkout",
       label: "Checkout selected",
       title: "Check out the selected files and download them to the local workspace.",
@@ -131,6 +137,8 @@
 
     var one = rows.length === 1 ? rows[0] : null;
     var canDetails = Boolean(one && one.hasDetails) && !busy;
+    // One file with a Details page, and a role that may comment (state.canComment).
+    var canComment = Boolean(state.canComment) && canDetails && !one.isFolder;
 
     var canCheckout =
       Boolean(state.showCheckout) &&
@@ -211,6 +219,7 @@
     return {
       canOpen: canOpen,
       canDetails: canDetails,
+      canComment: canComment,
       canCheckout: canCheckout,
       canUndo: canUndo,
       canAddSelected: canAddSelected,
@@ -228,6 +237,7 @@
     return Boolean(
       caps.canOpen ||
         caps.canDetails ||
+        caps.canComment ||
         caps.canCheckout ||
         caps.canUndo ||
         caps.canAddSelected ||
@@ -271,6 +281,7 @@
     var map = {
       open: caps.canOpen,
       details: caps.canDetails,
+      comment: caps.canComment,
       checkout: caps.canCheckout,
       undo: caps.canUndo,
       "add-selected": caps.canAddSelected,

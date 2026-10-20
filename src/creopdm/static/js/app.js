@@ -4077,6 +4077,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       allowsContent: productAllowsContent(),
       canOfferAdd: canOfferAdd(),
       canDiscardLocalControl: Boolean(discardLocalBtn),
+      canComment:
+        document.body?.dataset?.canViewComments === "1" && document.body?.dataset?.canAddComments === "1",
     });
   }
 
@@ -4182,6 +4184,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function runFilesContextMenuAction(action) {
     closeFilesContextMenu();
+    if (action === "comment") {
+      // The file's Details on its Discussion tab, with the comment box focused.
+      const href = rowHistoryHref(selectedRows()[0]);
+      if (href) void softNavigate(`${href}${href.includes("?") ? "&" : "?"}tab=discussion&compose=1`);
+      return;
+    }
     if (action === "open") {
       openBtn?.click();
       return;
