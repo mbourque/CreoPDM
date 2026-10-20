@@ -1166,9 +1166,15 @@ def _diff_constraint_lists(
 
 
 def _constraints_diff_lines(
-    older: dict[str, Any], newer: dict[str, Any]
+    older: dict[str, Any], newer: dict[str, Any], *, implied_by_components: bool = False
 ) -> list[str]:
-    """Authoritative assembly constraint diffs — missing envelope → Not captured."""
+    """Authoritative assembly constraint diffs — missing envelope → Not captured.
+
+    ``implied_by_components``: the Components section already says which occurrences were added
+    or removed, so their whole constraint lists are not repeated (hundreds of blocks for a
+    removed bolt pattern buried the real changes). Constraint changes on occurrences that exist on
+    both sides are always listed.
+    """
     older_cons = _constraints_dict(older)
     newer_cons = _constraints_dict(newer)
     if older_cons is None and newer_cons is None:
@@ -1195,6 +1201,8 @@ def _constraints_diff_lines(
         old_c = older_by.get(key)
         new_c = newer_by.get(key)
         label = _constraint_occ_display(new_c or old_c or {})
+        if implied_by_components and (old_c is None or new_c is None):
+            continue
         if old_c is None and new_c is not None:
             cons = new_c.get("constraints") if isinstance(new_c.get("constraints"), list) else []
             bits = [_constraint_outline_line(c) for c in cons if isinstance(c, dict)]
@@ -1989,7 +1997,7 @@ def format_snapshot_compare_diff_text(
     simp_diff = _simp_reps_diff_lines(older, newer)
     if simp_diff:
         _extend_section(lines, simp_diff)
-    cons_diff = _constraints_diff_lines(older, newer)
+    cons_diff = _constraints_diff_lines(older, newer, implied_by_components=has_structure)
     if cons_diff:
         _extend_section(lines, cons_diff)
     rel_diff = _relations_diff_lines(older, newer)

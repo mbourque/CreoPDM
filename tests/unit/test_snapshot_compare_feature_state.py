@@ -200,3 +200,65 @@ def test_the_details_page_uses_the_same_formatter_for_every_mass_value():
         assert field + "|mass_num" in panel, field
     pages = (root / "src" / "creopdm" / "api" / "pages.py").read_text(encoding="utf-8")
     assert 'templates.env.filters["mass_num"] = format_mass_value' in pages
+
+
+# ---- removed components: their constraints are implied, every part is named ------------------------
+
+
+def _asm(parts, constraints):
+    """An assembly snapshot: a BOM of (name, qty) and a constraints envelope of (name, id, [types])."""
+    return {
+        "identity": {"model_type": "ASSEMBLY", "filename": "conveyor.asm"},
+        "bom": [
+            {"filename": "conveyor.asm", "quantity": 1, "dependency_type": "ASSEMBLY_ROOT", "children": [
+                {"filename": name, "quantity": qty, "dependency_type": "ASSEMBLY_MEMBER", "children": []}
+                for name, qty in parts
+            ]}
+        ],
+        "constraints": {
+            "components": [
+                {"model_name": name, "component_id": cid, "component_path": [cid],
+                 "constraints": [{"type": kind} for kind in kinds]}
+                for name, cid, kinds in constraints
+            ]
+        },
+    }
+
+
+def test_constraints_of_removed_components_are_not_repeated_but_changes_on_kept_ones_are():
+    older = _asm(
+        [("square_tube_4.prt", 1), ("plate_3.prt", 1), ("hexbolt-1-8x6_75.prt", 50)],
+        [("square_tube_4.prt", 357, ["CSYS"]), ("plate_3.prt", 783, ["ALIGN", "ALIGN", "ALIGN"]),
+         ("hexbolt-1-8x6_75.prt", 3439, ["ALIGN", "MATE_OFFSET"])],
+    )
+    newer = _asm([("square_tube_4.prt", 1)], [("square_tube_4.prt", 357, ["ALIGN", "ALIGN", "MATE"])])
+    text = _diff(older, newer)
+    # the components that left are named, with the quantity when there is one
+    assert "Components removed:" in text
+    removed = text.split("Components removed:", 1)[1].split("Components added", 1)[0]
+    assert "- plate_3.prt" in removed and "hexbolt-1-8x6_75.prt" in removed
+    # ... and their constraints are not listed again (the component change implies them)
+    assert "Assembly constraints removed (plate_3.prt" not in text
+    assert "Assembly constraints removed (hexbolt" not in text
+    # a component that stays and whose constraints changed is still reported
+    assert "square_tube_4.prt" in text.split("Assembly constraints", 1)[1]
+
+
+def test_without_a_components_list_the_constraint_blocks_still_show_removals():
+    """No BOM / structure: the constraints are the only evidence a component left."""
+    older = {"identity": {"model_type": "ASSEMBLY", "filename": "x.asm"},
+             "constraints": {"components": [{"model_name": "plate_3.prt", "component_id": 783,
+                                             "component_path": [783], "constraints": [{"type": "ALIGN"}]}]}}
+    newer = {"identity": {"model_type": "ASSEMBLY", "filename": "x.asm"}, "constraints": {"components": []}}
+    assert "Assembly constraints removed (plate_3.prt" in _diff(older, newer)
+
+
+def test_the_prompt_makes_the_model_name_every_part():
+    from pathlib import Path
+
+    prompt = (Path(__file__).resolve().parents[2] / "docs" / "ai-snapshot-compare-prompt.qwen3-8b-64k.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "Name EVERY part listed under Components removed / added" in prompt
+    assert "plate_3.prt" in prompt and "family word" in prompt
+    assert "constraints of components that were removed or added are not listed" in prompt

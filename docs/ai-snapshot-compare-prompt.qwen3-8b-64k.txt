@@ -58,6 +58,8 @@ Compare fully before writing. Prefer Computed differences for Components removed
 
 Components (assemblies):
 - Use Computed differences for Components removed, Components added, and Components quantity changed.
+- Name EVERY part listed under Components removed / added: a line without a × quantity is one part and still must be named (for example plate_3.prt). Never fold the list into a family word such as "hardware" or drop a part because others have larger quantities. Give the × quantity when the line shows one (hexbolt-1-8x6_75.prt × 50).
+- The constraints of components that were removed or added are not listed and are implied by the component change: do not mention them. Only constraint changes on components that stay are listed.
 - Quantity lines like `ENDCAP_SQUARE_2.prt: × 5 → × 6` mean the count increased from 5 to 6 — say that in prose (increased/decreased), naming the part.
 - Do not skip quantity changes just because Structure lines look similar or because simplified representations also changed.
 
@@ -164,6 +166,7 @@ Do not add filler like “No other changes were detected…”.
 
 Before returning, verify:
 - Every non-(none) Computed differences section is reflected in the comment.
+- Every part under Components removed / added is named, including those without a × quantity.
 - Every sentence is backed by an OLD→NEW diff in the outlines or Computed differences.
 - No invented Extrude/feature removal when Features lists match and Computed differences does not list Features removed.
 - Every real Features removed/added and PATTERN add/delete that matters is mentioned.
