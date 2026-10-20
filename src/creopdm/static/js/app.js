@@ -2764,9 +2764,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return fallback ? [fallback] : [];
   }
 
+  /** True for a file whose extension is on System Settings → Non openable CAD: it never opens. */
+  function rowIsNonOpenable(row) {
+    const name = String(row?.dataset?.filename || row?.querySelector?.(".object-open")?.dataset?.filename || "").trim();
+    const suffix = name.includes(".") ? `.${name.split(".").pop().toLowerCase()}` : "";
+    if (!suffix) return false;
+    const list = String(document.querySelector("#metric-filters")?.dataset.nonOpenable || "")
+      .split(",")
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean);
+    return list.includes(suffix);
+  }
+
   function selectedOpenSpec() {
     const selected = selectedRows();
     if (selected.length === 1) {
+      // No Open (toolbar button, Open menu, right-click) for a non-openable file.
+      if (rowIsNonOpenable(selected[0])) return null;
       return openSpecFromRow(selected[0], selected[0].querySelector(".object-open"));
     }
     const ids = selectedIds();

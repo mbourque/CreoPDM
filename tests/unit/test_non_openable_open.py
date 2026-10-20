@@ -53,3 +53,24 @@ def test_other_files_still_open(auth_client, auth_ctx):
     obj = _add(auth_client, product, "part.prt")
     opened = auth_client.post("/api/creo/open", json={"object_id": obj["uuid"], "launch": False})
     assert opened.status_code == 200, opened.text
+
+
+@requires_git
+def test_the_page_lists_non_openable_extensions_and_open_js_refuses_before_the_chooser(auth_client, auth_ctx):
+    from pathlib import Path
+
+    _signed_in_admin(auth_client, auth_ctx)
+    auth_ctx.config.settings.cad.extra_extensions = [".dat", ".creo"]
+    product = auth_client.post("/api/products", json={"name": "Types"}).json()
+    _add(auth_client, product, "values.dat")
+    html = auth_client.get(f"/?product={product['uuid']}").text
+    assert 'data-non-openable="' in html
+    attr = html.split('data-non-openable="', 1)[1].split('"', 1)[0]
+    assert ".creo" in attr.split(",") and ".dat" in attr.split(",")
+    js = (Path(__file__).resolve().parents[2] / "src/creopdm/static/js/open.js").read_text(encoding="utf-8")
+    app = (Path(__file__).resolve().parents[2] / "src/creopdm/static/js/app.js").read_text(encoding="utf-8")
+    # no Open button, Open menu or right-click Open for such a row (they all follow selectedOpenSpec)
+    assert "if (rowIsNonOpenable(selected[0])) return null;" in app
+    assert "function rowIsNonOpenable(row)" in app
+    refuse = js.index("const notOpenable = nonOpenableMessage(")
+    assert refuse < js.index("promptOpenCheckout({", refuse)  # before the Open chooser appears
