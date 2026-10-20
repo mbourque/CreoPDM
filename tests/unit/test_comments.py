@@ -209,7 +209,7 @@ def test_a_mention_notifies_the_user_not_the_author_and_not_outsiders(auth_clien
     assert made.status_code == 201, made.text
     body = made.json()
     assert [m["username"] for m in body["mentions"]] == ["eng"]
-    assert sorted(body["not_notified"]) == ["bob", "nobody"]
+    assert sorted(body["not_notified"]) == ["admin", "bob", "nobody"]  # an administrator is never taggable
     assert _inbox(auth_client)["items"] == []  # the author is told nothing
 
     _login(auth_client, "eng", "EngPass1")
@@ -232,6 +232,20 @@ def test_revoking_access_hides_past_notifications_and_the_unread_count(auth_clie
     _login(auth_client, "eng", "EngPass1")
     inbox = _inbox(auth_client)
     assert inbox["items"] == [] and inbox["unread"] == 0
+
+
+@requires_git
+def test_administrators_cannot_be_tagged_or_notified(auth_client, auth_ctx):
+    _setup(auth_client, auth_ctx)
+    product, _ = _product(auth_client)
+    _login(auth_client, "eng", "EngPass1")
+    listed = {r["username"] for r in auth_client.get(f"/api/products/{product['uuid']}/mentionable").json()}
+    assert "admin" not in listed and "bob" in listed
+    made = _post(auth_client, product, "@admin please look")
+    assert made.status_code == 201
+    assert made.json()["mentions"] == [] and made.json()["not_notified"] == ["admin"]
+    _login(auth_client, "admin", "AdminPass1")
+    assert _inbox(auth_client)["items"] == []
 
 
 # ------------------------------------------------------------------ notifications

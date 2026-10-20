@@ -41,7 +41,8 @@ from creopdm.models.comment import (
 )
 from creopdm.models.object import EngineeringObject
 from creopdm.models.product import Product
-from creopdm.models.user import User
+from creopdm.auth_constants import StarterRole
+from creopdm.models.user import Role, User, UserRole
 from creopdm.models.version import ObjectVersion
 from creopdm.services.activity_service import ActivityService
 from creopdm.services.notification_service import NotificationEvent, NotificationService
@@ -234,6 +235,16 @@ class CommentService:
         return names
 
     # ------------------------------------------------------------------ mentions
+    def _administrator_ids(self, db: Session) -> set[int]:
+        """Users holding the Administrator role: they are never offered or notified by @mention."""
+        return set(
+            db.scalars(
+                select(UserRole.user_id)
+                .join(Role, Role.id == UserRole.role_id)
+                .where(Role.name == StarterRole.ADMINISTRATOR.value)
+            )
+        )
+
     def mentionable(
         self,
         db: Session,
@@ -242,11 +253,12 @@ class CommentService:
         limit: int = 30,
         exclude_user_id: int | None = None,
     ) -> list[dict]:
-        """People the author can @mention: the product's audience, never the author."""
+        """People the author can @mention: the product's audience, never the author or an administrator."""
         needle = (query or "").strip().lower().lstrip("@")
         out: list[dict] = []
+        admins = self._administrator_ids(db)
         for user in self._accounts.product_audience(db, product):
-            if exclude_user_id is not None and user.id == exclude_user_id:
+            if (exclude_user_id is not None and user.id == exclude_user_id) or user.id in admins:
                 continue
             username = str(user.username or "")
             display = str(user.display_name or "")
@@ -261,7 +273,12 @@ class CommentService:
         self, db: Session, product: Product, body: str, actor: Actor
     ) -> tuple[list[User], list[str]]:
         """(users to record, names that matched nobody in the audience)."""
-        audience = {str(u.username).lower(): u for u in self._accounts.product_audience(db, product)}
+        admins = self._administrator_ids(db)
+        audience = {
+            str(u.username).lower(): u
+            for u in self._accounts.product_audience(db, product)
+            if u.id not in admins
+        }
         found: list[User] = []
         ignored: list[str] = []
         seen: set[str] = set()
