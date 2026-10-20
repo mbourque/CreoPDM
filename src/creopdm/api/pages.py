@@ -34,6 +34,7 @@ from creopdm.services.metadata_service import normalize_feature_rows
 from creopdm.utils.bom_match import bom_generic_label, bom_lookup_keys, format_bom_qty
 from creopdm.utils.classify import (
     display_type_label,
+    is_extra_cad,
     matches_cad_models,
     resolve_type_icon,
     type_icon_client_payload,
@@ -892,6 +893,10 @@ def _object_detail_page(
             "version_view": version_view,
             "metadata_note": metadata_note,
             "from_baseline": from_baseline,
+            # System Settings -> Non openable CAD: such a file never shows an Open button.
+            "non_openable": is_extra_cad(
+                obj.filename, ctx.config.extra_cad_extensions(), ctx.config.model_cad_extensions()
+            ),
             "workspace_path": str(ctx.workspaces.vault_for(product)),
             "workspace_folder": folder_of(obj.relative_path),
             "checkout_count": checkout_count,

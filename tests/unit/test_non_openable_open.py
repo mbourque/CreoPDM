@@ -60,6 +60,20 @@ def test_other_files_still_open(auth_client, auth_ctx):
 
 
 @requires_git
+def test_details_page_has_no_open_button_for_a_non_openable_file(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    auth_ctx.config.settings.cad.extra_extensions = [".dat", ".creo"]
+    product = auth_client.post("/api/products", json={"name": "Types"}).json()
+    blocked = _add(auth_client, product, "WINDCHILL-426 0.50in. Coupling.SLDPRT.creo")
+    normal = _add(auth_client, product, "part.prt")
+    page = auth_client.get(f"/products/{product['uuid']}/objects/{blocked['uuid']}").text
+    assert 'id="detail-open-btn"' not in page and 'id="open-btn"' not in page
+    assert "Details" in page  # the page itself still works
+    page = auth_client.get(f"/products/{product['uuid']}/objects/{normal['uuid']}").text
+    assert 'id="detail-open-btn"' in page and 'id="open-btn"' in page
+
+
+@requires_git
 def test_the_page_lists_non_openable_extensions_and_open_js_refuses_before_the_chooser(auth_client, auth_ctx):
     from pathlib import Path
 

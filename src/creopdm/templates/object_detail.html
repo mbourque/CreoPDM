@@ -97,7 +97,7 @@
     <div>
       <div class="detail-title-row">
         <h1 class="detail-filename">{{ object.filename }}</h1>
-        {% if product_ui.show_open and (not version_view or from_baseline) %}
+        {% if product_ui.show_open and not non_openable and (not version_view or from_baseline) %}
         <button type="button" class="btn detail-open-btn" id="detail-open-btn"
                 data-uuid="{{ object.uuid }}"
                 {% if version_view and from_baseline %}data-baseline="{{ from_baseline.uuid }}" data-product="{{ product.uuid }}" data-workspace-folder="{{ from_baseline.workspace_folder }}" data-relative-path="{{ version_view.relative_path }}"{% endif %}
@@ -840,9 +840,11 @@
               aria-haspopup="menu" aria-expanded="false"
               title="Open this file, or open this product’s local workspace folder.">Open ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
+        {% if not non_openable %}
         <button type="button" class="toolbar-menu-item" role="menuitem" id="open-btn" hidden
                 data-uuid="{{ object.uuid }}"
                 title="Open this file in Creo or its Windows associated program.">Open…</button>
+        {% endif %}
         <button type="button" class="toolbar-menu-item" role="menuitem" id="open-workspace-btn" hidden
                 data-product="{{ product.uuid }}" data-vault-folder="{{ product.vault_folder or product.uuid }}" data-folder="{{ workspace_folder }}"
                 title="Open this product’s local workspace on this PC. Requires creopdm-agent.">Open workspace</button>
