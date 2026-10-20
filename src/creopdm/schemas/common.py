@@ -858,6 +858,8 @@ class BatchItemResult(BaseModel):
 class BatchOperationResponse(BaseModel):
     ok: list[BatchItemResult]
     failed: list[BatchItemResult]
+    # Copy to Vault: files that already had a working copy there (nothing to do for them).
+    skipped: list[BatchItemResult] = Field(default_factory=list)
     workspace_root: str | None = None
     where_used_index: str | None = None  # "started" when background index kicked off
     # Checkout batches: content identities so the agent can skip files already local.

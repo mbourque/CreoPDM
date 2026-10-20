@@ -818,9 +818,12 @@ class WorkspaceService:
     ) -> dict[str, list]:
         ok: list[dict[str, str]] = []
         failed: list[dict[str, str]] = []
+        skipped: list[dict[str, str]] = []
         for product, obj in session_objects:
             try:
                 if self.has_local_copy(product, obj):
+                    # Already in the vault working folder: nothing to copy, but say so.
+                    skipped.append({"uuid": obj.uuid, "filename": obj.filename})
                     continue
                 path = self.materialize(product, obj, writable=False)
                 ok.append({"uuid": obj.uuid, "filename": obj.filename, "path": str(path)})
@@ -837,7 +840,7 @@ class WorkspaceService:
                         "message": message,
                     }
                 )
-        return {"ok": ok, "failed": failed}
+        return {"ok": ok, "failed": failed, "skipped": skipped}
 
     def copy_into_workspace(
         self,

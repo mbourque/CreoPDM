@@ -6353,8 +6353,21 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!result) return;
     const warning = formatBatch(result);
     const copied = result.ok?.length || 0;
+    const already = result.skipped?.length || 0;
     if (warning) showError($("#toolbar-error"), warning);
-    else showOk(`${copied} file(s) copied to the vault.`);
+    else if (copied) {
+      showOk(
+        `${copied} file(s) copied to the vault.` + (already ? ` ${already} already there.` : "")
+      );
+    } else if (already) {
+      // The usual case: a file that was added or checked in already has its vault copy.
+      showOk(
+        `Nothing to copy: the ${already === 1 ? "selected file is" : `${already} selected files are`} ` +
+          "already in the vault. Copy to Vault restores a working copy that was removed from it."
+      );
+    } else {
+      showOk("Nothing to copy: select files (or a folder with files) first.");
+    }
   });
 
   async function beginExport(mode) {
