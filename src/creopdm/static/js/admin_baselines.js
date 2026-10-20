@@ -20,11 +20,9 @@ window.__creopdmModules.admin_baselines = {
     const t = String(v || "").toLowerCase();
     return t ? t.charAt(0).toUpperCase() + t.slice(1) : "—";
   };
-  const when = (iso) => {
-    if (!iso) return "—";
-    const d = new Date(iso);
-    return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
-  };
+  // The app's one date format, shared with Files / Details (not the browser's locale date).
+  const when = (iso) => (shell.formatStamp ? shell.formatStamp(iso) : "") || "—";
+  const prettyWhen = (iso) => (shell.formatStampPretty ? shell.formatStampPretty(iso) : "") || "";
   const showError = (text) => {
     const el = $("#baseline-admin-error");
     if (!el) return;
@@ -186,7 +184,7 @@ window.__creopdmModules.admin_baselines = {
           <td>${kind}</td>
           <td>${esc(titleCase(item.status))}</td>
           <td>${esc(item.member_count)}</td>
-          <td title="${esc(item.created_at || "")}">${esc(when(item.created_at))}</td>
+          <td title="${esc(prettyWhen(item.created_at))}">${esc(when(item.created_at))}</td>
           <td>${esc(item.created_by)}</td>
           <td>${healthCell(item.uuid)}</td>
           <td class="baseline-admin-actions">
@@ -231,7 +229,7 @@ window.__creopdmModules.admin_baselines = {
     if (!(dialog instanceof HTMLDialogElement)) return;
     $("#baseline-integrity-title").textContent = `${report.name} — ${STATUS_LABEL[report.status] || report.status}`;
     $("#baseline-integrity-sub").textContent =
-      `${report.product_name} · ${titleCase(report.baseline_type)} · checked ${new Date(report.checked_at).toLocaleString()}` +
+      `${report.product_name} · ${titleCase(report.baseline_type)} · checked ${when(report.checked_at)}` +
       (report.deep ? " (file hashes verified)" : " (quick check)");
     const tag = report.tag_name
       ? `${report.tag_name}: ${titleCase(String(report.tag_state).replace(/_/g, " "))}`

@@ -22,15 +22,14 @@ window.__creopdmModules.baselines = {
         .replace(/"/g, "&quot;");
     }
 
+    /** The app's own date text (shared with Files / Details), never a raw ISO string. */
     function formatWhen(value) {
-      if (!value) return "—";
-      const date = new Date(value);
-      if (Number.isNaN(date.getTime())) return "—";
-      const pad = (n) => String(n).padStart(2, "0");
-      return (
-        `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
-        `${pad(date.getHours())}:${pad(date.getMinutes())}`
-      );
+      return (shell.formatStamp ? shell.formatStamp(value) : "") || "—";
+    }
+
+    /** Hover text: "Tuesday, October 20, 2026 at 5:15am", like every other date tooltip. */
+    function prettyWhen(value) {
+      return (shell.formatStampPretty ? shell.formatStampPretty(value) : "") || "";
     }
 
     function titleCase(value) {
@@ -91,7 +90,7 @@ window.__creopdmModules.baselines = {
             }</td>
             <td title="${esc(statusHint(item.status))}">${esc(titleCase(item.status))}</td>
             <td>${esc(item.member_count)}</td>
-            <td title="${esc(item.created_at || "")}">${esc(formatWhen(item.created_at))}</td>
+            <td title="${esc(prettyWhen(item.created_at))}">${esc(formatWhen(item.created_at))}</td>
             <td>${esc(item.created_by)}</td>
             <td class="baseline-details-cell"><button type="button" class="btn baseline-details-btn" data-baseline-details="${esc(
               item.uuid

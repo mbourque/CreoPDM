@@ -8335,6 +8335,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     assertProductAllows,
     typeIconHtml,
     refreshTabMetrics,
+    // The app's one date format: "2026-10-20 05:15" and the hover "Tuesday, October 20, 2026 at 5:15am".
+    formatStamp,
+    formatStampPretty,
     noteCollectFailures,
     openBaselineVersion,
     newerReleaseMessage,
