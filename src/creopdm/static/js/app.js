@@ -2765,15 +2765,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   /** True for a file whose extension is on System Settings → Non openable CAD: it never opens. */
+  function nonOpenableExtensions() {
+    return document.querySelector("#metric-filters")?.dataset.nonOpenable || "";
+  }
+
   function rowIsNonOpenable(row) {
-    const name = String(row?.dataset?.filename || row?.querySelector?.(".object-open")?.dataset?.filename || "").trim();
-    const suffix = name.includes(".") ? `.${name.split(".").pop().toLowerCase()}` : "";
-    if (!suffix) return false;
-    const list = String(document.querySelector("#metric-filters")?.dataset.nonOpenable || "")
-      .split(",")
-      .map((item) => item.trim().toLowerCase())
-      .filter(Boolean);
-    return list.includes(suffix);
+    const name = String(row?.dataset?.filename || row?.querySelector?.(".object-open")?.dataset?.filename || "");
+    return filesContextMenuApi().isNonOpenable(name, nonOpenableExtensions());
   }
 
   function selectedOpenSpec() {
@@ -4057,6 +4055,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const roleCanCheckin = userCanCheckin();
     const rows = selected.map((row) => ({
       uuid: String(row.dataset.uuid || "").trim(),
+      filename: String(row.dataset.filename || "").trim(),
       relativePath: String(row.dataset.relativePath || "").trim(),
       canCheckout: row.dataset.canCheckout === "1",
       owned: row.dataset.owned === "1",
@@ -4080,6 +4079,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     return filesContextMenuApi().capabilities({
       rows,
+      nonOpenableExtensions: nonOpenableExtensions(),
       hasOpenSpec: Boolean(openBtn) && Boolean(selectedOpenSpec()),
       showOpen: Boolean(openBtn),
       showCheckout: Boolean(checkoutBtn) && roleCanCheckout,

@@ -204,18 +204,13 @@ window.__creopdmModules.open = {
       return result.ok.map((item) => item.uuid).filter(Boolean);
     }
 
-    /** "" when the file may open; otherwise why not (System Settings → Non openable CAD). */
+    /** "" when the file may open; otherwise why not: the one shared rule (files_context_menu.js). */
     function nonOpenableMessage(filename) {
-      const name = String(filename || "").trim();
-      const list = String($("#metric-filters")?.dataset.nonOpenable || "")
-        .split(",")
-        .map((item) => item.trim().toLowerCase())
-        .filter(Boolean);
-      const suffix = name.includes(".") ? `.${name.split(".").pop().toLowerCase()}` : "";
-      if (!suffix || !list.includes(suffix)) return "";
       return (
-        `${name} is a non-openable file type (${suffix}): it stays in the product but is not opened. ` +
-        "An administrator can change this in System Settings → Non openable CAD."
+        window.CreoPdmFilesContextMenu?.nonOpenableMessage(
+          filename,
+          $("#metric-filters")?.dataset.nonOpenable || ""
+        ) || ""
       );
     }
 

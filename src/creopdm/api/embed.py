@@ -310,6 +310,7 @@ def embed_explorer(
             "query_folder": ctx_payload.initial_folder,
             "follow_active": not bool((product_q or "").strip()),
             "object_types": [item.value for item in ObjectType],
+            "non_openable_extensions": ctx.config.extra_cad_extensions(),
             "top_level_assembly_uuids": list(ctx_payload.top_level_assembly_uuids or []),
         },
     )

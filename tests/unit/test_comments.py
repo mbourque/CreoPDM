@@ -209,7 +209,7 @@ def test_a_mention_notifies_the_user_not_the_author_and_not_outsiders(auth_clien
     assert made.status_code == 201, made.text
     body = made.json()
     assert [m["username"] for m in body["mentions"]] == ["eng"]
-    assert sorted(body["not_notified"]) == ["admin", "bob", "nobody"]  # an administrator is never taggable
+    assert sorted(body["not_notified"]) == ["bob", "nobody"]
     assert _inbox(auth_client)["items"] == []  # the author is told nothing
 
     _login(auth_client, "eng", "EngPass1")
@@ -235,17 +235,35 @@ def test_revoking_access_hides_past_notifications_and_the_unread_count(auth_clie
 
 
 @requires_git
-def test_administrators_cannot_be_tagged_or_notified(auth_client, auth_ctx):
+def test_only_roles_with_comments_view_can_be_tagged_or_notified(auth_client, auth_ctx):
+    from sqlalchemy import delete
+
+    from creopdm.models.user import Permission, Role, RolePermission
+
     _setup(auth_client, auth_ctx)
     product, _ = _product(auth_client)
+    # Administrator keeps the permission, so an admin CAN be tagged by someone else.
     _login(auth_client, "eng", "EngPass1")
     listed = {r["username"] for r in auth_client.get(f"/api/products/{product['uuid']}/mentionable").json()}
-    assert "admin" not in listed and "bob" in listed
-    made = _post(auth_client, product, "@admin please look")
+    assert {"admin", "view", "bob"} <= listed
+    # Take comments.view away from the Viewer role: "view" cannot read comments any more.
+    with auth_ctx.session_factory() as db:
+        viewer = db.scalar(select(Role).where(Role.name == BuiltinRole.VIEWER.value))
+        ids = db.scalars(select(Permission.id).where(Permission.key == "comments.view")).all()
+        db.execute(
+            delete(RolePermission).where(
+                RolePermission.role_id == viewer.id, RolePermission.permission_id.in_(ids)
+            )
+        )
+        db.commit()
+    listed = {r["username"] for r in auth_client.get(f"/api/products/{product['uuid']}/mentionable").json()}
+    assert "view" not in listed and {"admin", "bob"} <= listed
+    made = _post(auth_client, product, "@view please look @admin")
     assert made.status_code == 201
-    assert made.json()["mentions"] == [] and made.json()["not_notified"] == ["admin"]
+    assert [m["username"] for m in made.json()["mentions"]] == ["admin"]
+    assert made.json()["not_notified"] == ["view"]
     _login(auth_client, "admin", "AdminPass1")
-    assert _inbox(auth_client)["items"] == []
+    assert len(_inbox(auth_client)["items"]) == 1  # the admin has the permission, so is told
 
 
 # ------------------------------------------------------------------ notifications

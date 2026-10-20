@@ -415,6 +415,7 @@
     if (!obj) return null;
     return {
       uuid: String(obj.uuid || "").trim(),
+      filename: String(obj.filename || "").trim(),
       relativePath: String(obj.relative_path || "").trim(),
       canCheckout: Boolean(obj.can_checkout),
       owned: Boolean(obj.owned_by_me),
@@ -433,6 +434,7 @@
     var row = rowStateFromObject(obj);
     return filesCtx().capabilities({
       rows: row ? [row] : [],
+      nonOpenableExtensions: root.getAttribute("data-non-openable") || "",
       showOpen: showOpen,
       showCheckout: showCheckout,
       showUndo: showUndo,

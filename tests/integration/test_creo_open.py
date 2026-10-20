@@ -449,7 +449,7 @@ def test_open_document_uses_windows_association(data_dir, repo_parent, identity,
 
 
 @requires_git
-def test_open_extra_cad_uses_windows_association(
+def test_open_non_openable_cad_is_refused_not_handed_to_windows(
     data_dir, repo_parent, identity, monkeypatch
 ):
     ctx = build_context(ConfigManager(), users=identity)
@@ -464,10 +464,10 @@ def test_open_extra_cad_uses_windows_association(
         assert created.status_code == 201, created.text
         obj_id = created.json()["uuid"]
         opened_resp = client.post("/api/creo/open", json={"object_id": obj_id})
-        assert opened_resp.status_code == 200, opened_resp.text
-        body = opened_resp.json()
-        assert body["method"] == "browser"
-        assert body["url"] == f"/api/objects/{obj_id}/content"
+        # System Settings -> Non openable CAD: the file stays in the product but never opens
+        # (it used to be handed to the Windows association).
+        assert opened_resp.status_code == 400, opened_resp.text
+        assert "non-openable file type (.inf)" in opened_resp.json()["error"]["message"]
 
 
 @requires_git

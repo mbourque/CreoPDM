@@ -103,8 +103,36 @@
   }
 
   /**
+   * System Settings → Non openable CAD: files with these extensions stay in the product but never
+   * open. One rule for every surface (Files, Creo navigator, Open chooser): callers only pass the
+   * file name and the extension list (array or comma-separated string).
+   */
+  function isNonOpenable(filename, extensions) {
+    var list = Array.isArray(extensions)
+      ? extensions
+      : String(extensions || "").split(",");
+    var name = String(filename || "").trim();
+    var suffix = name.indexOf(".") >= 0 ? "." + name.split(".").pop().toLowerCase() : "";
+    if (!suffix) return false;
+    return list.some(function (item) {
+      return String(item || "").trim().toLowerCase() === suffix;
+    });
+  }
+
+  function nonOpenableMessage(filename, extensions) {
+    if (!isNonOpenable(filename, extensions)) return "";
+    var name = String(filename || "").trim();
+    var suffix = "." + name.split(".").pop().toLowerCase();
+    return (
+      name + " is a non-openable file type (" + suffix + "): it stays in the product but is not opened. " +
+      "An administrator can change this in System Settings → Non openable CAD."
+    );
+  }
+
+  /**
    * @param {object} state
-   * @param {Array<object>} state.rows normalized selection rows:
+   * @param {Array<string>|string} [state.nonOpenableExtensions] System Settings → Non openable CAD
+   * @param {Array<object>} state.rows normalized selection rows (filename is needed for Open):
    *   uuid, relativePath, canCheckout, owned, canCheckin, localCache,
    *   isNewFile, hasDetails, hasCheckinWork, isFolder, canRevise, canDiscardChanges, isLocalSave
    * @param {boolean} [state.hasOpenSpec] when set, overrides row-derived Open tip
@@ -133,7 +161,10 @@
     } else {
       openSpec = false;
     }
-    var canOpen = Boolean(state.showOpen) && openSpec && !busy;
+    // A non-openable file never offers Open, whichever screen asks.
+    var notOpenable =
+      rows.length === 1 && isNonOpenable((rows[0] || {}).filename, state.nonOpenableExtensions);
+    var canOpen = Boolean(state.showOpen) && openSpec && !busy && !notOpenable;
 
     var one = rows.length === 1 ? rows[0] : null;
     var canDetails = Boolean(one && one.hasDetails) && !busy;
@@ -310,5 +341,7 @@
     applyVisibility: applyVisibility,
     itemForAction: itemForAction,
     needsEmbeddedBrowser: needsEmbeddedBrowser,
+    isNonOpenable: isNonOpenable,
+    nonOpenableMessage: nonOpenableMessage,
   };
 })(typeof window !== "undefined" ? window : globalThis);

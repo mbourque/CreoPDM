@@ -11,6 +11,7 @@
   data-agent-base="{{ agent_base_url | default('http://127.0.0.1:8766') }}"
   data-agent-token="{{ agent_token | default('') }}"
   data-purgeable="{{ purgeable_extensions | default([]) | join(',') }}"
+  data-non-openable="{{ non_openable_extensions | default([]) | join(',') }}"
   data-product-uuid="{{ selected.uuid if selected else '' }}"
   data-vault-folder="{{ selected.vault_folder if selected else '' }}"
   data-product-name="{{ selected.name if selected else '' }}"

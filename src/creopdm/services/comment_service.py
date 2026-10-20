@@ -41,8 +41,8 @@ from creopdm.models.comment import (
 )
 from creopdm.models.object import EngineeringObject
 from creopdm.models.product import Product
-from creopdm.auth_constants import StarterRole
-from creopdm.models.user import Role, User, UserRole
+from creopdm.auth_constants import PERMISSION_COMMENTS_VIEW
+from creopdm.models.user import Permission, RolePermission, User, UserRole
 from creopdm.models.version import ObjectVersion
 from creopdm.services.activity_service import ActivityService
 from creopdm.services.notification_service import NotificationEvent, NotificationService
@@ -235,13 +235,15 @@ class CommentService:
         return names
 
     # ------------------------------------------------------------------ mentions
-    def _administrator_ids(self, db: Session) -> set[int]:
-        """Users holding the Administrator role: they are never offered or notified by @mention."""
+    def _commenter_ids(self, db: Session) -> set[int]:
+        """Users whose role has comments.view: the only people who can be tagged or notified.
+        Someone whose role lacks it cannot see comments, so tagging them would tell them nothing."""
         return set(
             db.scalars(
                 select(UserRole.user_id)
-                .join(Role, Role.id == UserRole.role_id)
-                .where(Role.name == StarterRole.ADMINISTRATOR.value)
+                .join(RolePermission, RolePermission.role_id == UserRole.role_id)
+                .join(Permission, Permission.id == RolePermission.permission_id)
+                .where(Permission.key == PERMISSION_COMMENTS_VIEW)
             )
         )
 
@@ -253,12 +255,12 @@ class CommentService:
         limit: int = 30,
         exclude_user_id: int | None = None,
     ) -> list[dict]:
-        """People the author can @mention: the product's audience, never the author or an administrator."""
+        """People the author can @mention: the product's audience who may view comments, never the author."""
         needle = (query or "").strip().lower().lstrip("@")
         out: list[dict] = []
-        admins = self._administrator_ids(db)
+        allowed = self._commenter_ids(db)
         for user in self._accounts.product_audience(db, product):
-            if (exclude_user_id is not None and user.id == exclude_user_id) or user.id in admins:
+            if (exclude_user_id is not None and user.id == exclude_user_id) or user.id not in allowed:
                 continue
             username = str(user.username or "")
             display = str(user.display_name or "")
@@ -273,11 +275,11 @@ class CommentService:
         self, db: Session, product: Product, body: str, actor: Actor
     ) -> tuple[list[User], list[str]]:
         """(users to record, names that matched nobody in the audience)."""
-        admins = self._administrator_ids(db)
+        allowed = self._commenter_ids(db)
         audience = {
             str(u.username).lower(): u
             for u in self._accounts.product_audience(db, product)
-            if u.id not in admins
+            if u.id in allowed
         }
         found: list[User] = []
         ignored: list[str] = []
@@ -558,6 +560,8 @@ class CommentService:
         base_url: str,
         note: str = "",
     ) -> None:
+        if user.id not in self._commenter_ids(db):
+            return  # a role without comments.view cannot see comments, so it is told nothing
         who = actor.display_name or actor.username
         verb = {
             NOTIFY_MENTION: "mentioned you on",
