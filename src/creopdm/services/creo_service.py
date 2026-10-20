@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 from creopdm.constants import DependencyType
 from creopdm.creo.base import CreoConnector
 from creopdm.creo.file_manager import CreoFileManager
-from creopdm.exceptions import CreoUnavailableError, PathValidationError
+from creopdm.exceptions import CreoUnavailableError, PathValidationError, ValidationAppError
 from creopdm.logging_setup import get_logger
 from creopdm.models.dependency import Dependency
 from creopdm.models.object import EngineeringObject
@@ -19,7 +19,13 @@ from creopdm.models.product import Product
 from creopdm.services.checkout_service import CheckoutService
 from creopdm.services.object_service import ObjectService
 from creopdm.services.workspace_service import WorkspaceService
-from creopdm.utils.classify import classify_filename, is_creo_js_openable, is_creo_openable, is_creo_view
+from creopdm.utils.classify import (
+    classify_filename,
+    is_creo_js_openable,
+    is_creo_openable,
+    is_creo_view,
+    is_extra_cad,
+)
 from creopdm.services.metadata_service import MetadataService
 from creopdm.utils.creo_dependencies import (
     collect_open_dependency_walk,
@@ -413,6 +419,14 @@ class CreoService:
         prefer_local: bool = False,
         dependencies: list[dict[str, str | None]] | None = None,
     ) -> dict:
+        config = self._workspaces._config
+        # System Settings -> Non openable CAD: these stay in the product but do not open.
+        if is_extra_cad(path.name, config.extra_cad_extensions(), config.model_cad_extensions()):
+            raise ValidationAppError(
+                f"{Path(path.name).name} is a non-openable file type ({Path(path.name).suffix.lower()}): "
+                "it stays in the product but is not opened. "
+                "An administrator can change this in System Settings → Non openable CAD."
+            )
         workdir = working_directory_for(path)
         models = self._workspaces._config.model_cad_extensions()
         all_cad = self._workspaces._cad_extensions()
