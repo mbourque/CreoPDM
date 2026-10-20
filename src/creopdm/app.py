@@ -16,9 +16,11 @@ from creopdm.api import (
     auth_pages,
     baselines,
     checkout,
+    comments,
     creo,
     embed,
     health,
+    notifications,
     objects,
     pages,
     products,
@@ -46,6 +48,8 @@ from creopdm.services.activity_service import ActivityService
 from creopdm.services.checkin_service import CheckinService
 from creopdm.services.checkout_service import CheckoutService
 from creopdm.services.baseline_service import BaselineService
+from creopdm.services.comment_service import CommentService
+from creopdm.services.user_notification_service import UserNotificationService
 from creopdm.services.revise_service import ReviseService
 from creopdm.services.creo_service import CreoService
 from creopdm.services.email_service import EmailService
@@ -124,6 +128,14 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
     email = EmailService()
     notifications = NotificationService(get_config=lambda: manager.settings.email, email=email)
     product_watches = ProductWatchService(notifications)
+    user_notifications = UserNotificationService()
+    comments = CommentService(
+        activities,
+        user_accounts,
+        user_notifications,
+        notifications,
+        email_enabled=lambda: bool(manager.settings.email.enabled),
+    )
     password_resets = PasswordResetService(user_accounts, email, notifications)
     with session_factory() as db:
         user_accounts.ensure_builtin_roles(db)
@@ -161,6 +173,8 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
         email=email,
         notifications=notifications,
         product_watches=product_watches,
+        comments=comments,
+        user_notifications=user_notifications,
         password_resets=password_resets,
         user_accounts=user_accounts,
         auth_enabled=auth_enabled,
@@ -208,6 +222,8 @@ def create_app(context: AppContext | None = None) -> FastAPI:
     app.include_router(products.router)
     app.include_router(objects.router)
     app.include_router(baselines.router)
+    app.include_router(comments.router)
+    app.include_router(notifications.router)
     app.include_router(checkout.router)
     app.include_router(creo.router)
     app.include_router(embed.router)
@@ -237,6 +253,8 @@ def create_app(context: AppContext | None = None) -> FastAPI:
             "creo_workspace",
             "baselines",
             "admin_baselines",
+            "comments",
+            "notifications",
         }
     )
 

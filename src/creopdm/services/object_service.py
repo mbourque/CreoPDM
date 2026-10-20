@@ -45,6 +45,7 @@ from creopdm.models.object import EngineeringObject
 from creopdm.models.parameter import Parameter
 from creopdm.models.product import Product
 from creopdm.models.revise_operation import ReviseOperation
+from creopdm.services.comment_service import purge_object_comments
 from creopdm.services.baseline_guard import ensure_objects_not_pinned
 from creopdm.models.version import ObjectVersion
 from creopdm.product_state import ensure_product_allows
@@ -428,6 +429,7 @@ class ObjectService:
 
     def _delete_metadata(self, session: Session, obj: EngineeringObject) -> None:
         object_id = obj.id
+        purge_object_comments(session, [obj])
         current = obj.current_version
         obj.current_version = None
         obj.current_version_id = None
@@ -455,6 +457,7 @@ class ObjectService:
         ids = [obj.id for obj in objects]
         if not ids:
             return
+        purge_object_comments(session, objects)
         for obj in objects:
             obj.current_version = None
             obj.current_version_id = None

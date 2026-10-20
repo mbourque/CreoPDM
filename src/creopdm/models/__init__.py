@@ -3,6 +3,7 @@ from creopdm.models.ai_snapshot import ObjectVersionSnapshot
 from creopdm.models.baseline import Baseline, BaselineDependency, BaselineMember
 from creopdm.models.product_release import ProductRelease
 from creopdm.models.checkout import Checkout
+from creopdm.models.comment import Comment, CommentAttachment, CommentMention, UserNotification
 from creopdm.models.dependency import Dependency
 from creopdm.models.object import EngineeringObject
 from creopdm.models.parameter import Parameter
@@ -21,6 +22,10 @@ __all__ = [
     "BaselineMember",
     "ProductRelease",
     "Checkout",
+    "Comment",
+    "CommentAttachment",
+    "CommentMention",
+    "UserNotification",
     "Dependency",
     "EngineeringObject",
     "ObjectVersion",

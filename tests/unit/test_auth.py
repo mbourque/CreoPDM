@@ -2172,7 +2172,13 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
         PERMISSION_PRODUCTS_VIEW,
         PERMISSION_OBJECTS_VIEW,
         "baselines.view",
+        "comments.view",
+        "comments.add",
     }
+    assert "comments.resolve" not in keys_by_role[BuiltinRole.VIEWER.value]
+    assert "comments.resolve" in keys_by_role[BuiltinRole.ENGINEER.value]
+    assert "comments.admin" not in keys_by_role[BuiltinRole.ENGINEER.value]
+    assert "comments.admin" in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert "baselines.create" not in keys_by_role[BuiltinRole.VIEWER.value]
     assert "baselines.create" in keys_by_role[BuiltinRole.ENGINEER.value]
     assert PERMISSION_PRODUCTS_VIEW in keys_by_role[BuiltinRole.ENGINEER.value]
@@ -3158,6 +3164,28 @@ def _assert_permission_gate(response, *, allowed: bool, label: str) -> None:
         assert response.json()["error"]["code"] == "FORBIDDEN"
 
 
+def _seed_comment(auth_ctx, product_uuid: str) -> str:
+    """A product-level comment written by nobody in particular (the probes are not its author)."""
+    from uuid import uuid4
+
+    from creopdm.models.comment import Comment
+    from creopdm.models.product import Product
+
+    with auth_ctx.session_factory() as db:
+        product = db.scalar(select(Product).where(Product.uuid == product_uuid))
+        row = Comment(
+            uuid=str(uuid4()),
+            product_id=product.id,
+            target_type="PRODUCT",
+            target_uuid=product.uuid,
+            body="Seeded thread",
+            author="seed-author",
+        )
+        db.add(row)
+        db.commit()
+        return row.uuid
+
+
 @requires_git
 def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_parent):
     """Create one user per starter role; each logs in; assert every permission allow/deny.
@@ -3174,6 +3202,10 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         BUILTIN_PERMISSIONS,
         PERMISSION_BASELINES_CREATE,
         PERMISSION_BASELINES_ADMIN,
+        PERMISSION_COMMENTS_ADD,
+        PERMISSION_COMMENTS_ADMIN,
+        PERMISSION_COMMENTS_RESOLVE,
+        PERMISSION_COMMENTS_VIEW,
         PERMISSION_BASELINES_VIEW,
         PERMISSION_EMAIL_MANAGE,
         PERMISSION_OBJECTS_ADD,
@@ -3379,6 +3411,8 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             _assert_forbidden(auth_client.get(f"/api/objects/{object_id}"))
             _assert_forbidden(auth_client.get(f"/?product={product_id}"))
 
+        # Two threads written by someone else: one to resolve, one to delete.
+        seed_resolve, seed_delete = (_seed_comment(auth_ctx, product_id) for _ in range(2))
         probes: dict[str, object] = {
             PERMISSION_USERS_MANAGE: auth_client.get("/admin/users", follow_redirects=False),
             PERMISSION_ROLES_MANAGE: auth_client.get("/admin/roles", follow_redirects=False),
@@ -3463,6 +3497,15 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                 f"/api/products/{product_id}/baselines",
                 json={"name": f"Probe {username}"},
             ),
+            PERMISSION_COMMENTS_VIEW: auth_client.get(f"/api/products/{product_id}/comments"),
+            PERMISSION_COMMENTS_ADD: auth_client.post(
+                f"/api/products/{product_id}/comments",
+                json={"target_type": "PRODUCT", "target": product_id, "body": f"Probe {username}"},
+            ),
+            PERMISSION_COMMENTS_RESOLVE: auth_client.post(
+                f"/api/comments/{seed_resolve}/resolve", json={}
+            ),
+            PERMISSION_COMMENTS_ADMIN: auth_client.delete(f"/api/comments/{seed_delete}"),
             PERMISSION_OBJECTS_METADATA: auth_client.post(
                 f"/api/objects/{object_id}/creo-metadata",
                 json={},

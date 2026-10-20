@@ -136,6 +136,9 @@
       {% if can_view_baselines %}
       <li id="baselines-pill-item"{% if not baseline_count|default(0) %} hidden{% endif %}><button type="button" class="metric-link" data-tab-link="baselines" title="Open the Baselines tab: exact snapshots of this product."><strong id="baselines-pill-count">{{ baseline_count|default(0) }}</strong> Baselines</button></li>
       {% endif %}
+      {% if can_view_comments %}
+      <li id="discussion-pill-item" hidden><button type="button" class="metric-link" data-tab-link="discussion" title="Open the Discussion tab: comments on this product, its files and baselines."><strong id="discussion-pill-count">0</strong> Open comments</button></li>
+      {% endif %}
     </ul>
     {% endif %}
     <p class="muted small" id="selection-summary">&nbsp;</p>
@@ -147,6 +150,9 @@
       <button type="button" class="tab" data-tab="changes">{% if new_workspace_files|default(0) %}New files · {{ new_workspace_files }}{% else %}New files{% endif %}</button>
       {% if can_view_baselines %}
       <button type="button" class="tab" data-tab="baselines" id="baselines-tab">{% if baseline_count|default(0) %}Baselines · {{ baseline_count }}{% else %}Baselines{% endif %}</button>
+      {% endif %}
+      {% if can_view_comments %}
+      <button type="button" class="tab" data-tab="discussion">Discussion</button>
       {% endif %}
     </div>
 
@@ -394,6 +400,13 @@
     </section>
 
     {% if can_view_baselines %}
+    {% if can_view_comments %}
+    <section class="tab-panel" id="panel-discussion" data-product="{{ selected.uuid }}" data-target-type="PRODUCT" data-target="{{ selected.uuid }}" data-feed="1" hidden>
+      <p class="muted small">Every conversation in this product: on the product itself, on its files and on its baselines. Type @ to mention someone who has access to this product.</p>
+      <div class="cm-panel-host"></div>
+    </section>
+    {% endif %}
+
     <section class="tab-panel" id="panel-baselines" data-product="{{ selected.uuid }}" hidden>
       <div class="baselines-head" id="baselines-head">
         <p class="muted small">A baseline is an exact, frozen snapshot of this product: the version of every file at the moment it was created. Later check-ins and revisions never change it.</p>
@@ -436,6 +449,7 @@
             <button type="button" class="btn" id="baseline-browse-details" title="Structure, Git, integrity and compare for this baseline.">Baseline details…</button>
             <button type="button" class="btn" id="baseline-browse-download" title="Download this baseline's exact versions to a read-only folder on this PC.">Download…</button>
             <button type="button" class="btn" id="baseline-browse-compare" title="See what changed between this baseline and the product today.">Compare with current</button>
+            {% if can_view_comments %}<button type="button" class="btn" id="baseline-browse-discussion" title="Comments about this baseline.">Discussion</button>{% endif %}
           </span>
         </div>
         <p class="error" id="baseline-browse-error" hidden></p>
@@ -785,6 +799,13 @@
 </dialog>
 
 {% if can_view_baselines and selected %}
+{% if can_view_comments %}
+<dialog id="baseline-discussion-dialog" class="dialog baseline-discussion-dialog">
+  <div class="dialog-head"><h2 id="baseline-discussion-title">Discussion</h2>
+    <button type="button" class="btn" id="baseline-discussion-close">Close</button></div>
+  <div id="baseline-discussion-host"></div>
+</dialog>
+{% endif %}
 <dialog id="baseline-members-dialog" class="dialog baseline-members-dialog">
   <form method="dialog" id="baseline-members-form">
     <h2 id="baseline-members-title" tabindex="-1">Baseline</h2>

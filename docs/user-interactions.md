@@ -28,6 +28,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 16. [Quick walkthroughs](#16-quick-walkthroughs)
 17. [For developers (tests)](#17-for-developers-tests)
 18. [Creo navigator embed explorer](#18-creo-navigator-embed-explorer)
+19. [Discussion (comments, @mentions, notifications)](#19-discussion-comments-mentions-notifications)
 
 ---
 
@@ -684,3 +685,33 @@ Narrow page for Creo’s navigator pane (~350–450 px): **`GET /embed/explorer?
 | Toolkit Companion unreachable (agent `/toolkit/health` fails) or `/url` missing | Keep the read-only list and search; Open / Details / Checkout that need the main browser show why they could not open it | Crash the page; pretend Open succeeded inside the navigator |
 | creopdm-agent offline | Download / Check In that need a local workspace tip may warn; Open hand-off still needs Toolkit `/url` or Creo.JS `SetURL` | |
 | Scroll the file list | Only the tree scrolls (header + status stay put — one scrollbar) | Nest a second scrollbar on the page body |
+
+
+---
+
+## 19. Discussion (comments, @mentions, notifications)
+
+Comments let people talk about a product, a file, one exact version or a baseline. Everything follows **product access**: only active people who can use the product can read, write, be mentioned or be told. Needs `comments.view` to read and `comments.add` to write (Viewer, Engineer, PDM Manager and Administrator by default); `comments.resolve` (Engineer and up) resolves any thread; `comments.admin` (Administrator) deletes anyone's comment.
+
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Open a product you may comment on | Show a **Discussion** tab (count of open threads, accent colour when one mentions you) and an **N Open comments** pill when something is open; a user without `comments.view` sees neither | Show counts, glyphs or tabs for a product the user cannot access |
+| Look at the Files list | Show a speech-bubble **glyph with the open-thread count** after the file name (accent when it mentions you; hover: "2 open comments, 1 mentions you"); click opens that file's Discussion tab | Select the row or start an Open when the glyph is clicked; fetch counts per row (one summary call per page) |
+| Open a file's **Details → Discussion** (live file, exact version, or a baseline's file) | List its threads (Open / Mentions me / Mine / Resolved), newest last, with a comment box | Mix the threads of the live file, an exact version and a baseline file |
+| Open the product's **Discussion** tab | Show every thread of the product (on the product, its files and its baselines), each with a link to what it is about | Show threads of products the user cannot access |
+| Click **Baselines → a baseline → Discussion** or the glyph on a baseline row | Open the baseline's thread (dialog), glyph also on each file of a baseline that has comments | Let a comment change a baseline |
+| Type **@** in a comment box | Open a list of the product's people; each letter narrows it (username or display name); click, Enter or Tab inserts `@username`; Esc closes | Search or show e-mail addresses; list people without access, disabled users or yourself as notified |
+| Mention someone who has no access / does not exist | Keep the text, tell the author "Not notified (no access or no such user)" | Notify them in any channel |
+| **Ctrl+V** an image, drop a file on the box, or **Attach image** | Show a chip (thumbnail, name, size, ×); up to **4** images of 5 MB (PNG, JPEG, GIF, WebP); send waits for uploads | Accept SVG or corrupt files; keep EXIF/GPS metadata; serve an image to someone without product access |
+| Click an image in a comment | Open a larger view with Previous / Next and **Download** | |
+| **Reply** | Add to the same thread (one level) and tell the thread's author | Notify yourself |
+| **Edit** your comment | Mark it "edited"; add/remove images; tell only people newly mentioned | Let anyone else edit it |
+| **Delete** (your own, or anyone's with `comments.admin`) | Remove the text and images at once; leave "This comment was deleted." where replies remain | Remove the audit rows |
+| **Resolve** a thread (with an optional note) | Allowed for the thread's author, anyone mentioned in it, or `comments.resolve`; record who, when, the note and the version; tell the originator and everyone mentioned | Tell the person who resolved it |
+| **Reopen** a resolved thread | Same people as resolve; tell the person who resolved it; the open counts include it again | |
+| Someone mentions or replies to you, or resolves/reopens your thread | Show a **toast** (bottom right; mentions and resolves stay until dismissed, others fade after ~8 s; at most 3 at a time then "+N more"), raise the **bell** count and the tab title "(2) CreoPDM"; click opens the exact thread | Toast the same message twice after a reload or in a second tab (`seen_at`) |
+| Open the **bell** | List the latest notifications (unread marked), **Mark all read**; click opens the thread | Show notifications of products the user lost access to; count them |
+| E-mail is **not** set up | Toast, bell and inbox work exactly the same; nothing is sent or logged as an error | Show any e-mail setting for comments |
+| E-mail **is** enabled and the person has a usable address | Also e-mail the notification; watchers get "Comment added" (only if they still have product access) | Let a failing mail block or delay the comment |
+| Comment, edit, delete, resolve or reopen | Write an **Audit log** row (Comment added / edited / deleted / resolved / reopened) with who, product, file and version, an excerpt (200 characters), mentions and image count | Lose the rows when the comment, file or product is later deleted |
+| Remove a file, or delete a product | Delete its comments, images, mentions and notifications in the same operation | Leave images or threads of a removed file behind |

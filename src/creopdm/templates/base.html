@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-thumb-preview-revise-39">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-thumb-preview-revise-41">
   <script>
     /* Suppress PTC creojs.js noise outside Creo's browser (and when Creo injects its own copy). */
     (function () {
@@ -25,6 +25,8 @@
   data-can-checkin="{{ '1' if can_checkin else '0' }}"
   data-can-force-undo-checkout="{{ '1' if can_force_undo_checkout else '0' }}"
   data-can-view="{{ '1' if can_view_objects else '0' }}"
+  data-can-view-comments="{{ '1' if can_view_comments and auth_user else '0' }}"
+  data-can-add-comments="{{ '1' if can_add_comments else '0' }}"
   data-can-view-products="{{ '1' if can_view_products else '0' }}"
   data-can-copy-to-vault="{{ '1' if can_copy_to_vault else '0' }}"
   data-can-export-product="{{ '1' if can_export_product else '0' }}"
@@ -42,6 +44,20 @@
       </div>
     </a>
     <div class="status-cluster">
+      {% if can_view_comments and auth_user %}
+      <span class="notif-wrap">
+        <button type="button" class="status-pill notif-bell" id="notif-bell" hidden aria-haspopup="true" aria-expanded="false"
+                title="Notifications">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0-6 6v3.6L4.4 15.5A1 1 0 0 0 5.3 17h13.4a1 1 0 0 0 .9-1.5L18 12.6V9a6 6 0 0 0-6-6Zm-2 15a2 2 0 0 0 4 0Z"/></svg>
+          <span class="notif-count" id="notif-count" hidden>0</span>
+        </button>
+        <div class="notif-panel" id="notif-panel" hidden>
+          <div class="notif-panel-head"><strong>Notifications</strong>
+            <button type="button" class="cm-link" id="notif-read-all">Mark all read</button></div>
+          <div class="notif-list" id="notif-list"></div>
+        </div>
+      </span>
+      {% endif %}
       {# On Administration and System Settings the Help pill opens the administrator help. #}
       {% if request.url.path.startswith('/admin') or request.url.path.startswith('/settings') %}
       <a class="status-pill" href="/help/admin" target="creopdm-help" rel="noopener noreferrer"
@@ -70,6 +86,7 @@
   <main class="shell">
     {% block content %}{% endblock %}
   </main>
+  <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
   <dialog id="danger-confirm-dialog" class="dialog danger-confirm-dialog">
     <form method="dialog" id="danger-confirm-form">
       <h2 id="danger-confirm-title">Confirm</h2>

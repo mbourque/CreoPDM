@@ -125,7 +125,12 @@ def test_quiet_browse_does_not_eager_load_heavy_modules():
     # admin chrome too: it starts only when its own page is on screen (a soft navigation never runs
     # <script> tags, so app.js has to start it), and it is a small module.
     eager = re.findall(r'void initJobModule\("(\w+)"', boot_tail.split("} finally {", 1)[0])
-    assert set(eager) <= {"admin", "admin_baselines", "modifications"}, eager
+    # notifications.js is the one deliberate always-on module: the bell, the toast popups and the
+    # comment glyphs must work on every page (and it is gated on the comments permission).
+    assert set(eager) <= {"admin", "admin_baselines", "modifications", "notifications"}, eager
+    assert 'document.body?.dataset.canViewComments === "1"' in boot_tail
+    # The Discussion UI itself (threads, composer, @mentions, images) stays lazy.
+    assert "comments" not in eager
     assert 'if ($("#admin-baselines-page"))' in boot_tail  # gated on the page, never at quiet browse
     # Collect resume is gated on stored state; open/add/checkout/checkin/creo_workspace load on use.
     assert "const state = loadMetadataCollectState();" in app

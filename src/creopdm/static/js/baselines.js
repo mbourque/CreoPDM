@@ -330,6 +330,8 @@ window.__creopdmModules.baselines = {
       if (!baselineUuid) return;
       browseUuid = baselineUuid;
       openBaselineUuid = baselineUuid;
+      const paneEl = $("#baseline-browse");
+      if (paneEl) paneEl.dataset.baseline = baselineUuid;
       rememberBaseline(baselineUuid);
       browseData = [];
       browseEdges = [];
@@ -366,6 +368,8 @@ window.__creopdmModules.baselines = {
             `${browseInfo.member_count} file${browseInfo.member_count === 1 ? "" : "s"} · ` +
             `created ${formatWhen(browseInfo.created_at)} by ${browseInfo.created_by}` +
             (browseInfo.status === "ARCHIVED" ? " · Archived" : "");
+          // The date in the line gets the same pretty hover as every other date.
+          meta.title = prettyWhen(browseInfo.created_at);
         }
         paintBrowse();
       } catch (err) {
@@ -757,6 +761,7 @@ window.__creopdmModules.baselines = {
               : "") +
             " · " +
             `created ${formatWhen(info.created_at)} by ${info.created_by}`;
+          meta.title = prettyWhen(info.created_at);
         }
         renderStructure(structureResp.ok ? await structureResp.json() : []);
         renderTag(info, checkResp.ok ? await checkResp.json() : null);
@@ -1249,6 +1254,7 @@ window.__creopdmModules.baselines = {
 
     mod.openBaselineMembers = openBaselineMembers;
     mod.browseBaseline = browseBaseline;
+    mod.currentBaselineUuid = () => (browseVisible() ? browseUuid : "");
     mod.syncBrowseChrome = syncBrowseChrome;
     mod.showBaselineList = () => {
       leaveBrowse();
@@ -1386,6 +1392,12 @@ window.__creopdmModules.baselines = {
     });
 
     $("#baselines-show-archived")?.addEventListener("change", () => void loadBaselinesTab());
+
+    $("#baseline-browse-discussion")?.addEventListener("click", () => {
+      if (browseUuid) {
+        void shell.openBaselineDiscussion?.(browseUuid, $("#baseline-browse-title")?.textContent || "");
+      }
+    });
 
     $("#create-baseline-btn")?.addEventListener("click", () => {
       void openCreateBaselineDialog();

@@ -55,6 +55,11 @@ ACTION_LABELS: dict[str, str] = {
     ActivityAction.BASELINE_CREATED.value: "Baseline created",
     ActivityAction.BASELINE_ARCHIVED.value: "Baseline archived",
     ActivityAction.BASELINE_RESTORED.value: "Baseline restored",
+    ActivityAction.COMMENT_ADDED.value: "Comment added",
+    ActivityAction.COMMENT_EDITED.value: "Comment edited",
+    ActivityAction.COMMENT_DELETED.value: "Comment deleted",
+    ActivityAction.COMMENT_RESOLVED.value: "Comment resolved",
+    ActivityAction.COMMENT_REOPENED.value: "Comment reopened",
     ActivityAction.METADATA_COLLECTED.value: "Metadata collected",
     ActivityAction.WHERE_USED_REBUILT.value: "Where Used rebuilt",
     ActivityAction.VAULT_HISTORY_COMPACTED.value: "Vault history compacted",
@@ -98,6 +103,11 @@ AUDIT_ACTION_FILTER_CHOICES: list[tuple[str, str]] = [
     (ActivityAction.BASELINE_CREATED.value, "Baseline created"),
     (ActivityAction.BASELINE_ARCHIVED.value, "Baseline archived"),
     (ActivityAction.BASELINE_RESTORED.value, "Baseline restored"),
+    (ActivityAction.COMMENT_ADDED.value, "Comment added"),
+    (ActivityAction.COMMENT_EDITED.value, "Comment edited"),
+    (ActivityAction.COMMENT_DELETED.value, "Comment deleted"),
+    (ActivityAction.COMMENT_RESOLVED.value, "Comment resolved"),
+    (ActivityAction.COMMENT_REOPENED.value, "Comment reopened"),
     (ActivityAction.METADATA_COLLECTED.value, "Metadata collected"),
     (ActivityAction.WHERE_USED_REBUILT.value, "Where Used rebuilt"),
     (ActivityAction.USER_CREATED.value, "User created"),
@@ -774,6 +784,43 @@ def _object_label(details: dict[str, Any], obj: EngineeringObject | None) -> str
     return None
 
 
+COMMENT_ACTIONS = frozenset(
+    {
+        ActivityAction.COMMENT_ADDED.value,
+        ActivityAction.COMMENT_EDITED.value,
+        ActivityAction.COMMENT_DELETED.value,
+        ActivityAction.COMMENT_RESOLVED.value,
+        ActivityAction.COMMENT_REOPENED.value,
+    }
+)
+
+
+def _comment_summary(action: str, details: dict[str, Any]) -> str:
+    """``on conveyor.asm A.2: "excerpt" · mentions @bob · 2 images`` (resolve rows add the note)."""
+    where = str(details.get("target_name") or "").strip()
+    version = str(details.get("version_display") or "").strip()
+    head = f"on {where} {version}".strip() if where else ""
+    excerpt = str(details.get("excerpt") or "").strip()
+    out: list[str] = []
+    if head:
+        out.append(f"{head}: \"{excerpt}\"" if excerpt else head)
+    elif excerpt:
+        out.append(f"\"{excerpt}\"")
+    mentions = details.get("mentions")
+    if isinstance(mentions, list) and mentions:
+        out.append("mentions " + ", ".join(f"@{name}" for name in mentions))
+    images = details.get("image_count")
+    if isinstance(images, int) and images:
+        out.append(f"{images} image{'s' if images != 1 else ''}")
+    note = str(details.get("resolution_note") or "").strip()
+    if action == ActivityAction.COMMENT_RESOLVED.value and note:
+        out.append(f"Note: {note}")
+    owner = str(details.get("comment_author") or "").strip()
+    if action == ActivityAction.COMMENT_DELETED.value and owner:
+        out.append(f"written by {owner}")
+    return " · ".join(out)
+
+
 def _event_summary(
     action: str, details: dict[str, Any], comment: str | None
 ) -> str:
@@ -800,6 +847,8 @@ def _event_summary(
         name = details.get("baseline_name")
         if name:
             parts.append(str(name))
+    if action in COMMENT_ACTIONS:
+        parts.append(_comment_summary(action, details))
     if action in {ActivityAction.METADATA_COLLECTED.value, "METADATA_COLLECTED"}:
         # One summary per Collect run (never one row per file).
         parts.append(_collect_summary(details))

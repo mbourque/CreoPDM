@@ -7833,6 +7833,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           refreshTabMetrics();
         });
       }
+      else if (name === "discussion") {
+        void initJobModule("comments", window.__creopdmShell).then((m) =>
+          m.mountPanel?.(document.getElementById("panel-discussion"))
+        );
+      }
       else if (name === "where-used") void loadWhereUsedTab();
       else if (name === "snapshot" || name === "compare-revisions") {
         void initJobModule("modifications", window.__creopdmShell).then((m) =>
@@ -7850,6 +7855,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
     });
   });
+
+  // ?tab=discussion (a notification, a glyph) opens the Discussion tab, here or on Details.
+  if (new URLSearchParams(window.location.search).get("tab") === "discussion") {
+    document.querySelector('.tabs .tab[data-tab="discussion"]')?.click();
+  }
 
   // The "N Baselines" pill (not a file filter) opens the Baselines tab.
   document.querySelector("#metric-filters")?.addEventListener("click", (event) => {
@@ -7869,9 +7879,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const baselinesTab = document.querySelector('.tabs .tab[data-tab="baselines"]');
     if ((linkedBaseline || wantList) && baselinesTab) {
       baselinesTab.click();
-      void initJobModule("baselines", window.__creopdmShell).then((m) =>
-        linkedBaseline ? m.browseBaseline?.(linkedBaseline) : m.showBaselineList?.()
-      );
+      void initJobModule("baselines", window.__creopdmShell).then((m) => {
+        if (linkedBaseline) m.browseBaseline?.(linkedBaseline);
+        else m.showBaselineList?.();
+        if (linkedBaseline && params.get("discussion")) void openBaselineDiscussion(linkedBaseline, "");
+      });
     }
   }
 
@@ -8318,8 +8330,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       void api.withBusy("Loading…", () => api.softNavigate(window.location.href, "none"));
     });
   }
+  /** The discussion dialog of one baseline (loads the Discussion module on first use). */
+  async function openBaselineDiscussion(baselineUuid, name) {
+    const mod = await initJobModule("comments", window.__creopdmShell);
+    mod.openBaselineDiscussion?.(baselineUuid, name);
+  }
+
   window.__creopdmShell = {
     $,
+    openBaselineDiscussion,
     withBusy,
     setBusy,
     setBusyMessage,
@@ -8487,6 +8506,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   // module is started here, after every page swap.
   if ($("#admin-baselines-page")) {
     void initJobModule("admin_baselines", window.__creopdmShell);
+  }
+  // Toast, bell and the comment counts / glyphs: always on for someone who may see comments.
+  if (document.body?.dataset.canViewComments === "1") {
+    void initJobModule("notifications", window.__creopdmShell);
   }
   if (
     $("#settings-form")

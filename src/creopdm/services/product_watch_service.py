@@ -7,10 +7,11 @@ from datetime import datetime, timezone
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from creopdm.auth_constants import UserStatus
 from creopdm.exceptions import ValidationAppError
 from creopdm.logging_setup import get_logger
 from creopdm.models.product import Product
-from creopdm.models.user import ProductWatch, User
+from creopdm.models.user import ProductWatch, User, UserProduct
 from creopdm.services.notification_service import NotificationEvent, NotificationService
 from creopdm.utils.timefmt import format_local
 
@@ -130,6 +131,15 @@ class ProductWatchService:
             select(User.email, User.id)
             .join(ProductWatch, ProductWatch.user_id == User.id)
             .where(ProductWatch.product_id == product_id)
+            # Watching alone is not access: a watcher who lost the product (or was disabled)
+            # gets nothing, the same audience rule comments use.
+            .where(User.status == UserStatus.ACTIVE.value)
+            .where(
+                (User.access_all_products.is_(True))
+                | User.id.in_(
+                    select(UserProduct.user_id).where(UserProduct.product_id == product_id)
+                )
+            )
         )
         if exclude_user_id is not None:
             stmt = stmt.where(User.id != exclude_user_id)

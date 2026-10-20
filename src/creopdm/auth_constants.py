@@ -55,6 +55,10 @@ PERMISSION_OBJECTS_REVISE = "objects.revise"
 PERMISSION_BASELINES_VIEW = "baselines.view"
 PERMISSION_BASELINES_CREATE = "baselines.create"
 PERMISSION_BASELINES_ADMIN = "baselines.admin"
+PERMISSION_COMMENTS_VIEW = "comments.view"
+PERMISSION_COMMENTS_ADD = "comments.add"
+PERMISSION_COMMENTS_RESOLVE = "comments.resolve"
+PERMISSION_COMMENTS_ADMIN = "comments.admin"
 PERMISSION_OBJECTS_METADATA = "objects.metadata"
 PERMISSION_OBJECTS_COPY_TO_VAULT = "objects.copy_to_vault"
 PERMISSION_PRODUCTS_EXPORT = "products.export"
@@ -113,6 +117,10 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
         PERMISSION_BASELINES_ADMIN,
         "Administration → Baselines (all baselines, integrity check, archive and restore)",
     ),
+    (PERMISSION_COMMENTS_VIEW, "View comments and discussions on products, files and baselines"),
+    (PERMISSION_COMMENTS_ADD, "Write comments, reply and mention people"),
+    (PERMISSION_COMMENTS_RESOLVE, "Resolve and reopen any comment thread"),
+    (PERMISSION_COMMENTS_ADMIN, "Delete anyone's comment"),
     (PERMISSION_OBJECTS_METADATA, "Update Creo metadata on objects"),
     (PERMISSION_OBJECTS_COPY_TO_VAULT, "Copy selected files into the vault (Copy to Vault)"),
     (PERMISSION_PRODUCTS_EXPORT, "Export an entire product as a zip download"),
@@ -216,6 +224,15 @@ PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             PERMISSION_BASELINES_ADMIN,
         ),
     ),
+    (
+        "Collaboration",
+        (
+            PERMISSION_COMMENTS_VIEW,
+            PERMISSION_COMMENTS_ADD,
+            PERMISSION_COMMENTS_RESOLVE,
+            PERMISSION_COMMENTS_ADMIN,
+        ),
+    ),
 )
 
 _AUTHORING = (
@@ -229,6 +246,9 @@ _AUTHORING = (
     PERMISSION_OBJECTS_REVISE,
     PERMISSION_BASELINES_VIEW,
     PERMISSION_BASELINES_CREATE,
+    PERMISSION_COMMENTS_VIEW,
+    PERMISSION_COMMENTS_ADD,
+    PERMISSION_COMMENTS_RESOLVE,
     PERMISSION_OBJECTS_METADATA,
     PERMISSION_PRODUCTS_EXPORT,
     PERMISSION_OBJECTS_EXPORT,
@@ -249,6 +269,8 @@ STARTER_ROLE_PERMISSION_KEYS: dict[str, tuple[str, ...]] = {
         PERMISSION_PRODUCTS_VIEW,
         PERMISSION_OBJECTS_VIEW,
         PERMISSION_BASELINES_VIEW,
+        PERMISSION_COMMENTS_VIEW,
+        PERMISSION_COMMENTS_ADD,
     ),
 }
 

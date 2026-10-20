@@ -638,6 +638,18 @@ class UserService:
             return True
         return product.id in self._membership_product_ids(user)
 
+    def product_audience(self, db: Session, product: Product) -> list[User]:
+        """ACTIVE users who may use the product: everyone with access to all products, plus the
+        users listed on it. The single source for who can read, write or be told about comments."""
+        member_ids = select(UserProduct.user_id).where(UserProduct.product_id == product.id)
+        stmt = (
+            select(User)
+            .where(User.status == UserStatus.ACTIVE.value)
+            .where((User.access_all_products.is_(True)) | (User.id.in_(member_ids)))
+            .order_by(func.lower(User.username))
+        )
+        return list(db.scalars(stmt).all())
+
     def filter_accessible_products(self, user: User, products: list[Product]) -> list[Product]:
         if getattr(user, "access_all_products", True):
             return list(products)

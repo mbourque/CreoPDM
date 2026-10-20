@@ -21,6 +21,10 @@ from creopdm.auth_constants import (
     PERMISSION_BASELINES_ADMIN,
     PERMISSION_BASELINES_CREATE,
     PERMISSION_BASELINES_VIEW,
+    PERMISSION_COMMENTS_ADD,
+    PERMISSION_COMMENTS_ADMIN,
+    PERMISSION_COMMENTS_RESOLVE,
+    PERMISSION_COMMENTS_VIEW,
     PERMISSION_OBJECTS_VIEW,
     PERMISSION_PRODUCTS_ASSIGN,
     PERMISSION_PRODUCTS_CREATE,
@@ -88,6 +92,10 @@ class CapabilityFlags:
     can_view_baselines: bool
     can_create_baselines: bool
     can_admin_baselines: bool
+    can_view_comments: bool
+    can_add_comments: bool
+    can_resolve_comments: bool
+    can_admin_comments: bool
     can_update_metadata: bool
     can_copy_to_vault: bool
     can_export_product: bool
@@ -131,6 +139,10 @@ def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
         can_view_baselines=PERMISSION_BASELINES_VIEW in keys,
         can_create_baselines=PERMISSION_BASELINES_CREATE in keys,
         can_admin_baselines=PERMISSION_BASELINES_ADMIN in keys,
+        can_view_comments=PERMISSION_COMMENTS_VIEW in keys,
+        can_add_comments=PERMISSION_COMMENTS_ADD in keys,
+        can_resolve_comments=PERMISSION_COMMENTS_RESOLVE in keys,
+        can_admin_comments=PERMISSION_COMMENTS_ADMIN in keys,
         can_update_metadata=PERMISSION_OBJECTS_METADATA in keys,
         can_copy_to_vault=PERMISSION_OBJECTS_COPY_TO_VAULT in keys,
         can_export_product=PERMISSION_PRODUCTS_EXPORT in keys,
@@ -186,6 +198,10 @@ def apply_caps(request: Request, caps: CapabilityFlags) -> None:
     request.state.can_view_baselines = caps.can_view_baselines
     request.state.can_create_baselines = caps.can_create_baselines
     request.state.can_admin_baselines = caps.can_admin_baselines
+    request.state.can_view_comments = caps.can_view_comments
+    request.state.can_add_comments = caps.can_add_comments
+    request.state.can_resolve_comments = caps.can_resolve_comments
+    request.state.can_admin_comments = caps.can_admin_comments
     request.state.can_update_metadata = caps.can_update_metadata
     request.state.can_copy_to_vault = caps.can_copy_to_vault
     request.state.can_export_product = caps.can_export_product
@@ -240,6 +256,10 @@ def caps_dict(request: Request) -> dict:
         "can_view_baselines": bool(getattr(request.state, "can_view_baselines", False)),
         "can_create_baselines": bool(getattr(request.state, "can_create_baselines", False)),
         "can_admin_baselines": bool(getattr(request.state, "can_admin_baselines", False)),
+        "can_view_comments": bool(getattr(request.state, "can_view_comments", False)),
+        "can_add_comments": bool(getattr(request.state, "can_add_comments", False)),
+        "can_resolve_comments": bool(getattr(request.state, "can_resolve_comments", False)),
+        "can_admin_comments": bool(getattr(request.state, "can_admin_comments", False)),
         "can_update_metadata": bool(getattr(request.state, "can_update_metadata", False)),
         "can_copy_to_vault": bool(getattr(request.state, "can_copy_to_vault", False)),
         "can_export_product": bool(getattr(request.state, "can_export_product", False)),

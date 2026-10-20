@@ -12,6 +12,8 @@ from creopdm.creo.base import CreoConnector
 from creopdm.services.activity_service import ActivityService
 from creopdm.services.ai_snapshot_service import AiSnapshotService
 from creopdm.services.baseline_service import BaselineService
+from creopdm.services.comment_service import CommentService
+from creopdm.services.user_notification_service import UserNotificationService
 from creopdm.services.checkin_service import CheckinService
 from creopdm.services.checkout_service import CheckoutService
 from creopdm.services.creo_service import CreoService
@@ -61,6 +63,8 @@ class AppContext:
     email: EmailService
     notifications: NotificationService
     product_watches: ProductWatchService
+    comments: CommentService
+    user_notifications: UserNotificationService
     password_resets: PasswordResetService
     thumbnails: ThumbnailService | None = None
     user_accounts: UserService = field(default_factory=UserService)

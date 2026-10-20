@@ -26,6 +26,7 @@ class NotificationEvent(StrEnum):
     BACKUP_MAINTENANCE = "backup_maintenance"
     USER_WORKFLOW = "user_workflow"
     PRODUCT_ACTIVITY = "product_activity"
+    COMMENT_MENTION = "comment_mention"
     SYSTEM_EVENT = "system_event"
 
 

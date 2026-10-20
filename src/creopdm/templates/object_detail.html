@@ -170,6 +170,9 @@
     <button type="button" class="tab" data-tab="snapshot">{{ snapshot_tab_label }}</button>
     {% endif %}
     <button type="button" class="tab" data-tab="history">History{% if workspace_pending %} · unsaved{% endif %}</button>
+    {% if can_view_comments %}
+    <button type="button" class="tab" data-tab="discussion">Discussion</button>
+    {% endif %}
   </div>
 
   <section class="tab-panel" id="panel-overview">
@@ -733,6 +736,22 @@
   </section>
   {% endif %}
 
+  {% if can_view_comments %}
+  {# What the thread is about: a baseline's file, one exact version, or the file itself. #}
+  <section class="tab-panel" id="panel-discussion" data-product="{{ product.uuid }}"
+           {% if version_view and from_baseline %}data-target-type="BASELINE_MEMBER" data-target="{{ from_baseline.uuid }}/{{ object.uuid }}"
+           {% elif version_view %}data-target-type="VERSION" data-target="{{ version_view.uuid }}"
+           {% else %}data-target-type="OBJECT" data-target="{{ object.uuid }}"{% endif %} hidden>
+    <p class="muted small">
+      {% if version_view and from_baseline %}Comments on this file as it is in the baseline {{ from_baseline.name }}.
+      {% elif version_view %}Comments on {{ object.filename }} {{ version_view.display }}.
+      {% else %}Comments on {{ object.filename }}.{% endif %}
+      Type @ to mention someone who has access to this product.
+    </p>
+    <div class="cm-panel-host"></div>
+  </section>
+  {% endif %}
+
   <section class="tab-panel" id="panel-history" hidden>
     {% if workspace_pending %}
     <p class="pending-note">
@@ -772,7 +791,7 @@
             <td></td>
             <td>{{ workspace_pending.file_size | byte_size }}</td>
             <td>vault</td>
-            <td>{{ workspace_pending.saved_at }}</td>
+            <td{% if workspace_pending.saved_at %} title="{{ local_time_pretty(workspace_pending.saved_at) }}"{% endif %}>{{ workspace_pending.saved_at }}</td>
             <td class="muted">Not checked in</td>
           </tr>
           {% endif %}

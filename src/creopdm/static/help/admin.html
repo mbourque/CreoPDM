@@ -348,6 +348,7 @@
         <a href="#promote">Promote Products</a>
         <a href="#revise">Revise (admin view)</a>
         <a href="#baselines">Baselines</a>
+        <a href="#collaboration">Collaboration</a>
         <a href="#danger">Delete, compact, rebuild</a>
         <a href="#settings">System Settings</a>
         <a href="#email">Email &amp; notifications</a>
@@ -450,6 +451,7 @@
               <tr><td><strong>Utilities</strong></td><td>Each is its own key: Availability, Email all users, Compact, Rebuild, Delete products, Audit, Health, Logs (<code>utilities.*</code>).</td></tr>
               <tr><td><strong>Products</strong></td><td><code>products.view</code>, <code>products.create</code>, <code>products.edit</code>, <code>products.delete</code> (delete or forget), <code>products.export</code> (whole-product zip).</td></tr>
               <tr><td><strong>Files</strong></td><td><code>objects.view</code> browse history, open and download · <code>objects.add</code> · <code>objects.checkout</code> check out and undo your own · <code>objects.checkin</code> · <code>objects.force_undo_checkout</code> release someone else’s checkout · <code>objects.remove</code> · <code>objects.revert</code> restore an older version · <code>objects.revise</code> start the next revision of a released file · <code>baselines.view</code> and <code>baselines.create</code> see and create product baselines · <code>objects.metadata</code> collect metadata · <code>objects.copy_to_vault</code> · <code>objects.export</code> zip selected files.</td></tr>
+              <tr><td><strong>Collaboration</strong></td><td><code>comments.view</code> read discussions · <code>comments.add</code> write, reply and mention · <code>comments.resolve</code> resolve or reopen any thread · <code>comments.admin</code> delete anyone’s comment.</td></tr>
             </tbody>
           </table>
         </div>
@@ -606,6 +608,19 @@
             <p>The optional Git tag was moved, deleted or never created. The baseline still points at its stored commit, which is the record.</p>
           </article>
         </div>
+      </section>
+
+      <section id="collaboration">
+        <h2>Collaboration (comments)</h2>
+        <p>Users discuss products, files, versions and baselines from <strong>Discussion</strong> tabs, with <code>@mentions</code>, pasted images, a resolve/reopen loop, toast pop-ups and a notification bell. <strong>Nothing needs to be turned on.</strong></p>
+        <ul class="clean">
+          <li><strong>Permissions (Roles).</strong> Four keys in the <em>Collaboration</em> group: <code>comments.view</code> and <code>comments.add</code> (all starter roles), <code>comments.resolve</code> (Administrator, PDM Manager, Engineer: resolve or reopen any thread; the thread's author and anyone mentioned in it can always do so) and <code>comments.admin</code> (Administrator: delete anyone's comment). Change them per role in the matrix.</li>
+          <li><strong>Who takes part is product access.</strong> The audience of a product is every <em>active</em> user with <strong>All products</strong> access plus those listed under <strong>Product Membership</strong> for it. Mentions, notifications, toasts and watcher e-mails are limited to that audience; removing someone's access hides that product's notifications from them at once.</li>
+          <li><strong>E-mail is optional.</strong> Toasts, the bell and the inbox always work. If <strong>System Settings → Email</strong> is on, mentioned and replied-to people with a usable address also get an e-mail, and watchers get <em>Comment added</em>. If it is off, nothing is sent and nothing is reported as an error. A failing mail never blocks a comment.</li>
+          <li><strong>Images</strong> are stored in the database (included in backups): PNG, JPEG, GIF or WebP only (no SVG), re-encoded to strip metadata, at most 4 per comment and 5 MB each. Pictures never attached to a comment are discarded after 24 hours. Only people with access to the product can view them.</li>
+          <li><strong>Audit log.</strong> <em>Comment added / edited / deleted / resolved / reopened</em> appear with who, product, file and version, an excerpt, the people mentioned and the number of images. The rows stay when a comment, a file or a product is deleted.</li>
+          <li><strong>Clean-up.</strong> Removing a file deletes its comments; deleting a product deletes all of its comments, images and notifications (not the audit rows).</li>
+        </ul>
       </section>
 
       <section id="danger">
