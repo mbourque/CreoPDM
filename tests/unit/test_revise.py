@@ -240,7 +240,7 @@ def test_revise_ui_is_wired_through_the_shared_menu_and_details():
     # the old menu (Revise… silently missing even though the row flags are right).
     for name in ("base.html", "embed_explorer.html"):
         page = (root / "templates" / name).read_text(encoding="utf-8")
-        assert "files_context_menu.js?v={{ app_version }}-files-ctx-comment" in page, name
+        assert "files_context_menu.js?v={{ app_version }}-files-ctx-nonopen" in page, name
     nav = (root / "static" / "js" / "embed_explorer.js").read_text(encoding="utf-8")
     assert "canRevise: showRevise && Boolean(obj.can_revise)" in nav
 
