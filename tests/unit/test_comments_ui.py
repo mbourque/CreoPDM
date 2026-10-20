@@ -155,6 +155,12 @@ def test_right_click_comment_on_a_single_file_row():
     assert 'dataset?.canAddComments === "1"' in app
     # the comment box is focused when the page opens with compose=1
     assert '"compose") === "1"' in (JS / "comments.js").read_text(encoding="utf-8")
+    # the Creo navigator uses the same shared item: it only has to say who may comment, and where to go
+    nav = (JS / "embed_explorer.js").read_text(encoding="utf-8")
+    assert 'getAttribute("data-can-comment") === "1"' in nav and "canComment: canComment" in nav
+    assert 'action === "comment"' in nav and "?tab=discussion&compose=1" in nav
+    page = (ROOT / "src" / "creopdm" / "templates" / "embed_explorer.html").read_text(encoding="utf-8")
+    assert 'data-can-comment="' in page
     # one file only, never a folder or a multi-selection (shared rules, Node-free check)
     assert "canDetails && !one.isFolder" in menu
 

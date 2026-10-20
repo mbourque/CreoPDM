@@ -30,6 +30,7 @@
   data-show-revise="{{ '1' if product_ui.show_revise else '0' }}"
   data-show-export="{{ '1' if product_ui.show_export_objects else '0' }}"
   data-can-export="{{ '1' if can_export_objects else '0' }}"
+  data-can-comment="{{ '1' if can_view_comments and can_add_comments else '0' }}"
   data-can-checkout="{{ '1' if can_checkout else '0' }}"
   data-can-checkin="{{ '1' if can_checkin else '0' }}"
   data-top-level-assemblies="{{ top_level_assembly_uuids | default([]) | join(',') }}"
@@ -89,6 +90,6 @@
   <script src="/static/js/files_search_match.js?v={{ app_version }}-files-search"></script>
   <script src="/static/js/local_cache_pending.js?v={{ app_version }}-local-cache"></script>
   <script src="/static/js/files_context_menu.js?v={{ app_version }}-files-ctx-nonopen"></script>
-  <script src="/static/js/embed_explorer.js?v={{ app_version }}-nonopen"></script>
+  <script src="/static/js/embed_explorer.js?v={{ app_version }}-comment"></script>
 </body>
 </html>

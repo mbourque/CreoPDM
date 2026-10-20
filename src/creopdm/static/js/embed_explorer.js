@@ -52,6 +52,8 @@
   var showExport =
     root.getAttribute("data-show-export") === "1" ||
     root.getAttribute("data-can-export") === "1";
+  // Comment… in the RMB: same rule as Files (may view and write comments).
+  var canComment = root.getAttribute("data-can-comment") === "1";
   var productNameEl = document.getElementById("ex-product-name");
   var productStateEl = document.getElementById("ex-product-state");
 
@@ -435,6 +437,7 @@
     return filesCtx().capabilities({
       rows: row ? [row] : [],
       nonOpenableExtensions: root.getAttribute("data-non-openable") || "",
+      canComment: canComment,
       showOpen: showOpen,
       showCheckout: showCheckout,
       showUndo: showUndo,
@@ -824,6 +827,10 @@
         void onDetails();
         return;
       }
+      if (action === "comment") {
+        void onComment();
+        return;
+      }
       void openInMainEmbeddedBrowser(filesDeepLink(action));
       return;
     }
@@ -1158,6 +1165,20 @@
       );
       return false;
     }
+  }
+
+  /** Comment…: the file's Details on its Discussion tab with the box focused (main browser). */
+  async function onComment() {
+    if (!selected || !selected.uuid || !productId) return;
+    var absolute = new URL(
+      "/products/" +
+        encodeURIComponent(productId) +
+        "/objects/" +
+        encodeURIComponent(selected.uuid) +
+        "?tab=discussion&compose=1",
+      window.location.origin
+    ).href;
+    await openInMainEmbeddedBrowser(absolute);
   }
 
   async function onDetails() {
