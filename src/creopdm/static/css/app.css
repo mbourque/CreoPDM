@@ -2687,3 +2687,6 @@ dialog.cm-lightbox[open] { display: flex; flex-direction: column; gap: 0.6rem; }
 /* Files page: the Discussion panel scrolls inside the fixed-height layout (like the file lists). */
 .content .tab-panel > .cm-panel-host { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 0.4rem; }
 .baseline-discussion-dialog #baseline-discussion-host { max-height: 70vh; overflow-y: auto; }
+/* The scroller spans the panel (scrollbar at the far right); the comments keep a readable width. */
+.content .tab-panel > .cm-panel-host.cm-host { max-width: none; padding-right: 0; }
+.content .tab-panel > .cm-panel-host.cm-host > * { max-width: 880px; }

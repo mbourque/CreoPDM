@@ -163,6 +163,7 @@ def test_comments_and_bell_have_styles():
     css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
     # the product Discussion panel scrolls inside the fixed-height Files layout
     assert ".content .tab-panel > .cm-panel-host" in css and "overflow-y: auto" in css
+    assert ".cm-panel-host.cm-host { max-width: none" in css  # scrollbar at the far right
     for selector in (".notif-bell", ".toast-stack", ".discuss-glyph", ".cm-thread", ".cm-mention-list", ".cm-lightbox"):
         assert selector in css, selector
 
