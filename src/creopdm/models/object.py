@@ -20,7 +20,7 @@ class EngineeringObject(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
-    number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    number: Mapped[str | None] = mapped_column(String(255), nullable=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     extension: Mapped[str] = mapped_column(String(32), nullable=False)

@@ -892,7 +892,7 @@ class ObjectService:
                 obj = EngineeringObject(
                     uuid=str(uuid.uuid4()),
                     product_id=product.id,
-                    number=plan.stem.upper(),
+                    number=plan.stem.upper()[:255],
                     name=plan.stem,
                     filename=plan.stored_name,
                     extension=plan.extension,
