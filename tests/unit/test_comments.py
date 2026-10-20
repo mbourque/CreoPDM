@@ -272,6 +272,25 @@ def test_notification_poll_seen_and_read_flow(auth_client, auth_ctx):
 
 
 @requires_git
+def test_clear_empties_only_my_bell(auth_client, auth_ctx):
+    _setup(auth_client, auth_ctx)
+    product, _ = _product(auth_client)
+    _post(auth_client, product, "@eng one")
+    _post(auth_client, product, "@bob two")
+    _login(auth_client, "eng", "EngPass1")
+    assert len(_inbox(auth_client)["items"]) == 1
+    assert auth_client.post("/api/notifications/clear").status_code == 204
+    assert _inbox(auth_client) == {"enabled": True, "unread": 0, "latest_id": 0, "items": []} or (
+        _inbox(auth_client)["items"] == [] and _inbox(auth_client)["unread"] == 0
+    )
+    _login(auth_client, "bob", "BobPass1")
+    assert len(_inbox(auth_client)["items"]) == 1  # someone else's list is untouched
+    # the audit log keeps the comments
+    with auth_ctx.session_factory() as db:
+        assert [e for e in auth_ctx.activities.list_events(db, q="") if e.action == "COMMENT_ADDED"]
+
+
+@requires_git
 def test_toast_and_bell_work_when_email_is_off_and_no_mail_is_attempted(auth_client, auth_ctx, monkeypatch):
     _setup(auth_client, auth_ctx)
     assert auth_ctx.settings.email.enabled is False

@@ -214,6 +214,11 @@ window.__creopdmModules.notifications = {
       const items = body.items || [];
       state.unread = Number(body.unread) || 0;
       paintBell();
+      // Clear is offered only after Mark all read: nothing unread, something to clear.
+      const clear = $("#notif-clear");
+      if (clear) {
+        clear.hidden = state.unread > 0 || !items.length;
+      }
       if (!items.length) {
         list.innerHTML = `<p class="muted small notif-empty">Nothing yet. Mentions, replies and resolved comments show up here.</p>`;
         return;
@@ -243,6 +248,15 @@ window.__creopdmModules.notifications = {
     });
     $("#notif-read-all")?.addEventListener("click", () => {
       void markRead(null).then(() => {
+        void poll();
+        void renderPanel();
+      });
+    });
+    $("#notif-clear")?.addEventListener("click", () => {
+      void api("/api/notifications/clear", { method: "POST", keepalive: true }).then(() => {
+        state.toasts.forEach((entry) => entry.timer && window.clearTimeout(entry.timer));
+        state.toasts = [];
+        paintToasts();
         void poll();
         void renderPanel();
       });

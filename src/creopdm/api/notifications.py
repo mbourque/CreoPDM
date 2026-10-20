@@ -126,6 +126,19 @@ def mark_seen(
         ctx.user_notifications.mark_seen(db, user, payload.ids or [])
 
 
+@router.post("/api/notifications/clear", status_code=204)
+def clear_notifications(
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> None:
+    """Empty the bell for the signed-in user. Only their own list; the audit log is untouched."""
+    require_permission(request, ctx, PERMISSION_COMMENTS_VIEW)
+    user = _user(request)
+    if user is not None:
+        ctx.user_notifications.clear_for_user(db, user)
+
+
 @router.post("/api/notifications/read", status_code=204)
 def mark_read(
     payload: NotificationIds,

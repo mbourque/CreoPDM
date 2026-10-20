@@ -105,5 +105,9 @@ class UserNotificationService:
             stmt = stmt.where(UserNotification.id.in_(ids))
         db.execute(stmt.values(read_at=now, seen_at=func.coalesce(UserNotification.seen_at, now)))
 
+    def clear_for_user(self, db: Session, user: User) -> None:
+        """The bell's Clear: remove this person's notifications (nobody else's, no audit rows)."""
+        db.execute(delete(UserNotification).where(UserNotification.user_id == user.id))
+
     def delete_for_product(self, db: Session, product_id: int) -> None:
         db.execute(delete(UserNotification).where(UserNotification.product_id == product_id))
