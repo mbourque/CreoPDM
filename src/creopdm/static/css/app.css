@@ -1603,7 +1603,8 @@ body.is-baseline-list footer.toolbar,
 body.is-discussion-tab footer.toolbar { padding-top: 0; padding-bottom: 0; }
 /* One baseline open: the product gear (Rename, Rebuild …) acts on the live product, not on a
    frozen snapshot, so it is not offered here. */
-body.is-baseline-browse #product-settings { display: none !important; }
+body.is-baseline-browse #product-settings,
+body.is-filter-off-tab #product-settings { display: none !important; }  /* gear: Files tab only */
 /* One baseline open: the Files toolbar gives way to the single Details button. */
 body.is-baseline-browse footer.toolbar .toolbar-actions > :not(#baseline-browse-file-details) { display: none !important; }
 button.baseline-file-open {

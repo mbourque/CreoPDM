@@ -347,7 +347,8 @@ def test_the_frozen_note_on_a_baseline_file_does_not_touch_the_open_button():
 
 def test_an_open_baseline_hides_the_product_gear():
     css = _read("src", "creopdm", "static", "css", "app.css")
-    assert "body.is-baseline-browse #product-settings { display: none !important; }" in css
+    assert "body.is-baseline-browse #product-settings," in css
+    assert "body.is-filter-off-tab #product-settings { display: none !important; }" in css
     page = _read("src", "creopdm", "templates", "app.html")
     assert 'id="product-settings"' in page  # the element the rule hides
 

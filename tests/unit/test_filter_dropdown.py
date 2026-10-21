@@ -152,6 +152,11 @@ def test_the_filter_shows_only_on_files_and_inside_an_open_baseline():
     assert "body.is-filter-off-tab #filter-dropdown" in CSS.read_text(encoding="utf-8")
 
 
+def test_the_product_gear_shows_only_on_the_files_tab():
+    css = CSS.read_text(encoding="utf-8")
+    assert "body.is-filter-off-tab #product-settings" in css and "body.is-baseline-browse #product-settings" in css
+
+
 def test_a_tab_click_never_opens_the_filter_menu():
     """Regression: a routine that showed/hid the old pills row (when the product has files) ran on every tab
     click and un-hid the menu itself, so the menu popped open without the Filter button being clicked."""
