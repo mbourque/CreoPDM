@@ -780,3 +780,51 @@ def test_migration_purges_threads_left_half_deleted():
     assert 'down_revision: Union[str, None] = "052_object_number_len"' in text
     assert len("053_purge_deleted_threads") <= 32
     assert "DELETE FROM comments WHERE parent_id IN" in text
+
+
+@requires_git
+def test_migration_cleans_a_thread_left_with_a_deleted_first_comment(auth_client, auth_ctx, monkeypatch):
+    import importlib.util
+    from datetime import datetime, timezone
+    from pathlib import Path
+    from uuid import uuid4
+
+    from creopdm.models.product import Product
+
+    _setup(auth_client, auth_ctx)
+    product, _ = _product(auth_client)
+    path = Path(__file__).resolve().parents[2] / "src/creopdm/database/migrations/versions/053_purge_deleted_threads.py"
+    spec = importlib.util.spec_from_file_location("purge_deleted_threads", path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    with auth_ctx.session_factory() as db:
+        pid = db.scalar(select(Product.id).where(Product.uuid == product["uuid"]))
+        user = db.scalar(select(User).where(User.username == "eng"))
+
+        def comment(body, parent=None, deleted=False):
+            row = Comment(
+                uuid=str(uuid4()), product_id=pid, target_type="PRODUCT", target_uuid=product["uuid"],
+                body=body, author="eng", parent_id=parent.id if parent else None,
+                deleted_at=datetime.now(timezone.utc) if deleted else None,
+            )
+            db.add(row)
+            db.flush()
+            return row
+
+        dead_root = comment("", deleted=True)  # the screenshot: deleted first comment ...
+        live_reply = comment("Looks good", parent=dead_root)  # ... with a reply still under it
+        db.add(CommentMention(comment_id=live_reply.id, user_id=user.id))
+        db.add(UserNotification(user_id=user.id, kind="REPLY", comment_id=live_reply.id, product_id=pid,
+                                target_type="PRODUCT", target_uuid=product["uuid"], title="t", actor="eng"))
+        healthy = comment("healthy thread")
+        healthy_reply = comment("healthy reply", parent=healthy)
+        gone_reply = comment("", parent=healthy, deleted=True)  # a deleted REPLY in a live thread stays
+        db.flush()
+        monkeypatch.setattr(migration.op, "get_bind", lambda: db.connection())
+        migration.upgrade()
+        left = {c.body for c in db.scalars(select(Comment))}
+        assert left == {"healthy thread", "healthy reply", ""}  # only the deleted reply's placeholder remains
+        assert db.get(Comment, gone_reply.id) is not None and db.get(Comment, healthy_reply.id) is not None
+        assert db.scalar(select(func.count()).select_from(CommentMention)) == 0
+        assert db.scalar(select(func.count()).select_from(UserNotification)) == 0

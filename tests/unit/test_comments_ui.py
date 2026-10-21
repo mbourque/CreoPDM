@@ -195,6 +195,12 @@ def test_the_highlighted_thread_outline_is_inside_its_box():
     assert ".cm-thread.is-target { box-shadow: inset 0 0 0 2px var(--accent); }" in css  # not clipped
 
 
+def test_deleting_a_first_comment_warns_that_the_replies_go_too():
+    js = (JS / "comments.js").read_text(encoding="utf-8")
+    assert "Delete this comment and its ${replyCount} repl" in js
+    assert "Delete this comment? Its images are removed too." in js  # a lone comment or a reply
+
+
 def test_all_links_under_a_comment_share_one_line():
     """Edit · Delete · Reply · Resolve are one row under the comment, not two."""
     js = (JS / "comments.js").read_text(encoding="utf-8")

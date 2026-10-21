@@ -595,7 +595,13 @@ window.__creopdmModules.comments = {
             state.editing = commentEl.getAttribute("data-comment");
             paint();
           } else if (act === "delete") {
-            if (!window.confirm("Delete this comment? Its images are removed too.")) return;
+            // The first comment of a thread takes the whole thread with it: say so before deleting.
+            const doomed = allComments().get(commentEl.getAttribute("data-comment"));
+            const replyCount = (doomed?.replies || []).filter((reply) => !reply.deleted).length;
+            const question = replyCount
+              ? `Delete this comment and its ${replyCount} repl${replyCount === 1 ? "y" : "ies"}? Their images are removed too.`
+              : "Delete this comment? Its images are removed too.";
+            if (!window.confirm(question)) return;
             await request(`/api/comments/${commentEl.getAttribute("data-comment")}`, { method: "DELETE" });
             await reload();
           } else if (act === "reply") {
