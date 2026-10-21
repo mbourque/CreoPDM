@@ -197,6 +197,7 @@ window.__creopdmModules.baselines = {
       document.body.classList.toggle("is-baseline-list", baselinesTabActive() && !browseUuid);
       setBaselineParam(on ? browseUuid : "");
       syncFooterDetails();
+      document.dispatchEvent(new CustomEvent("creopdm:baseline-chrome"));
     }
 
     function selectedBrowseRows() {

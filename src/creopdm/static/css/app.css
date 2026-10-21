@@ -1593,6 +1593,7 @@ button.forgot-password-btn,
 body.is-baseline-list #metric-filters,
 body.is-baseline-list #selection-summary,
 body.is-baseline-list #filter-dropdown,
+body.is-filter-off-tab #filter-dropdown,
 body.is-discussion-tab #metric-filters,
 body.is-discussion-tab #selection-summary,
 body.is-discussion-tab #filter-dropdown { display: none !important; }

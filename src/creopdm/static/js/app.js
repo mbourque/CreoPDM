@@ -1,7 +1,7 @@
 window.__creopdmBoot = function creopdmBoot(options = {}) {
   const soft = Boolean(options.soft);
   // A baseline view hides pills and toolbar buttons through body classes; a new page starts clean.
-  document.body?.classList.remove("is-baseline-browse", "is-baseline-list", "is-discussion-tab");
+  document.body?.classList.remove("is-baseline-browse", "is-baseline-list", "is-discussion-tab", "is-filter-off-tab");
   window.__creopdmAbort?.abort();
   const pageAbort = new AbortController();
   window.__creopdmAbort = pageAbort;
@@ -1437,6 +1437,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     syncToolbar();
   }
 
+  /** The Filter control belongs to the Files list and to an open baseline's files; every other tab hides it. */
+  function syncFilterTabVisibility() {
+    const off = activeListTab() !== "files" && !document.body.classList.contains("is-baseline-browse");
+    document.body.classList.toggle("is-filter-off-tab", off);
+    if (off) closeFilterMenu();
+  }
+  document.addEventListener("creopdm:baseline-chrome", syncFilterTabVisibility);
+
   function syncMetricFiltersVisibility() {
     // The whole Filter control (not its menu: the menu opens only from the Filter button).
     const root = document.getElementById("filter-dropdown");
@@ -2561,6 +2569,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     form.hidden = activeListTab() !== "files" || !productHasListedObjects();
   }
 
+  syncFilterTabVisibility();
   searchInput?.addEventListener("input", onSearchInput);
   $("#search-form")?.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -7965,6 +7974,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     tab.addEventListener("click", () => {
       if (tab.disabled) return;
       const name = tab.dataset.tab;
+      // A filter belongs to the list it was chosen in: moving to another tab starts unfiltered. Done before
+      // the switch, while the rows it hid are still the visible list's rows (so they are shown again).
+      if (!tab.classList.contains("is-active") && metricButtons().some((btn) => metricMode(btn) !== "off")) {
+        resetMetricFilters();
+      }
       document.querySelectorAll(".tabs .tab").forEach((item) => item.classList.toggle("is-active", item === tab));
       document.querySelectorAll(".tab-panel").forEach((panel) => {
         panel.hidden = panel.id !== `panel-${name}`;
@@ -7995,9 +8009,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
       else refreshTabMetrics();
       syncSearchFormVisibility();
+      syncFilterTabVisibility();
       syncDetailToolbar();
       // The open baseline's toolbar/address follow the tab (leaving the tab keeps the baseline).
       if (name !== "baselines") window.__creopdmModules?.baselines?.syncBrowseChrome?.();
+      syncFilterTabVisibility();
       // Keep list tab ready for Details → Back (Details boot must not consume it).
       if (LIST_RESTORE_TABS.has(String(name || "")) && document.querySelector("#object-table")) {
         persistListTabState(name);

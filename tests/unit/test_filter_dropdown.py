@@ -129,6 +129,29 @@ def test_menu_rows_are_plain_with_hidden_counts_and_the_control_hides_on_other_t
     assert ".filter-dropdown" in mobile
 
 
+def test_changing_tab_resets_the_filter_before_the_switch():
+    app = _app_js()
+    handler = app.split('document.querySelectorAll(".tabs .tab").forEach((tab) => {', 1)[1][:1200]
+    reset = handler.index("resetMetricFilters();")
+    # only when another tab is clicked and a filter is on ...
+    assert "!tab.classList.contains(\"is-active\")" in handler[:reset] and "metricMode(btn) !== \"off\"" in handler[:reset]
+    # ... and before the new tab becomes active, while the filtered rows are still the visible list
+    assert reset < handler.index('item.classList.toggle("is-active", item === tab)')
+
+
+def test_the_filter_shows_only_on_files_and_inside_an_open_baseline():
+    app = _app_js()
+    sync = app.split("function syncFilterTabVisibility() {", 1)[1].split("function syncMetricFiltersVisibility", 1)[0]
+    assert 'activeListTab() !== "files"' in sync and "is-baseline-browse" in sync
+    assert 'classList.toggle("is-filter-off-tab", off)' in sync
+    # recomputed on every tab click and whenever a baseline opens or closes
+    handler = app.split('document.querySelectorAll(".tabs .tab").forEach((tab) => {', 1)[1][:3000]
+    assert "syncFilterTabVisibility();" in handler
+    assert 'addEventListener("creopdm:baseline-chrome", syncFilterTabVisibility)' in app
+    assert "creopdm:baseline-chrome" in (JS / "baselines.js").read_text(encoding="utf-8")
+    assert "body.is-filter-off-tab #filter-dropdown" in CSS.read_text(encoding="utf-8")
+
+
 def test_a_tab_click_never_opens_the_filter_menu():
     """Regression: a routine that showed/hid the old pills row (when the product has files) ran on every tab
     click and un-hid the menu itself, so the menu popped open without the Filter button being clicked."""
