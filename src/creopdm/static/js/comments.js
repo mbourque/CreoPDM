@@ -115,10 +115,11 @@ window.__creopdmModules.comments = {
         `placeholder="${esc(cfg.placeholder || "Write a comment. Type @ to mention someone; paste an image with Ctrl+V.")}"></textarea>` +
         `<div class="cm-mention-list" role="listbox" hidden></div></div>` +
         `<div class="cm-chips"></div>` +
-        `<div class="cm-actions"><button type="button" class="btn cm-attach" title="Add an image (PNG, JPEG, GIF or WebP, up to 5 MB)">Attach image</button>` +
+        `<div class="cm-actions"><span class="small muted cm-hint"></span>` +
+        // Attach image sits right beside the main button, both at the right edge.
+        `<span class="cm-actions-end"><button type="button" class="btn cm-attach" title="Add an image (PNG, JPEG, GIF or WebP, up to 5 MB)">Attach image</button>` +
         `<input type="file" class="cm-file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>` +
-        `<span class="small muted cm-hint"></span>` +
-        `<span class="cm-actions-end">${cfg.onCancel ? `<button type="button" class="btn cm-cancel">Cancel</button> ` : ""}` +
+        `${cfg.onCancel ? `<button type="button" class="btn cm-cancel">Cancel</button> ` : ""}` +
         `<button type="button" class="btn btn-primary cm-send">${esc(cfg.submitLabel || "Comment")}</button></span></div>` +
         `<p class="error cm-error" hidden></p>`;
       const input = root.querySelector(".cm-input");

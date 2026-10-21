@@ -195,6 +195,15 @@ def test_the_highlighted_thread_outline_is_inside_its_box():
     assert ".cm-thread.is-target { box-shadow: inset 0 0 0 2px var(--accent); }" in css  # not clipped
 
 
+def test_attach_image_sits_beside_the_main_button_on_the_right():
+    js = (JS / "comments.js").read_text(encoding="utf-8")
+    row = js.split('<div class="cm-actions">', 1)[1].split('<p class="error cm-error"', 1)[0]
+    end = row.split('<span class="cm-actions-end">', 1)[1]
+    # Attach image is inside the right-hand group, before Cancel and the main button
+    assert end.index("cm-attach") < end.index("cm-cancel") < end.index("cm-send")
+    assert "cm-attach" not in row.split('<span class="cm-actions-end">', 1)[0]  # nothing left on the left
+
+
 def test_deleting_a_first_comment_warns_that_the_replies_go_too():
     js = (JS / "comments.js").read_text(encoding="utf-8")
     assert "Delete this comment and its ${replyCount} repl" in js
