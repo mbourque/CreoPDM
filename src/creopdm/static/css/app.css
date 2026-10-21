@@ -356,6 +356,9 @@ a.brand:hover { text-decoration: none; color: inherit; }
   margin-left: 0.5rem; border: 1px solid var(--line); border-radius: 6px; background: #fff;
 }
 .filter-dropdown[hidden], .filter-dropdown.is-empty { display: none; }
+/* Search carries the push to the right edge; when it is hidden (every tab but Files) the filter takes over,
+   so the filter always sits at the right edge, whatever the width of the pane. */
+.search-form[hidden] + .filter-dropdown { margin-left: auto; }
 .filter-dropdown.is-active { border-color: var(--accent); background: #f4d2b8; color: #6a2e0c; }
 .filter-trigger {
   display: inline-flex; align-items: center; gap: 0.4rem; border: 0; background: transparent;

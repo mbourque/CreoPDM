@@ -129,6 +129,16 @@ def test_menu_rows_are_plain_with_hidden_counts_and_the_control_hides_on_other_t
     assert ".filter-dropdown" in mobile
 
 
+def test_the_filter_stays_at_the_right_edge_when_search_hides():
+    """Search hides on every tab but Files; the control must not slide next to the product gear then."""
+    css = CSS.read_text(encoding="utf-8")
+    assert ".search-form[hidden] + .filter-dropdown { margin-left: auto; }" in css
+    page = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
+    # the sibling rule needs the control directly after the search form
+    after_search = page.split('id="search-form"', 1)[1].split("</form>", 1)[1].lstrip()
+    assert after_search.startswith("{% if selected and status %}") and 'id="filter-dropdown"' in after_search[:900]
+
+
 def test_the_shortcut_pills_are_gone_from_the_scripts():
     notifications = (JS / "notifications.js").read_text(encoding="utf-8")
     baselines = (JS / "baselines.js").read_text(encoding="utf-8")
