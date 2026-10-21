@@ -307,10 +307,14 @@ window.__creopdmModules.notifications = {
     }
 
     function paintTabAndPill() {
-      const open = lastSummary?.open || 0;
       const tab = $('.tabs .tab[data-tab="discussion"]');
+      // On a file's Details page the tab counts only the thread target it shows (the live file, one
+      // version, or that file inside a baseline); on the product page it counts the whole product.
+      const panel = $("#panel-discussion[data-target-type]:not([data-feed])");
+      const own = panel ? slot(panel.dataset.targetType, panel.dataset.target) : null;
+      const open = panel ? own?.open || 0 : lastSummary?.open || 0;
       if (tab) {
-        const mine = lastSummary?.mentions_me || 0;
+        const mine = panel ? own?.mentions_me || 0 : lastSummary?.mentions_me || 0;
         tab.textContent = open ? `Discussion · ${open}` : "Discussion";
         tab.classList.toggle("has-mention", mine > 0);
       }

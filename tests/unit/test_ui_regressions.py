@@ -1400,7 +1400,7 @@ def test_new_product_and_sidebar_collapse_handlers_present():
         html,
         re.DOTALL,
     )
-    assert 'id="sidebar-collapse-btn"' in APP_HTML.read_text(encoding="utf-8")
+    assert 'id="sidebar-collapse-btn"' in (APP_HTML.parent / "_sidebar.html").read_text(encoding="utf-8")
 
 
 def test_type_icon_css_svg_larger_than_png():
@@ -3063,5 +3063,5 @@ def test_product_list_never_shows_local_placeholder_for_empty_number():
         text = (root / name).read_text(encoding="utf-8")
         assert 'or "Local"' not in text, name
         assert "{% else %}Local{% endif %}" not in text, name
-    app = (root / "app.html").read_text(encoding="utf-8")
+    app = (root / "_sidebar.html").read_text(encoding="utf-8")
     assert "{% if product.number %}<span class=\"product-number\">" in app

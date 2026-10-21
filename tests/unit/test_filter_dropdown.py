@@ -198,3 +198,11 @@ def test_the_product_sidebar_stays_on_the_details_page(auth_client, auth_ctx):
     assert f'href="/?product={product["uuid"]}"' in page.split('id="product-list"', 1)[1]
     assert "product-item is-active" in page  # the file's own product is the highlighted one
     assert 'class="detail"' in page
+
+
+def test_the_details_discussion_tab_counts_only_its_own_target():
+    """Regression: on a baseline file's Details the tab showed the product-wide open-thread total."""
+    js = (JS / "notifications.js").read_text(encoding="utf-8")
+    paint = js.split("function paintTabAndPill() {", 1)[1].split("function paintGlyphs()", 1)[0]
+    assert '#panel-discussion[data-target-type]:not([data-feed])' in paint  # the product feed keeps the total
+    assert "slot(panel.dataset.targetType, panel.dataset.target)" in paint
