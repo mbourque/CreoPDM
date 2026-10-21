@@ -43,6 +43,10 @@ window.__creopdmModules.notifications = {
       const v = encodeURIComponent(item.version_uuid || "");
       const t = item.thread_uuid ? `&thread=${encodeURIComponent(item.thread_uuid)}` : "";
       const type = item.target_type;
+      // Activity on a watched product (not a comment): the file's Details, or the product's Files.
+      if (item.kind === "WATCH") {
+        return type === "OBJECT" && o ? `/products/${p}/objects/${o}` : `/?product=${p}`;
+      }
       if (type === "OBJECT" && o) return `/products/${p}/objects/${o}?tab=discussion${t}`;
       if (type === "VERSION" && o && v) return `/products/${p}/objects/${o}/versions/${v}?tab=discussion${t}`;
       if (type === "BASELINE") {

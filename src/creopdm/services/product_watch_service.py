@@ -10,9 +10,11 @@ from sqlalchemy.orm import Session
 from creopdm.auth_constants import UserStatus
 from creopdm.exceptions import ValidationAppError
 from creopdm.logging_setup import get_logger
+from creopdm.models.comment import NOTIFY_WATCH
 from creopdm.models.product import Product
 from creopdm.models.user import ProductWatch, User, UserProduct
 from creopdm.services.notification_service import NotificationEvent, NotificationService
+from creopdm.services.user_notification_service import UserNotificationService, commenter_user_ids
 from creopdm.utils.timefmt import format_local
 
 logger = get_logger("product_watch")
@@ -42,8 +44,12 @@ def _usable_watch_email(raw: str | None) -> str | None:
 
 
 class ProductWatchService:
-    def __init__(self, notifications: NotificationService) -> None:
+    def __init__(
+        self, notifications: NotificationService, inbox: UserNotificationService | None = None
+    ) -> None:
         self._notifications = notifications
+        # The in-app inbox (bell + toast). Without it watchers only get e-mail, as before.
+        self._inbox = inbox
 
     def email_notifications_enabled(self, *, email_enabled: bool) -> bool:
         return bool(email_enabled)
@@ -120,15 +126,16 @@ class ProductWatchService:
             product.uuid,
         )
 
-    def list_watcher_emails(
+    def list_watchers(
         self,
         db: Session,
         product_id: int,
         *,
         exclude_user_id: int | None = None,
-    ) -> list[str]:
+    ) -> list[User]:
+        """Active watchers who still have access to the product (never the actor)."""
         stmt = (
-            select(User.email, User.id)
+            select(User)
             .join(ProductWatch, ProductWatch.user_id == User.id)
             .where(ProductWatch.product_id == product_id)
             # Watching alone is not access: a watcher who lost the product (or was disabled)
@@ -143,9 +150,18 @@ class ProductWatchService:
         )
         if exclude_user_id is not None:
             stmt = stmt.where(User.id != exclude_user_id)
+        return list(db.scalars(stmt).all())
+
+    def list_watcher_emails(
+        self,
+        db: Session,
+        product_id: int,
+        *,
+        exclude_user_id: int | None = None,
+    ) -> list[str]:
         out: list[str] = []
-        for email, _uid in db.execute(stmt).all():
-            usable = _usable_watch_email(email)
+        for watcher in self.list_watchers(db, product_id, exclude_user_id=exclude_user_id):
+            usable = _usable_watch_email(watcher.email)
             if usable is not None:
                 out.append(usable)
         # Stable unique order
@@ -175,6 +191,17 @@ class ProductWatchService:
         what_label: str = "Files",
         email_enabled: bool,
     ) -> None:
+        # Toast + bell for watchers: works with or without e-mail.
+        self._notify_in_app(
+            db,
+            product=product,
+            action=action,
+            actor=actor,
+            actor_label=actor_label,
+            filenames=filenames,
+            object_uuid=object_uuid,
+            what=what,
+        )
         if not email_enabled:
             logger.info(
                 "product_activity skip product=%s action=%s: email notifications disabled",
@@ -239,6 +266,50 @@ class ProductWatchService:
             message=message,
             to=recipients,
         )
+
+    def _notify_in_app(
+        self,
+        db: Session,
+        *,
+        product: Product,
+        action: str,
+        actor: User | None,
+        actor_label: str,
+        filenames: list[str],
+        object_uuid: str | None,
+        what: str | None,
+    ) -> None:
+        """A bell entry and toast for each watcher who has access and can see the bell.
+
+        Never for the person who did it. A new comment is skipped here: comments already tell
+        the people they concern (mentions, replies), so a watcher would be told twice.
+        """
+        if self._inbox is None or action == "Comment added":
+            return
+        try:
+            files = [f for f in filenames if (f or "").strip()]
+            shown = what or ", ".join(files[:3]) + (f" (+{len(files) - 3} more)" if len(files) > 3 else "")
+            single = bool(object_uuid and len(files) == 1)
+            allowed = commenter_user_ids(db)
+            for watcher in self.list_watchers(
+                db, product.id, exclude_user_id=actor.id if actor is not None else None
+            ):
+                if watcher.id not in allowed:
+                    continue
+                self._inbox.create(
+                    db,
+                    user=watcher,
+                    kind=NOTIFY_WATCH,
+                    product=product,
+                    target_type="OBJECT" if single else "PRODUCT",
+                    target_uuid=str(object_uuid) if single else product.uuid,
+                    title=f"{actor_label}: {action}",
+                    excerpt=shown or product.name,
+                    actor=(actor.username if actor is not None else "") or actor_label,
+                    comment_id=None,
+                )
+        except Exception:  # noqa: BLE001 — the toast is an extra; it never breaks the action
+            logger.exception("in-app watch notification failed product=%s", product.uuid)
 
     def notify_force_undo_owners(
         self,

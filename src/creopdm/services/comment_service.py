@@ -48,7 +48,7 @@ from creopdm.models.version import ObjectVersion
 from creopdm.services.activity_service import ActivityService
 from creopdm.services.notification_service import NotificationEvent, NotificationService
 from creopdm.services.product_watch_service import _usable_watch_email
-from creopdm.services.user_notification_service import UserNotificationService
+from creopdm.services.user_notification_service import UserNotificationService, commenter_user_ids
 from creopdm.services.user_service import UserService
 from creopdm.utils.comment_images import (
     MAX_IMAGES_PER_COMMENT,
@@ -239,14 +239,7 @@ class CommentService:
     def _commenter_ids(self, db: Session) -> set[int]:
         """Users whose role has comments.view: the only people who can be tagged or notified.
         Someone whose role lacks it cannot see comments, so tagging them would tell them nothing."""
-        return set(
-            db.scalars(
-                select(UserRole.user_id)
-                .join(RolePermission, RolePermission.role_id == UserRole.role_id)
-                .join(Permission, Permission.id == RolePermission.permission_id)
-                .where(Permission.key == PERMISSION_COMMENTS_VIEW)
-            )
-        )
+        return commenter_user_ids(db)
 
     def mentionable(
         self,

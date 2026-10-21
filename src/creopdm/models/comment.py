@@ -22,6 +22,7 @@ NOTIFY_REPLY = "REPLY"
 NOTIFY_ON_MINE = "COMMENT_ON_MINE"
 NOTIFY_RESOLVED = "RESOLVED"
 NOTIFY_REOPENED = "REOPENED"
+NOTIFY_WATCH = "WATCH"  # activity on a product the user watches (not a comment)
 
 
 class Comment(Base):

@@ -12,11 +12,25 @@ from datetime import datetime, timezone
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
+from creopdm.auth_constants import PERMISSION_COMMENTS_VIEW
 from creopdm.models.comment import UserNotification
 from creopdm.models.product import Product
-from creopdm.models.user import User, UserProduct
+from creopdm.models.user import Permission, RolePermission, User, UserProduct, UserRole
 
 MAX_LIST = 50
+
+
+def commenter_user_ids(db: Session) -> set[int]:
+    """Users whose role has comments.view: the only people who see the bell and the toasts, so the
+    only ones worth telling in-app (comments and watched-product activity share this rule)."""
+    return set(
+        db.scalars(
+            select(UserRole.user_id)
+            .join(RolePermission, RolePermission.role_id == UserRole.role_id)
+            .join(Permission, Permission.id == RolePermission.permission_id)
+            .where(Permission.key == PERMISSION_COMMENTS_VIEW)
+        )
+    )
 
 
 def _visible_filter(user: User):

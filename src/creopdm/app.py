@@ -127,8 +127,8 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
     user_accounts = UserService()
     email = EmailService()
     notifications = NotificationService(get_config=lambda: manager.settings.email, email=email)
-    product_watches = ProductWatchService(notifications)
     user_notifications = UserNotificationService()
+    product_watches = ProductWatchService(notifications, user_notifications)
     comments = CommentService(
         activities,
         user_accounts,
