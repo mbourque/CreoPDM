@@ -741,9 +741,9 @@
            {% elif version_view %}data-target-type="VERSION" data-target="{{ version_view.uuid }}"
            {% else %}data-target-type="OBJECT" data-target="{{ object.uuid }}"{% endif %} hidden>
     <p class="muted small">
-      {% if version_view and from_baseline %}Comments on this file as it is in the baseline {{ from_baseline.name }}.
-      {% elif version_view %}Comments on {{ object.filename }} {{ version_view.display }}.
-      {% else %}Comments on {{ object.filename }}.{% endif %}
+      {% if version_view and from_baseline %}Comments on this file as it is in the baseline <strong>{{ from_baseline.name }}</strong>.
+      {% elif version_view %}Comments on <strong>{{ object.filename }} {{ version_view.display }}</strong>.
+      {% else %}Comments on <strong>{{ object.filename }}</strong>.{% endif %}
     </p>
     <div class="cm-panel-host"></div>
   </section>

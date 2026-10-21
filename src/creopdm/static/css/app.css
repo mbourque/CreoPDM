@@ -2696,3 +2696,5 @@ dialog.cm-lightbox[open] { display: flex; flex-direction: column; gap: 0.6rem; }
 .content .tab-panel > .cm-panel-host.cm-host > * { max-width: 880px; }
 /* Checked out / Modified / New files show only while they have something in them. */
 .tabs .tab[hidden] { display: none !important; }
+/* The product Discussion intro reads at the same size as a file's ("Comments on <file>."). */
+.discussion-intro { font-size: 0.95rem; line-height: 1.45; }

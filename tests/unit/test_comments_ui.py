@@ -166,6 +166,17 @@ def test_right_click_comment_on_a_single_file_row():
     assert "canDetails && !one.isFolder" in menu
 
 
+def test_product_discussion_intro_reads_comments_on_the_product_at_the_file_page_size():
+    page = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
+    assert '<p class="muted discussion-intro">Comments on <strong>{{ selected.name }}</strong>.</p>' in page
+    detail = (ROOT / "src" / "creopdm" / "templates" / "object_detail.html").read_text(encoding="utf-8")
+    assert "Comments on <strong>{{ object.filename }}</strong>." in detail  # the name is bold on a file too
+    assert "Every conversation in this product" not in page
+    css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    # same size as the file's Discussion intro (.detail text is 0.95rem)
+    assert ".discussion-intro { font-size: 0.95rem;" in css
+
+
 def test_discussion_pages_do_not_repeat_the_mention_hint():
     """The comment box's own placeholder already says "Type @ to mention someone"."""
     for name in ("app.html", "object_detail.html"):
