@@ -166,6 +166,14 @@ def test_right_click_comment_on_a_single_file_row():
     assert "canDetails && !one.isFolder" in menu
 
 
+def test_discussion_pages_do_not_repeat_the_mention_hint():
+    """The comment box's own placeholder already says "Type @ to mention someone"."""
+    for name in ("app.html", "object_detail.html"):
+        text = (ROOT / "src" / "creopdm" / "templates" / name).read_text(encoding="utf-8")
+        assert "Type @ to mention someone who has access to this product" not in text, name
+    assert "Type @ to mention someone" in (JS / "comments.js").read_text(encoding="utf-8")  # the placeholder stays
+
+
 def test_discussion_tab_hides_the_count_pills_and_the_file_toolbar():
     """A conversation page needs neither the Folders / Files / Parts pills above it nor the
     Add / Open / Checkout toolbar below it (the baseline list hides them the same way)."""
