@@ -733,3 +733,50 @@ def test_threads_list_newest_first_and_replies_oldest_first(auth_client, auth_ct
     assert [t["uuid"] for t in threads] == [third["uuid"], second["uuid"], first["uuid"]]
     # inside a thread the conversation still reads in order
     assert [r["body"] for r in threads[-1]["replies"]] == ["reply A", "reply B"]
+
+
+@requires_git
+def test_deleting_the_first_comment_deletes_the_whole_thread(auth_client, auth_ctx):
+    _setup(auth_client, auth_ctx)
+    product, _ = _product(auth_client)
+    up = f"/api/products/{product['uuid']}/comment-attachments"
+    shot = auth_client.post(up, content=_png()).json()
+    root = _post(auth_client, product, "@eng root question", attachment_uuids=[shot["uuid"]]).json()
+    _login(auth_client, "eng", "EngPass1")
+    reply = _post(auth_client, product, "@bob eng answers", parent=root["uuid"]).json()
+    _login(auth_client, "admin", "AdminPass1")
+    keep = _post(auth_client, product, "another thread").json()
+    reply_two = _post(auth_client, product, "admin follows up", parent=root["uuid"]).json()
+    assert reply_two["uuid"]
+
+    assert auth_client.delete(f"/api/comments/{root['uuid']}").status_code == 204
+
+    threads = auth_client.get(
+        f"/api/products/{product['uuid']}/comments", params={"filter": "all"}
+    ).json()
+    assert [t["uuid"] for t in threads] == [keep["uuid"]]  # no placeholder, no orphaned replies
+    with auth_ctx.session_factory() as db:
+        assert {c.uuid for c in db.scalars(select(Comment))} == {keep["uuid"]}
+        assert db.scalar(select(func.count()).select_from(CommentAttachment)) == 0
+        assert db.scalar(select(func.count()).select_from(CommentMention)) == 0
+        assert db.scalar(select(func.count()).select_from(UserNotification)) == 0
+        events = [e for e in auth_ctx.activities.list_events(db, q="") if e.action == "COMMENT_DELETED"]
+        assert len(events) == 1  # one audit row for the thread, and it says what went with it
+    page = auth_client.get("/admin/utilities/audit", params={"q": "root question"})
+    assert page.status_code == 200 and "2 replies deleted with it" in page.text
+    # a reply can also be deleted on its own (it leaves a placeholder only inside a live thread)
+    other = _post(auth_client, product, "thread with reply").json()
+    mine = _post(auth_client, product, "my reply", parent=other["uuid"]).json()
+    assert auth_client.delete(f"/api/comments/{mine['uuid']}").status_code == 204
+    again = auth_client.get(f"/api/products/{product['uuid']}/comments").json()
+    thread = next(t for t in again if t["uuid"] == other["uuid"])
+    assert thread["replies"][0]["deleted"] is True
+
+
+def test_migration_purges_threads_left_half_deleted():
+    from pathlib import Path
+
+    text = (Path(__file__).resolve().parents[2] / "src/creopdm/database/migrations/versions/053_purge_deleted_threads.py").read_text(encoding="utf-8")
+    assert 'down_revision: Union[str, None] = "052_object_number_len"' in text
+    assert len("053_purge_deleted_threads") <= 32
+    assert "DELETE FROM comments WHERE parent_id IN" in text

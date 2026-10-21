@@ -755,7 +755,22 @@ class CommentService:
         if not own and not actor.can_admin:
             raise PermissionDeniedError("You can only delete your own comments.")
         target = self._target(db, product, comment.target_type, comment.target_uuid)
-        images = len(self._attachments(db, [comment.id]).get(comment.id, []))
+        # Deleting the first comment of a thread deletes the whole thread: its replies, their
+        # pictures, mentions and notifications go too (no "deleted" placeholder is left behind).
+        replies = (
+            list(
+                db.scalars(
+                    select(Comment).where(Comment.parent_id == comment.id).where(Comment.deleted_at.is_(None))
+                )
+            )
+            if comment.parent_id is None
+            else []
+        )
+        ids = [comment.id, *[r.id for r in replies]]
+        images = sum(len(rows) for rows in self._attachments(db, ids).values())
+        extra: dict[str, Any] = {"comment_author": comment.author}
+        if comment.parent_id is None:
+            extra["replies_deleted"] = len(replies)
         self._audit(
             db,
             ActivityAction.COMMENT_DELETED,
@@ -767,8 +782,17 @@ class CommentService:
             mentions=[],
             images=images,
             object_id=target.object_id,
-            extra={"comment_author": comment.author},
+            extra=extra,
         )
+        if comment.parent_id is None:
+            all_ids = [comment.id, *list(db.scalars(select(Comment.id).where(Comment.parent_id == comment.id)))]
+            db.execute(delete(UserNotification).where(UserNotification.comment_id.in_(all_ids)))
+            db.execute(delete(CommentAttachment).where(CommentAttachment.comment_id.in_(all_ids)))
+            db.execute(delete(CommentMention).where(CommentMention.comment_id.in_(all_ids)))
+            db.execute(update(Comment).where(Comment.id.in_(all_ids)).values(parent_id=None))
+            db.execute(delete(Comment).where(Comment.id.in_(all_ids)))
+            db.flush()
+            return
         db.execute(delete(CommentAttachment).where(CommentAttachment.comment_id == comment.id))
         db.execute(delete(CommentMention).where(CommentMention.comment_id == comment.id))
         comment.body = ""

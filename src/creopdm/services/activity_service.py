@@ -818,6 +818,9 @@ def _comment_summary(action: str, details: dict[str, Any]) -> str:
     owner = str(details.get("comment_author") or "").strip()
     if action == ActivityAction.COMMENT_DELETED.value and owner:
         out.append(f"written by {owner}")
+    replies = details.get("replies_deleted")
+    if action == ActivityAction.COMMENT_DELETED.value and isinstance(replies, int) and replies:
+        out.append(f"{replies} repl{'ies' if replies != 1 else 'y'} deleted with it")
     return " · ".join(out)
 
 
