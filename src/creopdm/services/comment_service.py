@@ -1047,7 +1047,9 @@ class CommentService:
             select(Comment)
             .where(Comment.product_id == product.id)
             .where(Comment.parent_id.is_(None))
-            .order_by(Comment.created_at.asc(), Comment.id.asc())
+            # Newest thread first (the comment box is on top, so a new comment appears right under
+            # it); the replies inside a thread stay oldest first so a conversation reads in order.
+            .order_by(Comment.created_at.desc(), Comment.id.desc())
         )
         if target_type:
             stmt = stmt.where(Comment.target_type == target_type)

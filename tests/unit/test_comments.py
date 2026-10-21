@@ -717,3 +717,19 @@ def test_a_mention_mail_without_pictures_has_no_inline_images(auth_client, auth_
     _post(auth_client, product, "@eng just words")
     (mail,) = [kw for event, kw in sent if event == "comment_mention"]
     assert mail["inline_images"] is None and "cid:" not in mail["html"] and "just words" in mail["html"]
+
+
+@requires_git
+def test_threads_list_newest_first_and_replies_oldest_first(auth_client, auth_ctx):
+    _setup(auth_client, auth_ctx)
+    product, _ = _product(auth_client)
+    first = _post(auth_client, product, "first thread").json()
+    second = _post(auth_client, product, "second thread").json()
+    third = _post(auth_client, product, "third thread").json()
+    _post(auth_client, product, "reply A", parent=first["uuid"])
+    _post(auth_client, product, "reply B", parent=first["uuid"])
+    threads = auth_client.get(f"/api/products/{product['uuid']}/comments").json()
+    # newest thread on top, right under the comment box
+    assert [t["uuid"] for t in threads] == [third["uuid"], second["uuid"], first["uuid"]]
+    # inside a thread the conversation still reads in order
+    assert [r["body"] for r in threads[-1]["replies"]] == ["reply A", "reply B"]
