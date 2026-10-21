@@ -89,13 +89,10 @@
     {% endif %}
   </nav>
 
-  <header class="detail-tab-title" id="detail-tab-title">
-    <h1 id="detail-tab-title-text">Details</h1>
-  </header>
-
   <header class="detail-head">
     <div>
       <div class="detail-title-row">
+        <span class="detail-tab-title" id="detail-tab-title"><h1 id="detail-tab-title-text">Details</h1></span>
         <h1 class="detail-filename">{{ object.filename }}</h1>
         {% if product_ui.show_open and not non_openable and (not version_view or from_baseline) %}
         <button type="button" class="btn detail-open-btn" id="detail-open-btn"

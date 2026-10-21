@@ -1891,6 +1891,15 @@ body.is-file-drag #file-drop-overlay {
   width: fit-content;
   max-width: 100%;
 }
+/* "Details:" label on the same line as the file name and Open… (saves a row). */
+.detail-title-row .detail-tab-title { margin: 0; flex: 0 0 auto; }
+.detail-title-row .detail-tab-title h1 {
+  font-size: 1.15rem;
+  font-weight: 650;
+  overflow: visible;
+  text-overflow: clip;
+}
+.detail-title-row .detail-tab-title h1::after { content: ":"; }
 .detail-head h1,
 .detail-filename {
   margin: 0;
@@ -2553,8 +2562,8 @@ body.is-file-drag #file-drop-overlay {
   .detail-meta {
     display: none !important;
   }
-  .detail-tab-title h1 {
-    font-size: 1.2rem;
+  .detail-title-row .detail-tab-title h1 {
+    font-size: 1rem;
   }
   .detail-head h1,
   .detail-filename {

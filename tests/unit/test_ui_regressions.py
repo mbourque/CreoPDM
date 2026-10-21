@@ -1849,7 +1849,7 @@ def test_history_revert_only_for_older_versions():
     assert "subpanel-versions" not in detail
     assert 'id="history-files-table"' in detail
     assert "never **Check In ▾**" in docs or "Check In stays on the Files page" in docs
-    assert "**Details** title" in docs
+    assert "**Details:** then the file name then an **Open…** button" in docs
     assert "separate Version History view" in docs
     assert "left: 0" in css
     assert "#remove-menu .toolbar-menu-panel" in css
