@@ -1604,7 +1604,10 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     assert "object.checkout_since" in overview
     assert 'local_time_pretty(object.checkout_since)' in detail
     assert 'title="Checked out {{ local_time_pretty(object.checkout_since) }}"' in detail
-    assert "show_name" in overview
+    # Name mirrors the Files list (file name with extension) and Type is its type label.
+    assert "show_name" not in overview and "<td>File name</td>" not in overview
+    assert "<tr><td>Name</td><td>{{ object.filename" in overview
+    assert "<tr><td>Type</td><td>{{ object.type_label" in overview
     assert "show_common" in overview
     assert "show_full" in overview
     assert "show_instance" in overview

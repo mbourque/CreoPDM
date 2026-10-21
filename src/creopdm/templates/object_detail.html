@@ -182,7 +182,6 @@
     {% set id_full = (identity.full_name or "")|string|trim %}
     {% set id_instance = (identity.instance_name or "")|string|trim %}
     {% set id_generic = (identity.generic_name or "")|string|trim %}
-    {% set show_name = id_name and _norm(id_name) != _norm(id_number) and _stem(id_name) != _stem(id_number) %}
     {% set show_common = id_common and _norm(id_common) != _norm(id_number) and _norm(id_common) != _norm(id_name)
          and _stem(id_common) != _stem(id_number) and _stem(id_common) != _stem(id_name) %}
     {% set show_full = id_full and _norm(id_full) != _norm(id_number) and _norm(id_full) != _norm(id_name)
@@ -196,10 +195,9 @@
       <table class="grid inventory-table"{% if version_view %} id="version-facts"{% endif %}>
         <thead><tr><th>Field</th><th>Value</th></tr></thead>
         <tbody>
-          <tr><td>Name</td><td>{{ id_number or id_name or "—" }}</td></tr>
-          {% if show_name %}
-          <tr><td>File name</td><td>{{ id_name }}</td></tr>
-          {% endif %}
+          {# Name and Type read exactly as in the Files list (file name with extension, same type label). #}
+          <tr><td>Name</td><td>{{ object.filename or "—" }}</td></tr>
+          <tr><td>Type</td><td>{{ object.type_label or "—" }}</td></tr>
           {% if show_common %}
           <tr><td>Common name</td><td>{{ id_common }}</td></tr>
           {% endif %}
