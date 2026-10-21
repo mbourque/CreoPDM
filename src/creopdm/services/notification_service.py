@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from enum import StrEnum
-from typing import Protocol
+from typing import Any, Protocol
 
 from creopdm.config import EmailConfig
 from creopdm.logging_setup import get_logger
@@ -53,6 +53,7 @@ class NotificationProvider(Protocol):
         subject: str,
         message: str,
         to: list[str],
+        **extra: Any,
     ) -> None: ...
 
 
@@ -69,8 +70,13 @@ class EmailNotificationProvider:
         subject: str,
         message: str,
         to: list[str],
+        html: str | None = None,
+        inline_images: Sequence[tuple[str, bytes, str]] | None = None,
     ) -> None:
-        self._email.send(to, subject, message)
+        if html:
+            self._email.send(to, subject, message, html=html, inline_images=inline_images)
+        else:
+            self._email.send(to, subject, message)  # plain text: exactly as before
 
 
 class NotificationService:
@@ -102,6 +108,8 @@ class NotificationService:
         subject: str,
         message: str,
         to: str | list[str] | None = None,
+        html: str | None = None,
+        inline_images: Sequence[tuple[str, bytes, str]] | None = None,
     ) -> None:
         try:
             kind = event if isinstance(event, NotificationEvent) else NotificationEvent(str(event))
@@ -122,6 +130,9 @@ class NotificationService:
             )
             return
 
+        # Only a mail that has an HTML version passes the extra arguments, so a provider written for
+        # plain text keeps working untouched.
+        extra = {"html": html, "inline_images": inline_images} if html else {}
         for provider in self._providers:
             try:
                 provider.send(
@@ -129,6 +140,7 @@ class NotificationService:
                     subject=subject,
                     message=message,
                     to=recipients,
+                    **extra,
                 )
             except Exception as exc:  # noqa: BLE001 — never fail originating operation
                 logger.error(

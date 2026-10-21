@@ -121,3 +121,51 @@ def test_notification_send_failure_is_logged_not_raised(caplog):
     with caplog.at_level("ERROR", logger="creopdm.notifications"):
         notify.notify(NotificationEvent.SERVER_ERROR, subject="Err", message="Boom")
     assert any("failed" in r.message.lower() for r in caplog.records)
+
+
+def _sent_message(**send_kwargs):
+    service = EmailService(lambda: _cfg())
+    smtp = MagicMock()
+    smtp.__enter__ = MagicMock(return_value=smtp)
+    smtp.__exit__ = MagicMock(return_value=False)
+    with patch("creopdm.services.email_service.smtplib.SMTP", return_value=smtp):
+        service.send("user@example.com", "Subject", "Plain body", **send_kwargs)
+    return smtp.send_message.call_args.args[0]
+
+
+def test_plain_mail_stays_plain_text():
+    msg = _sent_message()
+    assert not msg.is_multipart() and msg.get_content_type() == "text/plain"
+
+
+def test_html_mail_embeds_pictures_inline_not_as_attachments():
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+    msg = _sent_message(
+        html='<p>Look</p><img src="cid:pic1@creopdm">',
+        inline_images=[("pic1@creopdm", png, "image/png"), ("pic2@creopdm", png, "image/png")],
+    )
+    parts = list(msg.walk())
+    types = [p.get_content_type() for p in parts]
+    assert "text/plain" in types and "text/html" in types  # both versions: text for plain clients
+    assert msg.get_content_type() == "multipart/alternative"
+    assert "multipart/related" in types  # the pictures belong to the HTML part
+    images = [p for p in parts if p.get_content_maintype() == "image"]
+    assert [p["Content-ID"] for p in images] == ["<pic1@creopdm>", "<pic2@creopdm>"]
+    assert all(p.get_content_disposition() == "inline" for p in images)  # shown in the body
+    assert not any(p.get_content_disposition() == "attachment" for p in parts)  # never attachments
+    assert images[0].get_payload(decode=True) == png
+    html_part = next(p for p in parts if p.get_content_type() == "text/html")
+    assert "cid:pic1@creopdm" in html_part.get_content()
+
+
+def test_a_provider_without_html_support_still_works():
+    seen = {}
+
+    class PlainProvider:
+        def send(self, *, event, subject, message, to):
+            seen["called"] = (subject, message, to)
+
+    cfg = _cfg()
+    service = NotificationService(get_config=lambda: cfg, email=MagicMock(), providers=[PlainProvider()])
+    service.notify(NotificationEvent.USER_WORKFLOW, subject="S", message="M", to="a@example.com")
+    assert seen["called"][0] == "S"

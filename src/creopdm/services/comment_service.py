@@ -8,6 +8,7 @@ only an extra and only when e-mail is set up.
 
 from __future__ import annotations
 
+import html as html_lib
 import json
 import re
 from urllib.parse import quote
@@ -102,6 +103,32 @@ def _version_display(revision: str | None, iteration: int | None) -> str:
 def _iso(value: datetime | None) -> str | None:
     utc = as_utc(value)
     return utc.isoformat() if utc is not None else None
+
+
+def _email_html(
+    title: str, product_name: str, text: str, link: str, images: list[tuple[str, str]]
+) -> str:
+    """The mail body as HTML: who did what, the comment, its pictures (cid:) and a link to it."""
+    esc = html_lib.escape
+    parts = [f"<p><strong>{esc(title)}</strong> in {esc(product_name)}:</p>"]
+    if text:
+        quoted = esc(text).replace("\n", "<br>")
+        parts.append(
+            '<blockquote style="margin:0 0 12px;padding:8px 12px;border-left:3px solid #b4531e;'
+            f'background:#f6f6f6">{quoted}</blockquote>'
+        )
+    for cid, name in images:
+        parts.append(
+            f'<p><img src="cid:{esc(cid)}" alt="{esc(name)}" '
+            'style="max-width:600px;height:auto;border:1px solid #cccccc"></p>'
+        )
+    if link:
+        parts.append(f'<p><a href="{esc(link, quote=True)}">Open the comment in CreoPDM</a></p>')
+    return (
+        '<html><body style="font-family:Segoe UI,Calibri,Arial,sans-serif;font-size:14px;color:#1b2430">'
+        + "".join(parts)
+        + "</body></html>"
+    )
 
 
 def _excerpt(text: str) -> str:
@@ -623,12 +650,25 @@ class CommentService:
         if not address:
             return
         link = self._deep_link(db, base_url, product, comment, target)
+        # The whole comment (not the 200-character inbox excerpt) and its pictures, embedded in the
+        # mail body as inline images (cid:), never as attachments.
+        text = ((note or comment.body) or "").strip()[:2000]
+        pictures = self._attachments(db, [comment.id]).get(comment.id, []) if images else []
+        cids = [f"cmt-{a.uuid}@creopdm" for a in pictures]
+        inline = [(cid, bytes(a.data), a.content_type) for cid, a in zip(cids, pictures)]
+        html = _email_html(title, product.name, text, link, [(c, a.filename) for c, a in zip(cids, pictures)])
+        plain = f"{title} in {product.name}:\n\n{text}\n\n"
+        if pictures:
+            count = len(pictures)
+            plain += f"({count} image{'s' if count != 1 else ''}: open the link to see {'them' if count != 1 else 'it'})\n\n"
         try:
             self._notifications.notify(
                 NotificationEvent.COMMENT_MENTION,
                 subject=f"CreoPDM: {title}",
-                message=f"{title} in {product.name}:\n\n{excerpt}\n\n{link}",
+                message=plain + (link or ""),
                 to=address,
+                html=html,
+                inline_images=inline or None,
             )
         except Exception as exc:  # noqa: BLE001 — a mail problem never blocks a comment
             logger.warning("Comment e-mail to user %s failed: %s", user.id, exc)

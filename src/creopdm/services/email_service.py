@@ -28,8 +28,21 @@ class EmailService:
             raise ValidationAppError("Email service is not configured.")
         return self._get_config()
 
-    def send(self, to: str | Sequence[str], subject: str, message: str) -> None:
-        """Send a plain-text email. Raises ValidationAppError on misconfig or SMTP failure."""
+    def send(
+        self,
+        to: str | Sequence[str],
+        subject: str,
+        message: str,
+        *,
+        html: str | None = None,
+        inline_images: Sequence[tuple[str, bytes, str]] | None = None,
+    ) -> None:
+        """Send an email. Raises ValidationAppError on misconfig or SMTP failure.
+
+        Plain text by default. With ``html`` the mail carries both versions (text for clients
+        that do not show HTML), and ``inline_images`` -- (content id, bytes, content type) -- are
+        embedded in the HTML as ``<img src="cid:...">``: shown in the body, not as attachments.
+        """
         cfg = self._config()
         recipients = _normalize_recipients(to)
         if not recipients:
@@ -47,6 +60,14 @@ class EmailService:
         msg["To"] = ", ".join(recipients)
         msg["Subject"] = (subject or "").strip() or "(no subject)"
         msg.set_content(message or "")
+        if html:
+            msg.add_alternative(html, subtype="html")
+            html_part = msg.get_payload()[-1]
+            for cid, data, content_type in inline_images or ():
+                maintype, _, subtype = (content_type or "image/png").partition("/")
+                html_part.add_related(
+                    data, maintype=maintype, subtype=subtype or "png", cid=f"<{cid}>", disposition="inline"
+                )
 
         try:
             with smtplib.SMTP(host, port, timeout=30) as smtp:

@@ -675,3 +675,45 @@ def test_deleting_a_product_deletes_all_its_discussion(auth_client, auth_ctx):
         assert [c.body for c in db.scalars(select(Comment))] == ["stays"]
         assert db.scalar(select(func.count()).select_from(CommentAttachment)) == 0
         assert db.scalar(select(func.count()).select_from(UserNotification)) == 0
+
+
+@requires_git
+def test_the_mention_mail_shows_the_comments_pictures_inline(auth_client, auth_ctx, monkeypatch):
+    _setup(auth_client, auth_ctx)
+    sent = []
+    monkeypatch.setattr(auth_ctx.notifications, "notify", lambda event, **kw: sent.append((str(event), kw)))
+    auth_ctx.settings.email.enabled = True
+    product, _ = _product(auth_client)
+    up = f"/api/products/{product['uuid']}/comment-attachments"
+    shots = [auth_client.post(f"{up}?filename=shot{i}.png", content=_png((20 + i, 20))).json() for i in range(2)]
+    made = _post(
+        auth_client,
+        product,
+        "@eng please check <b>this</b> & that\nsecond line",
+        attachment_uuids=[s["uuid"] for s in shots],
+    )
+    assert made.status_code == 201, made.text
+    (mail,) = [kw for event, kw in sent if event == "comment_mention"]
+    # inline pictures: one per image, bytes + type, referenced from the HTML as cid:
+    inline = mail["inline_images"]
+    assert len(inline) == 2 and all(data[:8] == b"\x89PNG\r\n\x1a\n" and kind == "image/png" for _cid, data, kind in inline)
+    for cid, _data, _kind in inline:
+        assert f'src="cid:{cid}"' in mail["html"]
+    # the whole comment, escaped (no markup injected), and a link to the thread
+    assert "&lt;b&gt;this&lt;/b&gt; &amp; that<br>second line" in mail["html"]
+    assert "<b>this</b>" not in mail["html"]
+    assert f"thread={made.json()['uuid']}" in mail["html"] and 'href="' in mail["html"]
+    # the plain-text version says there are pictures and where to see them
+    assert "2 images" in mail["message"] and "please check <b>this</b> & that" in mail["message"]
+
+
+@requires_git
+def test_a_mention_mail_without_pictures_has_no_inline_images(auth_client, auth_ctx, monkeypatch):
+    _setup(auth_client, auth_ctx)
+    sent = []
+    monkeypatch.setattr(auth_ctx.notifications, "notify", lambda event, **kw: sent.append((str(event), kw)))
+    auth_ctx.settings.email.enabled = True
+    product, _ = _product(auth_client)
+    _post(auth_client, product, "@eng just words")
+    (mail,) = [kw for event, kw in sent if event == "comment_mention"]
+    assert mail["inline_images"] is None and "cid:" not in mail["html"] and "just words" in mail["html"]
