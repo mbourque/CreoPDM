@@ -356,3 +356,43 @@ def test_baseline_names_in_the_list_are_not_bold():
     css = _read("src", "creopdm", "static", "css", "app.css")
     rule = css.split(".baseline-open {", 1)[1].split("}", 1)[0]
     assert "font-weight: 400;" in rule and "font-weight: 700" not in rule
+
+
+def test_baseline_rows_use_the_same_icon_inputs_as_the_files_list():
+    """The icon table is keyed by ".mfg" (with the dot) and by type label first. The baseline rows
+    passed "mfg" without the dot and no label, so an .mfg showed the generic file icon."""
+    js = (ROOT / "src/creopdm/static/js/baselines.js").read_text(encoding="utf-8")
+    assert "typeLabel: m.type_label, filename: m.filename, objectType: type" in js
+    assert "typeIconHtml({ objectType: type, extension: ext })" not in js
+
+
+def test_baseline_open_asks_the_server_for_the_same_decision_as_the_files_list():
+    """A baseline file opens like the same file in the Files list: the server decides (Creo
+    session / Multi-CAD / Creo View / Windows, or refused as non-openable), the browser has no
+    list of its own. Opening an .mfg through the Windows association used to start whichever
+    Creo Windows had registered (an older one)."""
+    js = (ROOT / "src/creopdm/static/js/creo_workspace.js").read_text(encoding="utf-8")
+    assert '"/api/creo/open-plan"' in js and "async function openPlanFor(filename)" in js
+    assert "const planned = await openPlanFor(member.filename);" in js
+    assert "plan.creo_object || plan.open_with_creo" in js
+    # no fixed extension lists in the open path
+    assert '["prt", "asm", "drw"]' not in js and "(prt|asm|drw)" not in js and "isCreoModelFile" not in js
+    # the plan is asked before the baseline is downloaded to the PC
+    assert js.index("openPlanFor(member.filename)") < js.index("probeCreoAgent();", js.index("async function openBaselineVersion"))
+
+
+@requires_git
+def test_open_plan_endpoint_matches_the_files_list_decision(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    cad = auth_ctx.config.settings.cad
+    cad.model_extensions = [".prt", ".asm", ".drw", ".mfg"]
+    cad.extra_extensions = [".creo", ".dat"]
+    plan = lambda name: auth_client.post("/api/creo/open-plan", json={"filename": name})  # noqa: E731
+    mfg = plan("as_nc.mfg")
+    assert mfg.status_code == 200 and mfg.json()["creo_object"] is True  # opens in the running Creo
+    assert plan("x.prt.3").json()["creo_object"] is True
+    other = plan("notes.xyz").json()
+    assert other["creo_object"] is False and other["open_with_creo"] is False
+    refused = plan("WINDCHILL-424 ASSY.SLDASM.creo")
+    assert refused.status_code == 400 and "non-openable file type" in refused.json()["error"]["message"]
+    assert plan("values.DAT").status_code == 400

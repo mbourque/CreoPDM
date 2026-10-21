@@ -293,7 +293,11 @@ window.__creopdmModules.baselines = {
                   m.object_uuid
                 )}/versions/${encodeURIComponent(m.version_uuid)}?baseline=${encodeURIComponent(browseUuid)}`
               : "";
-          const icon = shell.typeIconHtml ? shell.typeIconHtml({ objectType: type, extension: ext }) : "";
+          // The same inputs as the Files list: type label first, then the file's own extension
+          // (with its dot, as the icon table is keyed), then the object type.
+          const icon = shell.typeIconHtml
+            ? shell.typeIconHtml({ typeLabel: m.type_label, filename: m.filename, objectType: type })
+            : "";
           return `<tr class="object-row baseline-file-row" data-uuid="${esc(m.object_uuid)}" data-version="${esc(
             m.version_uuid
           )}" data-filename="${esc(m.filename)}" data-object-type="${esc(type)}" data-extension="${esc(

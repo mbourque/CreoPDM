@@ -350,9 +350,31 @@ window.__creopdmModules.creo_workspace = {
      * Shared by the baseline's file list and by the Details page of a baseline file.
      * Returns "" when the file was opened, otherwise the message to show.
      */
+    /**
+     * How a file opens, decided by the server exactly as for the Files list (Creo session,
+     * Multi-CAD, Creo View, Windows) or why it does not (System Settings -> Non openable CAD).
+     */
+    async function openPlanFor(filename) {
+      const response = await fetch("/api/creo/open-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename }),
+      });
+      if (!response.ok) return { error: await readError(response) };
+      return { plan: await response.json() };
+    }
+
     async function openBaselineVersion(info, member) {
       if (!info || !member || !member.filename) return "That file is not part of the baseline.";
-      if (/\.(prt|asm|drw)(?:\.\d+)?$/i.test(member.filename) && shell.hostedCreoJS?.() && shell.creoOpenMode?.() === "embedded") {
+      // Same decision as the Files list: refused types stop here, before anything is downloaded.
+      const planned = await openPlanFor(member.filename);
+      if (planned.error) return planned.error;
+      const plan = planned.plan;
+      const inCreoSession =
+        Boolean(plan.creo_object || plan.open_with_creo) &&
+        Boolean(shell.hostedCreoJS?.()) &&
+        shell.creoOpenMode?.() === "embedded";
+      if (inCreoSession) {
         // Before anything is downloaded: a model from a newer Creo cannot open in this session.
         const tooNew = await newerReleaseMessage(member.filename, member.creo_release);
         if (tooNew) return tooNew;
@@ -417,10 +439,8 @@ window.__creopdmModules.creo_workspace = {
       if (!folder) return "The agent did not say where the baseline is.";
       const fullPath = joinLocalWorkspacePath(folder, member.relative_path || member.filename);
       const dir = String(fullPath).replace(/[\\/][^\\/]*$/, "");
-      const extension = (/\.([a-z0-9_+]+)(?:\.\d+)?$/i.exec(member.filename) || [])[1] || "";
-      const creoModel = ["prt", "asm", "drw"].includes(extension.toLowerCase());
       try {
-        if (creoModel && shell.hostedCreoJS?.() && shell.creoOpenMode?.() === "embedded") {
+        if (inCreoSession) {
           await withBusy("Opening in Creo…", async () => {
             await whenCreoJSReady();
             const opened = await window.CreoJS.openModel(dir, member.filename, "", member.filename, fullPath);

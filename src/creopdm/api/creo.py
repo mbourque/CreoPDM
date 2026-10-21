@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from creopdm.api.deps import get_context, get_db, load_accessible_product, require_permission, require_product_access
@@ -27,6 +28,25 @@ def creo_status(ctx: AppContext = Depends(get_context)) -> CreoStatusResponse:
         running=running,
         label=label,
     )
+
+
+class CreoOpenPlanRequest(BaseModel):
+    filename: str = Field(default="", max_length=512)
+
+
+@router.post("/api/creo/open-plan")
+def open_plan(
+    payload: CreoOpenPlanRequest,
+    request: Request,
+    ctx: AppContext = Depends(get_context),
+) -> dict:
+    """How a file would open (Creo session, Multi-CAD, view, Windows) or why it will not.
+
+    The same decision the Files list gets from /api/creo/open; a baseline's files ask it too so
+    they always open the way the Files list opens them.
+    """
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    return ctx.creo_service.open_plan(payload.filename)
 
 
 @router.post("/api/creo/open", response_model=CreoOpenResponse)

@@ -403,6 +403,39 @@ class CreoService:
             )
         return out
 
+    def open_plan(self, filename: str, object_type: str = "") -> dict:
+        """How a file opens: the one decision shared by the Files list and a baseline's files.
+
+        Raises when the file type is on System Settings -> Non openable CAD. Otherwise says whether
+        it opens in the running Creo session (``creo_object``), through File > Open for Multi-CAD
+        (``open_with_creo``), in Creo View, or with the Windows association.
+        """
+        name = Path(filename).name
+        config = self._workspaces._config
+        if is_extra_cad(name, config.extra_cad_extensions(), config.model_cad_extensions()):
+            raise ValidationAppError(
+                f"{name} is a non-openable file type ({Path(name).suffix.lower()}): "
+                "it stays in the product but is not opened. "
+                "An administrator can change this in System Settings → Non openable CAD."
+            )
+        models = config.model_cad_extensions()
+        all_cad = self._workspaces._cad_extensions()
+        is_model = object_type.startswith("CREO_") or is_creo_openable(name, models, all_cad)
+        view_object = is_creo_view(name)
+        open_mode = self._connector.cad_open_mode()
+        use_view = view_object or (open_mode == "view" and is_model)
+        # Multi-CAD (SolidWorks, CATIA, …) is Creo-openable in File > Open, but
+        # Creo.JS ModelDescriptor cannot open it — agent launches Parametric instead.
+        js_openable = is_creo_js_openable(name, models, all_cad)
+        return {
+            "is_model": is_model,
+            "use_view": use_view,
+            "creo_object": (not use_view) and is_model and js_openable,
+            "open_with_creo": (not use_view) and is_model and not js_openable,
+            "requires_agent_cache": bool(is_model and not use_view),
+            "open_mode": open_mode,
+        }
+
     def _open_resolved(
         self,
         path: Path,
@@ -419,31 +452,17 @@ class CreoService:
         prefer_local: bool = False,
         dependencies: list[dict[str, str | None]] | None = None,
     ) -> dict:
-        config = self._workspaces._config
-        # System Settings -> Non openable CAD: these stay in the product but do not open.
-        if is_extra_cad(path.name, config.extra_cad_extensions(), config.model_cad_extensions()):
-            raise ValidationAppError(
-                f"{Path(path.name).name} is a non-openable file type ({Path(path.name).suffix.lower()}): "
-                "it stays in the product but is not opened. "
-                "An administrator can change this in System Settings → Non openable CAD."
-            )
+        plan = self.open_plan(path.name, object_type)
         workdir = working_directory_for(path)
         models = self._workspaces._config.model_cad_extensions()
         all_cad = self._workspaces._cad_extensions()
-        is_model = object_type.startswith("CREO_") or is_creo_openable(
-            path.name, models, all_cad
-        )
-        view_object = is_creo_view(path.name)
-        open_mode = self._connector.cad_open_mode()
-        use_view = view_object or (open_mode == "view" and is_model)
-        # Multi-CAD (SolidWorks, CATIA, …) is Creo-openable in File > Open, but
-        # Creo.JS ModelDescriptor cannot open it — agent launches Parametric instead.
-        js_openable = is_creo_js_openable(path.name, models, all_cad)
-        creo_object = (not use_view) and is_model and js_openable
+        use_view = plan["use_view"]
+        open_mode = plan["open_mode"]
+        creo_object = plan["creo_object"]
         # True when the agent should start parametric.exe with this file (Unite).
-        open_with_creo = (not use_view) and is_model and not js_openable
+        open_with_creo = plan["open_with_creo"]
         # Embedded Creo browser must fetch every Creo-openable model into the agent cache.
-        requires_agent_cache = bool(is_model and not use_view)
+        requires_agent_cache = plan["requires_agent_cache"]
         logical = CreoFileManager.normalize_creo_filename(path.name, (*models, *all_cad))
         url: str | None = None
         if launch:
