@@ -32,6 +32,26 @@ window.__creopdmModules.add = {
     const logicalUploadName = shell.logicalUploadName;
     const PathBasename = shell.PathBasename;
     const purgeableExtensionSet = shell.purgeableExtensionSet;
+
+    /**
+     * The Add dialog's file-type groups come from System Settings: Creo Models, Creo-openable
+     * models, Non openable CAD and Documents. The page carries the lists (server-rendered from
+     * the settings) and the tray agent, which has no settings of its own, builds the dialog from them.
+     */
+    function pickerExtensions() {
+      const data = document.querySelector("#metric-filters")?.dataset || {};
+      const list = (value) =>
+        String(value || "")
+          .split(",")
+          .map((item) => item.trim().toLowerCase())
+          .filter(Boolean);
+      const out = {};
+      if (data.pickerModels !== undefined) out.models = list(data.pickerModels);
+      if (data.pickerOpenable !== undefined) out.openable = list(data.pickerOpenable);
+      if (data.nonOpenable !== undefined) out.extras = list(data.nonOpenable);
+      if (data.documents !== undefined) out.documents = list(data.documents);
+      return out;
+    }
     const isImportVersionedExtension = shell.isImportVersionedExtension;
     const addPageListener =
       shell.addPageListener ||
@@ -1010,6 +1030,8 @@ window.__creopdmModules.add = {
             initial_directory: addInitialDirectory || "",
             title: "Add files to the product",
             purgeable_extensions: [...purgeableExtensionSet()],
+            // The dialog's file-type groups follow System Settings (sent by the page).
+            ...pickerExtensions(),
           }),
         });
       } finally {

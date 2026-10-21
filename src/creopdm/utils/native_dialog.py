@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Iterable
 from pathlib import Path
 
 from creopdm.constants import (
@@ -49,25 +50,40 @@ def is_user_cancelled(exc: BaseException) -> bool:
     return False
 
 
-def creo_model_dialog_filter_patterns() -> str:
-    """Default Add filter: numbered Creo parts, assemblies, and drawings."""
-    return "*.prt.*;*.asm.*;*.drw.*"
+def creo_model_dialog_filter_patterns(models: Iterable[str] | None = None) -> str:
+    """Add filter, first group: Creo models.
+
+    With no argument: numbered Creo parts, assemblies and drawings (the built-in default).
+    With ``models`` (System Settings -> Creo Models): every configured Creo model extension,
+    plain and numbered (``*.mfg;*.mfg.*``), so an extension added in settings shows up here.
+    """
+    if models is None:
+        return "*.prt.*;*.asm.*;*.drw.*"
+    patterns: list[str] = []
+    for ext in dict.fromkeys(str(item).strip().lower() for item in models if str(item).strip()):
+        patterns.extend((f"*{ext}", f"*{ext}.*"))
+    return ";".join(patterns) or "*.prt.*;*.asm.*;*.drw.*"
 
 
-def cad_dialog_filter_patterns() -> str:
+def cad_dialog_filter_patterns(
+    models: Iterable[str] | None = None,
+    openable: Iterable[str] | None = None,
+    extras: Iterable[str] | None = None,
+) -> str:
     """Glob list for the native file picker, including Creo numbered saves.
 
     Creo-openable models: *.ext, *.ext.*, and *.*.ext (name.N.ext).
     Other CAD data: *.ext and *.ext.* only.
+    The lists come from System Settings (Creo Models, Creo-openable models, Non openable CAD);
+    with none given the built-in defaults are used.
     """
     seen: set[str] = set()
-    openable = set(DEFAULT_CREO_MODEL_EXTENSIONS)
+    model_list = tuple(DEFAULT_CREO_MODEL_EXTENSIONS if models is None else models)
+    openable_list = tuple(DEFAULT_OPENABLE_CAD_EXTENSIONS if openable is None else openable)
+    extra_list = tuple(DEFAULT_EXTRA_CAD_EXTENSIONS if extras is None else extras)
+    openable = set(model_list)
     patterns: list[str] = []
-    for ext in (
-        *DEFAULT_CREO_MODEL_EXTENSIONS,
-        *DEFAULT_OPENABLE_CAD_EXTENSIONS,
-        *DEFAULT_EXTRA_CAD_EXTENSIONS,
-    ):
+    for ext in (*model_list, *openable_list, *extra_list):
         if ext in seen:
             continue
         seen.add(ext)
@@ -78,18 +94,30 @@ def cad_dialog_filter_patterns() -> str:
     return ";".join(patterns)
 
 
-def document_dialog_filter_patterns() -> str:
+def document_dialog_filter_patterns(documents: Iterable[str] | None = None) -> str:
     """Glob list for the Documents group in the native file picker."""
-    return ";".join(f"*{ext}" for ext in DEFAULT_DOCUMENT_EXTENSIONS)
+    return ";".join(f"*{ext}" for ext in (DEFAULT_DOCUMENT_EXTENSIONS if documents is None else documents))
 
 
-def add_files_dialog_filter_pairs() -> list[tuple[str, str]]:
-    """Filter groups for Add files: Creo models first, then All files, then others."""
+def add_files_dialog_filter_pairs(
+    models: Iterable[str] | None = None,
+    openable: Iterable[str] | None = None,
+    extras: Iterable[str] | None = None,
+    documents: Iterable[str] | None = None,
+) -> list[tuple[str, str]]:
+    """Filter groups for Add files: Creo models first, then All files, then others.
+
+    Pass the extension lists from System Settings so the picker follows them; with none the
+    built-in defaults are used.
+    """
+    model_label = (
+        "Creo models (*.prt.*, *.asm.*, *.drw.*)" if models is None else "Creo models"
+    )
     return [
-        ("Creo models (*.prt.*, *.asm.*, *.drw.*)", creo_model_dialog_filter_patterns()),
+        (model_label, creo_model_dialog_filter_patterns(models)),
         ("All files (*.*)", "*.*"),
-        ("CAD files", cad_dialog_filter_patterns()),
-        ("Documents", document_dialog_filter_patterns()),
+        ("CAD files", cad_dialog_filter_patterns(models, openable, extras)),
+        ("Documents", document_dialog_filter_patterns(documents)),
     ]
 
 
@@ -101,11 +129,19 @@ def archive_dialog_filter_pairs() -> list[tuple[str, str]]:
     ]
 
 
-def _dialog_filter_pairs(filter_mode: str) -> list[tuple[str, str]]:
+def _dialog_filter_pairs(
+    filter_mode: str, extensions: dict[str, Iterable[str]] | None = None
+) -> list[tuple[str, str]]:
     mode = (filter_mode or "add").strip().lower()
     if mode in {"archive", "zip", "compressed"}:
         return archive_dialog_filter_pairs()
-    return add_files_dialog_filter_pairs()
+    ext = extensions or {}
+    return add_files_dialog_filter_pairs(
+        models=ext.get("models"),
+        openable=ext.get("openable"),
+        extras=ext.get("extras"),
+        documents=ext.get("documents"),
+    )
 
 
 def _is_windows() -> bool:
@@ -123,18 +159,21 @@ def pick_files(
     title: str = "Add files to the product",
     *,
     filter_mode: str = "add",
+    extensions: dict[str, Iterable[str]] | None = None,
 ) -> list[Path]:
     """Open a native file dialog starting in initial_dir.
 
     ``filter_mode``: ``add`` (Creo/CAD filters, multi-select) or ``archive``
-    (*.zip first, single-select). Does not change the PDM process working directory.
+    (*.zip first, single-select). ``extensions`` (keys models / openable / extras / documents)
+    are the System Settings lists the Add filters are built from. Does not change the PDM
+    process working directory.
     """
     if not _is_windows():
         logger.info("Native file picker is not available; use the browser file chooser")
         return []
     start = Path(initial_dir)
     start.mkdir(parents=True, exist_ok=True)
-    pairs = _dialog_filter_pairs(filter_mode)
+    pairs = _dialog_filter_pairs(filter_mode, extensions)
     allow_multi = (filter_mode or "add").strip().lower() not in {
         "archive",
         "zip",

@@ -580,6 +580,7 @@ def home(
             "cad_models_extensions": ctx.config.cad_models_extensions(),
             "cad_model_extensions": ctx.config.model_cad_extensions(),
             "non_openable_extensions": ctx.config.extra_cad_extensions(),
+            "openable_extensions": ctx.config.openable_cad_extensions(),
             "document_extensions": ctx.config.document_extensions(),
             "purgeable_extensions": ctx.config.purgeable_cad_extensions(),
             "type_icons": type_icon_client_payload(ctx.config.type_labels()),

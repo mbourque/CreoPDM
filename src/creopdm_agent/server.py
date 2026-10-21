@@ -542,6 +542,12 @@ class PickFilesRequest(BaseModel):
     recursive: bool = True
     # ``add`` = Creo/CAD filters; ``archive`` = *.zip first (Compressed data…).
     filter_mode: str = "add"
+    # Add dialog filter groups, from System Settings (Creo Models, Creo-openable models,
+    # Non openable CAD, Documents). The agent has no settings of its own: the page sends them.
+    models: list[str] | None = None
+    openable: list[str] | None = None
+    extras: list[str] | None = None
+    documents: list[str] | None = None
 
 
 def _agent_purgeable_extensions(raw: list[str] | None) -> list[str]:
@@ -1595,7 +1601,19 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             else "Add files to the product"
         )
         try:
-            selected = pick_files(start, title=title, filter_mode=filter_mode)
+            extensions = {
+                key: [str(item).strip().lower() for item in value if str(item).strip()]
+                for key, value in (
+                    ("models", payload.models),
+                    ("openable", payload.openable),
+                    ("extras", payload.extras),
+                    ("documents", payload.documents),
+                )
+                if value is not None
+            }
+            selected = pick_files(
+                start, title=title, filter_mode=filter_mode, extensions=extensions or None
+            )
         except ValidationAppError as exc:
             raise HTTPException(status_code=400, detail=exc.message) from exc
         except Exception as exc:

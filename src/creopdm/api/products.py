@@ -781,7 +781,18 @@ def choose_workspace_files(
     product = load_accessible_product(request, ctx, db, product_id)
     start = ctx.products.preferred_import_directory(product)
     start.mkdir(parents=True, exist_ok=True)
-    picked = pick_files(start, title="Add files to the product")
+    # The picker's filter groups follow System Settings (Creo Models, Creo-openable models,
+    # Non openable CAD, Documents), so an extension added there shows up in the dialog.
+    picked = pick_files(
+        start,
+        title="Add files to the product",
+        extensions={
+            "models": ctx.config.model_cad_extensions(),
+            "openable": ctx.config.openable_cad_extensions(),
+            "extras": ctx.config.extra_cad_extensions(),
+            "documents": ctx.config.document_extensions(),
+        },
+    )
     ignored = ctx.config.ignore_patterns()
     extras = ctx.config.purgeable_cad_extensions()
     ignored_count = 0
