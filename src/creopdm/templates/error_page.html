@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}{{ error_title }} — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page error-page">
+  <h1>{{ error_title }}</h1>
+  <p>{{ error_lead }}</p>
+  {% if error_hint %}<p class="muted">{{ error_hint }}</p>{% endif %}
+  <p class="error-actions">
+    <a class="btn btn-primary" href="/">Go to Files</a>
+    <a class="btn" href="javascript:history.back()">Go back</a>
+    {% if auth_user and error_status == 403 %}<a class="btn" href="/logout">Sign in as someone else</a>{% endif %}
+  </p>
+  {% if auth_user %}<p class="muted small">Signed in as <strong>{{ auth_user.display_name }}</strong> ({{ auth_user.username }}).</p>{% endif %}
+</article>
+{% endblock %}
