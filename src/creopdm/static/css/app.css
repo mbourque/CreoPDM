@@ -2643,8 +2643,8 @@ body.is-file-drag #file-drop-overlay {
 .cm-composer { position: relative; margin: 0.4rem 0 0.8rem; }
 .cm-composer.is-drop .cm-input { outline: 2px dashed var(--accent-2); }
 .cm-input-wrap { position: relative; }
-/* Starts two lines tall and grows as the person types (CSS only: field-sizing), up to max-height, then scrolls. */
-.cm-input { width: 100%; min-height: 4.2rem; max-height: 16rem; field-sizing: content; overflow-y: auto; resize: vertical; font: inherit; padding: 0.45rem 0.55rem; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink); }
+/* Starts one line tall and grows as the person types (CSS only: field-sizing), up to max-height, then scrolls. */
+.cm-input { width: 100%; min-height: 2.4rem; max-height: 16rem; field-sizing: content; overflow-y: auto; resize: vertical; font: inherit; padding: 0.45rem 0.55rem; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink); }
 .cm-mention-list {
   position: absolute; left: 0; top: 100%; z-index: 20; min-width: 240px; max-height: 12rem; overflow: auto;
   background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 18px rgba(16, 24, 32, 0.25);

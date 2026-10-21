@@ -111,7 +111,7 @@ window.__creopdmModules.comments = {
       const root = document.createElement("div");
       root.className = "cm-composer";
       root.innerHTML =
-        `<div class="cm-input-wrap"><textarea class="cm-input" rows="${cfg.rows || 2}" maxlength="4000" ` +
+        `<div class="cm-input-wrap"><textarea class="cm-input" rows="${cfg.rows || 1}" maxlength="4000" ` +
         `placeholder="${esc(cfg.placeholder || "Write a comment. Type @ to mention someone; paste an image with Ctrl+V.")}"></textarea>` +
         `<div class="cm-mention-list" role="listbox" hidden></div></div>` +
         `<div class="cm-chips"></div>` +
@@ -544,7 +544,6 @@ window.__creopdmModules.comments = {
             text: comment.body,
             images: comment.images,
             submitLabel: "Save",
-            rows: 3,
             onCancel: () => {
               state.editing = "";
               paint();
@@ -602,7 +601,6 @@ window.__creopdmModules.comments = {
             inline.textContent = "";
             const box = composer({
               product: cfg.product,
-              rows: 2,
               submitLabel: "Reply",
               placeholder: "Write a reply. Type @ to mention someone.",
               onCancel: () => {
@@ -653,7 +651,6 @@ window.__creopdmModules.comments = {
         composerHost.appendChild(
           composer({
             product: cfg.product,
-            rows: 3,
             submitLabel: "Comment",
             onSubmit: (value) =>
               post({ ...targetFor(), body: value.text, attachment_uuids: value.attachment_uuids }),

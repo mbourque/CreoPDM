@@ -185,9 +185,9 @@ def test_product_discussion_intro_reads_comments_on_the_product_at_the_file_page
 def test_comment_box_starts_short_and_grows_with_css_alone():
     css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
     rule = css.split(".cm-input { width", 1)[1].split("}", 1)[0]
-    assert "field-sizing: content" in rule and "min-height: 4.2rem" in rule and "max-height: 16rem" in rule
+    assert "field-sizing: content" in rule and "min-height: 2.4rem" in rule and "max-height: 16rem" in rule
     js = (JS / "comments.js").read_text(encoding="utf-8")
-    assert "cfg.rows || 2" in js  # two lines to start with
+    assert "cfg.rows || 1" in js  # one line to start with
     # CSS only: no script resizes the box
     assert "scrollHeight" not in js and "style.height" not in js
 
