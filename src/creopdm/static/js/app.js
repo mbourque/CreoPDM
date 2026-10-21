@@ -1,7 +1,7 @@
 window.__creopdmBoot = function creopdmBoot(options = {}) {
   const soft = Boolean(options.soft);
   // A baseline view hides pills and toolbar buttons through body classes; a new page starts clean.
-  document.body?.classList.remove("is-baseline-browse", "is-baseline-list");
+  document.body?.classList.remove("is-baseline-browse", "is-baseline-list", "is-discussion-tab");
   window.__creopdmAbort?.abort();
   const pageAbort = new AbortController();
   window.__creopdmAbort = pageAbort;
@@ -7845,6 +7845,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       document.querySelectorAll(".tab-panel").forEach((panel) => {
         panel.hidden = panel.id !== `panel-${name}`;
       });
+      // Discussion is a conversation page: no count pills above it, no file toolbar below it.
+      document.body.classList.toggle("is-discussion-tab", name === "discussion" && Boolean($("#metric-filters")));
       if (name === "changes") loadChangesTab();
       else if (name === "modified") void loadModifiedTab();
       else if (name === "checked-out") void loadCheckedOutTab();

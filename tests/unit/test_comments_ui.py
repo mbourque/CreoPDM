@@ -166,6 +166,17 @@ def test_right_click_comment_on_a_single_file_row():
     assert "canDetails && !one.isFolder" in menu
 
 
+def test_discussion_tab_hides_the_count_pills_and_the_file_toolbar():
+    """A conversation page needs neither the Folders / Files / Parts pills above it nor the
+    Add / Open / Checkout toolbar below it (the baseline list hides them the same way)."""
+    app = (JS / "app.js").read_text(encoding="utf-8")
+    assert 'name === "discussion" && Boolean($("#metric-filters"))' in app
+    assert '"is-baseline-browse", "is-baseline-list", "is-discussion-tab"' in app  # reset on every page
+    css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    assert "body.is-discussion-tab #metric-filters" in css and "body.is-discussion-tab #selection-summary" in css
+    assert "body.is-discussion-tab footer.toolbar .toolbar-actions" in css
+
+
 def test_comments_and_bell_have_styles():
     css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
     # the product Discussion panel scrolls inside the fixed-height Files layout

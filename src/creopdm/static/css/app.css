@@ -1557,9 +1557,13 @@ button.forgot-password-btn,
 .baseline-crumbs { display: flex; align-items: center; gap: 0.5rem; margin: 0.2rem 0 0.5rem; }
 /* The list of baselines: nothing to filter or act on, so no pills and no Files toolbar. */
 body.is-baseline-list #metric-filters,
-body.is-baseline-list #selection-summary { display: none !important; }
-body.is-baseline-list footer.toolbar .toolbar-actions { display: none !important; }
-body.is-baseline-list footer.toolbar { padding-top: 0; padding-bottom: 0; }
+body.is-baseline-list #selection-summary,
+body.is-discussion-tab #metric-filters,
+body.is-discussion-tab #selection-summary { display: none !important; }
+body.is-baseline-list footer.toolbar .toolbar-actions,
+body.is-discussion-tab footer.toolbar .toolbar-actions { display: none !important; }
+body.is-baseline-list footer.toolbar,
+body.is-discussion-tab footer.toolbar { padding-top: 0; padding-bottom: 0; }
 /* One baseline open: the product gear (Rename, Rebuild …) acts on the live product, not on a
    frozen snapshot, so it is not offered here. */
 body.is-baseline-browse #product-settings { display: none !important; }

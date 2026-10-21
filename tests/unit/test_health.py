@@ -135,7 +135,7 @@ def test_home_page(client):
     assert "push169" not in text
     assert "export3" not in text
     assert "compact-busy" not in text
-    assert "/client/app.js?v=" in text and "baseline-icon" in text
+    assert "/client/app.js?v=" in text and "discussion-clean" in text
     assert 'id="creo-connecting-overlay"' in text
     assert "Connecting to Creo…" in text
     assert "/static/css/app.css?v=" in text and "thumb-preview" in text

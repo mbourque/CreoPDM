@@ -282,7 +282,7 @@ def test_the_list_of_baselines_has_no_pills_and_no_files_toolbar():
     assert 'classList.toggle("is-baseline-list", baselinesTabActive() && !browseUuid)' in module
     css = _read("src", "creopdm", "static", "css", "app.css")
     assert "body.is-baseline-list #metric-filters" in css and "body.is-baseline-list #selection-summary" in css
-    assert "body.is-baseline-list footer.toolbar .toolbar-actions { display: none !important; }" in css
+    assert "body.is-baseline-list footer.toolbar .toolbar-actions" in css and "{ display: none !important; }" in css
     # an open baseline brings the pills back (and the single Details button), so no list rule leaks
     assert "body.is-baseline-browse footer.toolbar .toolbar-actions" in css
 
@@ -290,7 +290,7 @@ def test_the_list_of_baselines_has_no_pills_and_no_files_toolbar():
 def test_a_new_page_starts_without_the_baseline_view_classes():
     app = _read("src", "creopdm", "static", "js", "app.js")
     boot = app.split("window.__creopdmBoot = function creopdmBoot", 1)[1][:600]
-    assert 'classList.remove("is-baseline-browse", "is-baseline-list")' in boot
+    assert 'classList.remove("is-baseline-browse", "is-baseline-list", "is-discussion-tab")' in boot
 
 
 def test_an_open_baseline_shows_only_the_pills_that_work_on_its_files():
