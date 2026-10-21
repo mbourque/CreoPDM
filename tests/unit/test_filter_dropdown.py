@@ -129,6 +129,19 @@ def test_menu_rows_are_plain_with_hidden_counts_and_the_control_hides_on_other_t
     assert ".filter-dropdown" in mobile
 
 
+def test_a_tab_click_never_opens_the_filter_menu():
+    """Regression: a routine that showed/hid the old pills row (when the product has files) ran on every tab
+    click and un-hid the menu itself, so the menu popped open without the Filter button being clicked."""
+    app = _app_js()
+    sync = app.split("function syncMetricFiltersVisibility() {", 1)[1].split("function setProductObjectCount(", 1)[0]
+    assert 'document.getElementById("filter-dropdown")' in sync  # the control, not the menu
+    assert 'querySelector("#metric-filters")' not in sync and "metric-filters" not in sync
+    # the filter menu is un-hidden in exactly one place (the right-click menu is a different element)
+    assert app.count("function openFilterMenu()") == 1
+    opener = app.split("function openFilterMenu() {", 1)[1].split("/** Rows with nothing in them", 1)[0]
+    assert opener.count("menu.hidden = false;") == 1
+
+
 def test_the_filter_stays_at_the_right_edge_when_search_hides():
     """Search hides on every tab but Files; the control must not slide next to the product gear then."""
     css = CSS.read_text(encoding="utf-8")

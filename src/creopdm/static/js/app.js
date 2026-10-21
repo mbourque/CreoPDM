@@ -1438,12 +1438,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function syncMetricFiltersVisibility() {
-    const root = document.querySelector("#metric-filters");
+    // The whole Filter control (not its menu: the menu opens only from the Filter button).
+    const root = document.getElementById("filter-dropdown");
     if (!root) return;
     const hide = !productHasListedObjects();
     if (root.hidden === hide) return;
     root.hidden = hide;
     if (hide) {
+      closeFilterMenu();
       metricButtons().forEach((btn) => {
         if (metricMode(btn) !== "off") setMetricMode(btn, "off");
       });
