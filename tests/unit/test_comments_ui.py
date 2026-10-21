@@ -190,6 +190,11 @@ def test_feed_threads_start_with_re_and_a_bold_name():
     assert where.count("<strong>${name}</strong>") == 3  # file, baseline and product / other targets
 
 
+def test_the_highlighted_thread_outline_is_inside_its_box():
+    css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    assert ".cm-thread.is-target { box-shadow: inset 0 0 0 2px var(--accent); }" in css  # not clipped
+
+
 def test_all_links_under_a_comment_share_one_line():
     """Edit · Delete · Reply · Resolve are one row under the comment, not two."""
     js = (JS / "comments.js").read_text(encoding="utf-8")
