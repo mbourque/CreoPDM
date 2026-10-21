@@ -79,8 +79,8 @@ def test_a_link_with_a_baseline_opens_its_files():
     app = _read("src", "creopdm", "static", "js", "app.js")
     assert 'params.get("baseline")' in app and 'new URLSearchParams(window.location.search)' in app
     assert "m.browseBaseline?.(linkedBaseline)" in app
-    # the pill opens the tab, which keeps whichever baseline is open
-    assert 'data-tab-link' in app and "loadBaselinesTab?.()" in app
+    # the Baselines tab keeps whichever baseline is open
+    assert "loadBaselinesTab?.()" in app
 
 
 def test_baseline_files_act_like_files_rows():
@@ -297,7 +297,7 @@ def test_an_open_baseline_shows_only_the_pills_that_work_on_its_files():
     module = _read("src", "creopdm", "static", "js", "baselines.js")
     assert 'const PILLS_NOT_FOR_BASELINE_FILES = ["folders", "modified", "checked_out"];' in module
     painter = module.split("function syncPills", 1)[1].split("function syncBrowseChrome", 1)[0]
-    assert "item.hidden = on" in painter and "chip.hidden = on ||" in painter
+    assert "item.hidden = on" in painter and "chip.hidden" not in painter  # no shortcut pill any more
     # a filter left on is switched off first, so it cannot hide every baseline row
     assert 'btn.click()' in painter
     assert "syncPills(on);" in module

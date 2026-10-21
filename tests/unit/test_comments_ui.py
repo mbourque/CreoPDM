@@ -47,7 +47,8 @@ def test_product_page_has_the_discussion_tab_panel_pill_bell_and_toast_stack(aut
     html = page.text
     assert 'data-tab="discussion"' in html
     assert 'id="panel-discussion"' in html and 'data-feed="1"' in html
-    assert 'id="discussion-pill-item"' in html and 'data-tab-link="discussion"' in html
+    # the tabs carry the counts; there is no shortcut pill any more
+    assert 'id="discussion-pill-item"' not in html and 'data-tab-link=' not in html
     assert 'id="notif-bell"' in html and 'id="notif-panel"' in html and 'id="toast-stack"' in html
     assert 'data-can-view-comments="1"' in html and 'data-can-add-comments="1"' in html
     assert 'id="baseline-browse-discussion"' in html and 'id="baseline-discussion-dialog"' in html

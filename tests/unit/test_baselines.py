@@ -330,12 +330,11 @@ def test_files_page_has_the_baselines_tab_pill_and_dialog(auth_client, auth_ctx)
     text = page.text
     assert 'data-tab="baselines"' in text and 'id="panel-baselines"' in text
     assert 'id="create-baseline-btn"' in text and 'id="baseline-dialog"' in text
-    assert 'id="baselines-pill-item" hidden' in text  # no baselines yet: pill hidden
+    assert 'baselines-pill' not in text  # the tab carries the count; there is no shortcut pill any more
     assert _create(auth_client, product).status_code == 201
     after = auth_client.get(f"/?product={product['uuid']}").text
     assert "Baselines · 1" in after
-    assert 'id="baselines-pill-item" hidden' not in after
-    assert 'data-tab-link="baselines"' in after
+    assert 'baselines-pill' not in after and 'data-tab-link=' not in after  # the tab shows the count; no pill
 
     # A viewer sees the tab and list but no way to create.
     _login(auth_client, "view", "ViewPass1")
@@ -350,7 +349,7 @@ def test_baselines_client_wiring():
     assert "loadBaselinesTab" in module and "openCreateBaselineDialog" in module
     app = (ROOT / "src" / "creopdm" / "static" / "js" / "app.js").read_text(encoding="utf-8")
     assert 'name === "baselines"' in app and 'initJobModule("baselines"' in app
-    assert "[data-tab-link]" in app
+    assert "[data-tab-link]" not in app  # no shortcut pills to wire
     server = (ROOT / "src" / "creopdm" / "app.py").read_text(encoding="utf-8")
     assert '"baselines"' in server
 

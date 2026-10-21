@@ -28,8 +28,8 @@ def test_metric_filters_hidden_on_empty_product(client, repo_parent, tmp_path):
     assert empty.status_code == 200, empty.text
     assert 'id="metric-filters"' in empty.text
     assert 'data-product-objects="0"' in empty.text
-    metrics = empty.text.split('id="metric-filters"', 1)[1].split(">", 1)[0]
-    assert " hidden" in metrics or metrics.endswith("hidden")
+    box = empty.text.split('id="filter-dropdown"', 1)[1].split(">", 1)[0]  # the filter dropdown, not the menu
+    assert " hidden" in box or box.endswith("hidden")
     search = empty.text.split('id="search-form"', 1)[1].split(">", 1)[0]
     assert " hidden" in search or search.endswith("hidden")
 
@@ -44,8 +44,8 @@ def test_metric_filters_hidden_on_empty_product(client, repo_parent, tmp_path):
     filled = client.get(f"/?product={product['uuid']}")
     assert filled.status_code == 200, filled.text
     assert 'data-product-objects="1"' in filled.text
-    metrics_filled = filled.text.split('id="metric-filters"', 1)[1].split(">", 1)[0]
-    assert " hidden" not in metrics_filled
+    box_filled = filled.text.split('id="filter-dropdown"', 1)[1].split(">", 1)[0]
+    assert " hidden" not in box_filled
     search_filled = filled.text.split('id="search-form"', 1)[1].split(">", 1)[0]
     assert " hidden" not in search_filled
 
@@ -437,7 +437,7 @@ def test_choose_files_omits_ignored_and_older_saves(client, repo_parent, monkeyp
     newer.write_bytes(b"4")
     monkeypatch.setattr(
         "creopdm.api.products.pick_files",
-        lambda initial_dir, title="Add files to the product": [pin, trail, older, newer],
+        lambda initial_dir, title="Add files to the product", **kwargs: [pin, trail, older, newer],
     )
     response = client.post(f"/api/products/{product['uuid']}/workspace/choose-files")
     assert response.status_code == 200, response.text
@@ -498,9 +498,8 @@ def test_choose_folder_lists_latest_files(client, repo_parent, monkeypatch, data
     assert "disabled" not in inside.text.split('data-filter="creo_parts"')[1].split("</button>")[0]
     assert "disabled" not in inside.text.split('data-filter="assemblies"')[1].split("</button>")[0]
     assert "disabled" not in inside.text.split('data-filter="drawings"')[1].split("</button>")[0]
-    assert 'data-filter="modified"' in inside.text
-    assert inside.text.index('data-filter="modified"') < inside.text.index('data-filter="checked_out"')
-    assert "disabled" not in inside.text.split('data-filter="checked_out"')[1].split("</button>")[0]
+    # Modified / Checked out are tabs; the filter menu has no rows for them
+    assert 'data-filter="modified"' not in inside.text and 'data-filter="checked_out"' not in inside.text
     nested = client.get(f"/?product={product['uuid']}&folder=Incoming/lib")
     assert nested.status_code == 200, nested.text
     assert "pin.prt" in nested.text

@@ -418,11 +418,11 @@ def test_top_level_assemblies_pill_wired_in_ui():
     chip = script.split("function onMetricChip(", 1)[1].split(
         'document.querySelector("#metric-filters")', 1
     )[0]
-    assert 'key === "top_level_assemblies" && next !== "off"' in chip
-    assert 'clearMetricFilters(new Set(["top_level_assemblies"]))' in chip
+    # One filter at a time: choosing Top level assemblies (or anything) turns every other filter off.
+    assert "One filter at a time: choosing one turns every other one off." in chip
     assert "Top level assemblies" in docs
     assert "current folder only" in docs
-    assert "turn **off** every other pill" in docs
+    assert "turns **off** every other filter" in docs
     assert "Where Used" in docs
 
 

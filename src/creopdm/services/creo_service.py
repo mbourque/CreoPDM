@@ -403,39 +403,6 @@ class CreoService:
             )
         return out
 
-    def open_plan(self, filename: str, object_type: str = "") -> dict:
-        """How a file opens: the one decision shared by the Files list and a baseline's files.
-
-        Raises when the file type is on System Settings -> Non openable CAD. Otherwise says whether
-        it opens in the running Creo session (``creo_object``), through File > Open for Multi-CAD
-        (``open_with_creo``), in Creo View, or with the Windows association.
-        """
-        name = Path(filename).name
-        config = self._workspaces._config
-        if is_extra_cad(name, config.extra_cad_extensions(), config.model_cad_extensions()):
-            raise ValidationAppError(
-                f"{name} is a non-openable file type ({Path(name).suffix.lower()}): "
-                "it stays in the product but is not opened. "
-                "An administrator can change this in System Settings → Non openable CAD."
-            )
-        models = config.model_cad_extensions()
-        all_cad = self._workspaces._cad_extensions()
-        is_model = object_type.startswith("CREO_") or is_creo_openable(name, models, all_cad)
-        view_object = is_creo_view(name)
-        open_mode = self._connector.cad_open_mode()
-        use_view = view_object or (open_mode == "view" and is_model)
-        # Multi-CAD (SolidWorks, CATIA, …) is Creo-openable in File > Open, but
-        # Creo.JS ModelDescriptor cannot open it — agent launches Parametric instead.
-        js_openable = is_creo_js_openable(name, models, all_cad)
-        return {
-            "is_model": is_model,
-            "use_view": use_view,
-            "creo_object": (not use_view) and is_model and js_openable,
-            "open_with_creo": (not use_view) and is_model and not js_openable,
-            "requires_agent_cache": bool(is_model and not use_view),
-            "open_mode": open_mode,
-        }
-
     def _open_resolved(
         self,
         path: Path,
@@ -510,6 +477,39 @@ class CreoService:
             "creo_release": creo_release or "",
             "url": url,
             "dependencies": dependencies or [],
+        }
+
+    def open_plan(self, filename: str, object_type: str = "") -> dict:
+        """How a file opens: the one decision shared by the Files list and a baseline's files.
+
+        Raises when the file type is on System Settings -> Non openable CAD. Otherwise says whether
+        it opens in the running Creo session (``creo_object``), through File > Open for Multi-CAD
+        (``open_with_creo``), in Creo View, or with the Windows association.
+        """
+        name = Path(filename).name
+        config = self._workspaces._config
+        if is_extra_cad(name, config.extra_cad_extensions(), config.model_cad_extensions()):
+            raise ValidationAppError(
+                f"{name} is a non-openable file type ({Path(name).suffix.lower()}): "
+                "it stays in the product but is not opened. "
+                "An administrator can change this in System Settings → Non openable CAD."
+            )
+        models = config.model_cad_extensions()
+        all_cad = self._workspaces._cad_extensions()
+        is_model = object_type.startswith("CREO_") or is_creo_openable(name, models, all_cad)
+        view_object = is_creo_view(name)
+        open_mode = self._connector.cad_open_mode()
+        use_view = view_object or (open_mode == "view" and is_model)
+        # Multi-CAD (SolidWorks, CATIA, …) is Creo-openable in File > Open, but
+        # Creo.JS ModelDescriptor cannot open it — agent launches Parametric instead.
+        js_openable = is_creo_js_openable(name, models, all_cad)
+        return {
+            "is_model": is_model,
+            "use_view": use_view,
+            "creo_object": (not use_view) and is_model and js_openable,
+            "open_with_creo": (not use_view) and is_model and not js_openable,
+            "requires_agent_cache": bool(is_model and not use_view),
+            "open_mode": open_mode,
         }
 
     def _open_path(self, path: Path, *, browser_url: str = "") -> str:

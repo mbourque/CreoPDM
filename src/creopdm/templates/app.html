@@ -109,6 +109,29 @@
                  title="Wildcards:&#10;* = any characters&#10;? = one character&#10;^ = starts with&#10;$ = ends with&#10;&#10;Examples:&#10;*.prt&#10;*.prt.*&#10;^CAD/&#10;.prt$"
                  autocomplete="off">
         </form>
+      {% if selected and status %}
+      {# One filter dropdown replaces the row of count pills. Menu rows without a count are hidden by
+         the page script; the engine and the control read the counts. #}
+      <div class="filter-dropdown" id="filter-dropdown"{% if not (product_object_count | default(0)) %} hidden{% endif %}>
+        <button type="button" class="filter-trigger" id="filter-trigger" aria-haspopup="menu" aria-expanded="false"
+                title="Filter the list by type"><span id="filter-trigger-label">Filter</span><span class="filter-caret" aria-hidden="true">&#9662;</span></button>
+        <span class="filter-count" id="filter-count" hidden></span>
+        <button type="button" class="filter-reset" id="filter-reset" hidden aria-label="Clear the filter" title="Show everything again">&times;</button>
+        <ul class="filter-menu" id="metric-filters" role="menu" hidden data-product-objects="{{ product_object_count | default(0) }}" data-cad-models="{{ cad_models_extensions | join(',') }}" data-non-openable="{{ non_openable_extensions | default([]) | join(',') }}" data-picker-models="{{ cad_model_extensions | default([]) | join(',') }}" data-picker-openable="{{ openable_extensions | default([]) | join(',') }}" data-documents="{{ document_extensions | join(',') }}" data-purgeable="{{ purgeable_extensions | join(',') }}" data-vault-folder="{{ selected.vault_folder or selected.uuid }}" data-product="{{ selected.uuid }}" data-allows-mutation="{{ '1' if product_ui.allows_mutation else '0' }}" data-allows-content="{{ '1' if product_ui.allows_content else '0' }}" data-show-revise="{{ '1' if product_ui.show_revise else '0' }}" data-show-undo="{{ '1' if product_ui.show_undo_checkout else '0' }}" data-product-state="{{ selected.state }}" data-type-icons='{{ type_icons | tojson }}'{% if where_used_present %} data-top-level-assemblies="{{ top_level_assembly_uuids | join(',') }}"{% endif %}>
+        <li role="none"><button type="button" class="metric" role="menuitemradio" aria-checked="false" data-filter="files" data-mode="off" title="Select every file in the list. Choose it again to clear."><span class="metric-label">All files</span><strong>{{ status.files }}</strong></button></li>
+        <li role="none"><button type="button" class="metric" role="menuitemradio" aria-checked="false" data-filter="folders" data-mode="off" title="Show only folders and select them. Choose it again to clear."><span class="metric-label">Folders</span><strong>{{ status.folders | default(0) }}</strong></button></li>
+        <li role="none"><button type="button" class="metric" role="menuitemradio" aria-checked="false" data-filter="cad_models" data-mode="off" title="Show only Creo models and select them. Choose it again to clear."><span class="metric-label">Creo Models</span><strong>{{ status.cad_models }}</strong></button></li>
+        <li role="none"><button type="button" class="metric" role="menuitemradio" aria-checked="false" data-filter="creo_parts" data-mode="off" title="Show only parts and select them. Choose it again to clear."><span class="metric-label">Parts</span><strong>{{ status.creo_parts }}</strong></button></li>
+        <li role="none"><button type="button" class="metric" role="menuitemradio" aria-checked="false" data-filter="assemblies" data-mode="off" title="Show only assemblies and select them. Choose it again to clear."><span class="metric-label">Assemblies</span><strong>{{ status.assemblies }}</strong></button></li>
+        <li role="none"><button type="button" class="metric" role="menuitemradio" aria-checked="false" data-filter="drawings" data-mode="off" title="Show only drawings and select them. Choose it again to clear."><span class="metric-label">Drawings</span><strong>{{ status.drawings }}</strong></button></li>
+        {% if where_used_present %}
+        <li role="none"><button type="button" class="metric" role="menuitemradio" aria-checked="false" data-filter="top_level_assemblies" data-mode="off" title="Show only top-level assemblies (not used by another assembly; drawing references do not count) and select them. Choose it again to clear."><span class="metric-label">Top level assemblies</span><strong>{{ status.top_level_assemblies | default(0) }}</strong></button></li>
+        {% endif %}
+        <li role="none"><button type="button" class="metric" role="menuitemradio" aria-checked="false" data-filter="documents" data-mode="off" title="Show only documents and select them. Choose it again to clear."><span class="metric-label">Documents</span><strong>{{ status.documents }}</strong></button></li>
+        <li role="none"><button type="button" class="metric" role="menuitemradio" aria-checked="false" data-filter="other" data-mode="off" title="Show only files that are not Creo models and select them. Choose it again to clear."><span class="metric-label">Other</span><strong>{{ status.other }}</strong></button></li>
+        </ul>
+      </div>
+      {% endif %}
       </div>
       {% if selected.number or selected.description %}
       <p class="muted product-meta">{% if selected.number %}<span class="product-meta-number">{{ selected.number }}</span>{% endif %}{% if selected.number and selected.description %} · {% endif %}{% if selected.description %}{{ selected.description }}{% endif %}</p>
@@ -118,29 +141,6 @@
       {% endif %}
     </div>
 
-    {% if selected and status %}
-    <ul class="metrics" id="metric-filters" data-product-objects="{{ product_object_count | default(0) }}" data-cad-models="{{ cad_models_extensions | join(',') }}" data-non-openable="{{ non_openable_extensions | default([]) | join(',') }}" data-picker-models="{{ cad_model_extensions | default([]) | join(',') }}" data-picker-openable="{{ openable_extensions | default([]) | join(',') }}" data-documents="{{ document_extensions | join(',') }}" data-purgeable="{{ purgeable_extensions | join(',') }}" data-vault-folder="{{ selected.vault_folder or selected.uuid }}" data-product="{{ selected.uuid }}" data-allows-mutation="{{ '1' if product_ui.allows_mutation else '0' }}" data-allows-content="{{ '1' if product_ui.allows_content else '0' }}" data-show-revise="{{ '1' if product_ui.show_revise else '0' }}" data-show-undo="{{ '1' if product_ui.show_undo_checkout else '0' }}" data-product-state="{{ selected.state }}" data-type-icons='{{ type_icons | tojson }}'{% if where_used_present %} data-top-level-assemblies="{{ top_level_assembly_uuids | join(',') }}"{% endif %}{% if not (product_object_count | default(0)) %} hidden{% endif %}>
-      <li><button type="button" class="metric" data-filter="folders" data-mode="off" title="Filter to folders and select them. Click again to clear."><strong>{{ status.folders | default(0) }}</strong> Folders</button></li>
-      <li><button type="button" class="metric" data-filter="files" data-mode="off" title="Show and select all files. Clears type chips. Click again to clear."><strong>{{ status.files }}</strong> Files</button></li>
-      <li><button type="button" class="metric" data-filter="cad_models" data-mode="off" title="Filter to Creo models and select them. Click again to clear."><strong>{{ status.cad_models }}</strong> Creo Models</button></li>
-      <li><button type="button" class="metric" data-filter="creo_parts" data-mode="off" title="Filter to parts and select them. Click again to clear."><strong>{{ status.creo_parts }}</strong> Parts</button></li>
-      <li><button type="button" class="metric" data-filter="assemblies" data-mode="off" title="Filter to assemblies and select them. Click again to clear."><strong>{{ status.assemblies }}</strong> Assemblies</button></li>
-      <li><button type="button" class="metric" data-filter="drawings" data-mode="off" title="Filter to drawings and select them. Click again to clear."><strong>{{ status.drawings }}</strong> Drawings</button></li>
-      {% if where_used_present %}
-      <li><button type="button" class="metric" data-filter="top_level_assemblies" data-mode="off" title="Filter to top-level assemblies (not used by another assembly). Drawing references do not count. Click again to clear."><strong>{{ status.top_level_assemblies | default(0) }}</strong> Top level assemblies</button></li>
-      {% endif %}
-      <li><button type="button" class="metric" data-filter="documents" data-mode="off" title="Filter to documents and select them. Click again to clear."><strong>{{ status.documents }}</strong> Documents</button></li>
-      <li><button type="button" class="metric" data-filter="other" data-mode="off" title="Filter to files that are not Creo models and select them. Click again to clear."><strong>{{ status.other }}</strong> Other</button></li>
-      <li><button type="button" class="metric" data-filter="modified" data-mode="off" title="Filter to modified files in the current group and select them. Click again to clear."><strong>{{ status.modified | default(0) }}</strong> Modified</button></li>
-      <li><button type="button" class="metric" data-filter="checked_out" data-mode="off" title="Filter to checked out files in the current group and select them. Click again to clear."><strong>{{ status.checked_out }}</strong> Checked out</button></li>
-      {% if can_view_baselines %}
-      <li id="baselines-pill-item"{% if not baseline_count|default(0) %} hidden{% endif %}><button type="button" class="metric-link" data-tab-link="baselines" title="Open the Baselines tab: exact snapshots of this product."><strong id="baselines-pill-count">{{ baseline_count|default(0) }}</strong> Baselines</button></li>
-      {% endif %}
-      {% if can_view_comments %}
-      <li id="discussion-pill-item" hidden><button type="button" class="metric-link" data-tab-link="discussion" title="Open the Discussion tab: comments on this product, its files and baselines."><strong id="discussion-pill-count">0</strong> Open comments</button></li>
-      {% endif %}
-    </ul>
-    {% endif %}
     <div class="tabs" role="tablist">
       <button type="button" class="tab is-active" data-tab="files">Files</button>
       <button type="button" class="tab" data-tab="checked-out"{% if not checkout_count|default(0) %} hidden{% endif %}>{% if checkout_count|default(0) %}Checked out · {{ checkout_count }}{% else %}Checked out{% endif %}</button>

@@ -57,15 +57,11 @@ window.__creopdmModules.baselines = {
       return $("#panel-baselines")?.dataset.product || currentProductId() || "";
     }
 
-    /** Tab label and the header pill follow the number of baselines. */
+    /** The tab label follows the number of baselines. */
     function paintCounts(count) {
       const n = Number(count) || 0;
       const tab = $("#baselines-tab");
       if (tab) tab.textContent = n ? `Baselines · ${n}` : "Baselines";
-      const pill = $("#baselines-pill-item");
-      if (pill) pill.hidden = n === 0;
-      const strong = $("#baselines-pill-count");
-      if (strong) strong.textContent = String(n);
     }
 
     function renderRows(items) {
@@ -190,8 +186,6 @@ window.__creopdmModules.baselines = {
         const item = btn.closest("li");
         if (item) item.hidden = on;
       });
-      const chip = $("#baselines-pill-item");
-      if (chip) chip.hidden = on || Number($("#baselines-pill-count")?.textContent || 0) === 0;
     }
 
     function syncBrowseChrome() {

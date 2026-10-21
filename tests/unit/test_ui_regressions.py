@@ -1475,7 +1475,7 @@ def test_mobile_browse_css_is_minimal():
     assert ".topbar .status-cluster { display: none" not in mobile
     assert "#new-product-btn" in mobile
     assert ".product-settings" in mobile
-    assert ".metrics" in mobile
+    assert ".filter-dropdown" in mobile  # the filter dropdown is hidden on the phone layout, like the pills were
     assert "footer.toolbar" in mobile
     assert "#detail-toolbar" in mobile
     assert "#object-table th:nth-child(n + 3)" in mobile
@@ -2262,37 +2262,26 @@ def test_metric_filters_hidden_when_product_has_no_objects():
     search_sync = _between(script, "function syncSearchFormVisibility(", "searchInput?.addEventListener")
     assert "productHasListedObjects()" in search_sync
     assert "Open a product with **no objects**" in docs
-    assert "Hide the whole metric filter row" in docs
+    assert "Hide the **Filter** control" in docs
     assert "hide **Search**" in docs
 
 
 def test_folders_metric_pill_before_files():
-    """Folders pill sits before Files; selects folder rows; stays visible at 0."""
+    """Folders is a filter-menu row after "All files"; it selects folder rows; the menu lists it only when
+    the list has folders (no empty filters)."""
     html = APP_HTML.read_text(encoding="utf-8")
     script = _app_js()
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert 'data-filter="folders"' in html
-    assert html.index('data-filter="folders"') < html.index('data-filter="files"')
+    assert html.index('data-filter="files"') < html.index('data-filter="folders"')  # All files first
     assert "status.folders" in html
-    assert "{% if not status.folders %}" not in html
+    assert "{% if not status.folders %}" not in html  # hidden by the script (count 0), not by the template
     assert "syncFoldersMetricVisibility" not in script
-    chip = _between(script, "function onMetricChip(", "document.querySelector(\"#metric-filters\")")
-    assert 'key === "folders"' in chip
-    assert 'other !== "folders"' in chip
-    assert "setMetricMode(foldersBtn, \"filter\")" not in chip
-    assert "listedFolderRows().length" not in chip
+    assert 'metricKey(btn) === "folders"' in script  # folders still select their rows
     restore = _between(script, "function restoreStoredFilters(", "function clearProductViewStorage(")
     assert "setMetricMode(foldersBtn, \"filter\")" not in restore
-    assert "Click **Folders**" in docs
-    assert "including **0**" in docs
-    assert "Hide the **Folders** pill when the count is 0" in docs
-    assert "stays **on** together with **Files**" in docs
-    assert "does not force Folders back on" in docs
-    assert "turning **Folders** or **Files** off **stays off**" in docs
-    assert "latest pill state wins" in docs
-    assert "turning **Folders** off **unselects** folder rows" in docs or "unselects** folder rows" in docs
-    assert "hides and unselects** folders" in docs
-    assert "re-activate Folders or Files after navigation" in docs
+    assert "Choose **Folders**" in docs
+    assert "no empty filters" in docs and "**one filter at a time**" in docs
     read_filters = _between(script, "function readStoredFilters(", "function writeStoredFilters(")
     assert 'filterStoreKey("_last")' in read_filters
     assert read_filters.index('filterStoreKey("_last")') < read_filters.index(
@@ -2355,12 +2344,11 @@ def test_user_interaction_negative_client_guards():
     assert "### Purge workspace…" in docs_rm
 
 
-def test_modified_metric_pill_left_of_checked_out():
-    """Modified pill filters/selects dirty owned files; sits left of Checked out."""
+def test_modified_and_checked_out_are_tabs_not_filter_rows():
+    """The Modified / Checked out tabs list those files with their own actions, so the filter menu has no
+    rows for them (the engine still understands the keys, e.g. in an older stored filter)."""
     html = APP_HTML.read_text(encoding="utf-8")
-    assert 'data-filter="modified"' in html
-    assert html.index('data-filter="modified"') < html.index('data-filter="checked_out"')
-    assert "> Modified</button>" in html.replace("\n", "")
+    assert 'data-filter="modified"' not in html and 'data-filter="checked_out"' not in html
     script = _app_js()
     match = _between(script, "function rowMatchesMetric(", "function rememberMetricCounts(")
     assert 'key === "modified"' in match
@@ -2370,14 +2358,11 @@ def test_modified_metric_pill_left_of_checked_out():
     assert "activeStateMetricKeys" in script
     # Regression: files-tab counts must recount modified after agent probes
     # (SSR folderCount alone stayed 0 while STATE already showed Modified).
-    counts_fn = _between(script, "function updateMetricCounts(", "function refreshTabMetrics(")
+    counts_fn = _between(script, "function paintMetricCounts(", "function updateMetricCounts(")
     assert "isStateMetric(key)" in counts_fn
     assert "rowMatchesMetric(row, key)" in counts_fn
     remember = _between(script, "function rememberPendingCheckinIds(", "function syncModifiedStateLabels(")
     assert "updateMetricCounts()" in remember
-    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
-    assert "Click **Modified**" in docs
-    assert "pill count matches rows shown as Modified" in docs
 
 def test_local_only_new_files_prefer_highest_creo_save():
     """New files (local) must show test-part.prt.2, not a leftover .prt.1."""

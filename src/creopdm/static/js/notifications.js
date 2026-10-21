@@ -314,10 +314,6 @@ window.__creopdmModules.notifications = {
         tab.textContent = open ? `Discussion · ${open}` : "Discussion";
         tab.classList.toggle("has-mention", mine > 0);
       }
-      const pill = $("#discussion-pill-item");
-      if (pill) pill.hidden = open === 0;
-      const strong = $("#discussion-pill-count");
-      if (strong) strong.textContent = String(open);
     }
 
     function paintGlyphs() {

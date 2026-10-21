@@ -1293,7 +1293,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return [...root.querySelectorAll(".folder-row")];
   }
 
-  function updateMetricCounts() {
+  function paintMetricCounts() {
     rememberMetricCounts();
     const root = fileListRoot();
     const filesTab = !root || root.id === "panel-files" || root.id === "object-table";
@@ -1334,6 +1334,77 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         : files.filter((row) => rowMatchesMetric(row, key)).length;
       strong.textContent = String(count);
     });
+  }
+
+  function updateMetricCounts() {
+    paintMetricCounts();
+    syncFilterMenu();
+  }
+
+  // ---- The filter dropdown (replaces the row of count pills) -------------------------------------
+  // The buttons inside it are the same ".metric" buttons the engine has always used; this only decides
+  // which rows the menu lists (no empty filters), and what the collapsed control shows.
+  function filterMenuEl() {
+    return document.getElementById("metric-filters");
+  }
+
+  function closeFilterMenu() {
+    const menu = filterMenuEl();
+    if (menu) menu.hidden = true;
+    document.getElementById("filter-trigger")?.setAttribute("aria-expanded", "false");
+  }
+
+  function openFilterMenu() {
+    const menu = filterMenuEl();
+    if (!menu) return;
+    syncFilterMenu();
+    menu.hidden = false;
+    document.getElementById("filter-trigger")?.setAttribute("aria-expanded", "true");
+  }
+
+  /** Rows with nothing in them are not listed (the active one always is); the control shows the active filter. */
+  function syncFilterMenu() {
+    const box = document.getElementById("filter-dropdown");
+    if (!box) return;
+    const buttons = metricButtons();
+    const active = buttons.find((btn) => metricMode(btn) !== "off") || null;
+    let anyListed = false;
+    buttons.forEach((btn) => {
+      const count = Number.parseInt(btn.querySelector("strong")?.textContent || "0", 10) || 0;
+      const on = metricMode(btn) !== "off";
+      const item = btn.closest("li");
+      // Own class (not [hidden]): the baseline view hides some rows through [hidden] as well.
+      if (item) item.classList.toggle("is-empty", !(count > 0 || on));
+      if (count > 0 || on) anyListed = true;
+      btn.setAttribute("aria-checked", on ? "true" : "false");
+    });
+    const label = document.getElementById("filter-trigger-label");
+    const countEl = document.getElementById("filter-count");
+    const reset = document.getElementById("filter-reset");
+    if (label) label.textContent = active ? active.querySelector(".metric-label")?.textContent || "Filter" : "Filter";
+    if (countEl) {
+      countEl.hidden = !active;
+      countEl.textContent = active ? active.querySelector("strong")?.textContent || "0" : "";
+    }
+    if (reset) reset.hidden = !active;
+    box.classList.toggle("is-active", Boolean(active));
+    // Nothing to filter by (an empty list): no control at all.
+    box.classList.toggle("is-empty", !anyListed);
+  }
+
+  /** Back to everything: every filter off, nothing selected by a filter. */
+  function resetMetricFilters() {
+    metricButtons().forEach((btn) => {
+      if (metricMode(btn) !== "off") setMetricMode(btn, "off");
+    });
+    rows().forEach((row) => markRowSelected(row, false));
+    lastSelectRow = null;
+    applyMetricVisibility();
+    applyMetricSelection();
+    writeStoredFilters();
+    updateMetricCounts();
+    syncToolbar();
+    closeFilterMenu();
   }
 
   function productHasListedObjects() {
@@ -1405,6 +1476,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       btn.classList.remove("is-selected");
       btn.classList.remove("is-filtered");
     }
+    syncFilterMenu();
     const key = metricKey(btn);
     const label = METRIC_LABELS[key] || key;
     if (key === "files") {
@@ -3821,6 +3893,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       setMetricMode(btn, mode);
       applied = true;
     });
+    // One filter at a time: an older stored combination keeps only its first filter.
+    metricButtons()
+      .filter((btn) => metricMode(btn) !== "off")
+      .slice(1)
+      .forEach((btn) => setMetricMode(btn, "off"));
     const files = metricButtons().find((btn) => metricKey(btn) === "files");
     if (files && metricMode(files) !== "off") {
       metricButtons().forEach((item) => {
@@ -3836,6 +3913,45 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!applied) return;
     applyMetricVisibility();
     applyMetricSelection();
+  }
+
+  /** Filters (not sort) of one product, from the browser's storage. */
+  function clearProductFilterStorage(productId) {
+    if (!productId) return;
+    const prefix = `creopdm.filters.${productId}.`;
+    try {
+      const remove = [];
+      for (let index = 0; index < localStorage.length; index += 1) {
+        const key = localStorage.key(index);
+        if (key && key.startsWith(prefix)) remove.push(key);
+      }
+      remove.forEach((key) => localStorage.removeItem(key));
+    } catch {
+      /* private mode */
+    }
+  }
+
+  /**
+   * Switching to another product starts with everything shown: the filter of the product being opened
+   * and of the one left behind are dropped. Inside one product (reload, folders, tabs) it persists.
+   */
+  function resetFiltersOnProductSwitch() {
+    const product = currentProductId();
+    if (!product) return;
+    let last = "";
+    try {
+      last = sessionStorage.getItem("creopdm.filterProduct") || "";
+    } catch {
+      last = "";
+    }
+    if (last === product) return;
+    clearProductFilterStorage(product);
+    if (last) clearProductFilterStorage(last);
+    try {
+      sessionStorage.setItem("creopdm.filterProduct", product);
+    } catch {
+      /* private mode */
+    }
   }
 
   function clearProductViewStorage(productId) {
@@ -4564,43 +4680,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     // One click = sticky filter (list filtered + matching rows selected). Click again clears.
     const next = current === "filter" || current === "select" ? "off" : "filter";
     setMetricMode(btn, next);
-    if (key === "files" && next !== "off") {
+    // One filter at a time: choosing one turns every other one off.
+    if (next !== "off") {
       metricButtons().forEach((item) => {
-        const other = metricKey(item);
-        // Files does not clear Folders — leave Folders as the user left it (on or off).
-        if (item !== btn && !isStateMetric(other) && other !== "folders") {
-          setMetricMode(item, "off");
-        }
+        if (item !== btn && metricMode(item) !== "off") setMetricMode(item, "off");
       });
-    }
-    if (key === "folders" && next !== "off") {
-      metricButtons().forEach((item) => {
-        const other = metricKey(item);
-        // Folders may stay with Files; clear other type chips only.
-        if (item !== btn && !isStateMetric(other) && other !== "files") {
-          setMetricMode(item, "off");
-        }
-      });
-    }
-    if (key !== "files" && key !== "folders" && !isStateMetric(key) && next !== "off") {
-      clearMetricFilters(new Set(["files"]));
-    }
-    if (key !== "folders" && key !== "files" && !isStateMetric(key) && next !== "off") {
-      clearMetricFilters(new Set(["folders"]));
-    }
-    if (key === "cad_models" && next !== "off") {
-      clearMetricFilters(CAD_MODEL_CHILD_FILTERS);
-    }
-    if (next !== "off" && CAD_MODEL_CHILD_FILTERS.has(key)) {
-      clearMetricFilters(new Set(["cad_models"]));
-    }
-    // Top level assemblies is exclusive — no other pills stay on with it.
-    if (key === "top_level_assemblies" && next !== "off") {
-      metricButtons().forEach((item) => {
-        if (item !== btn) setMetricMode(item, "off");
-      });
-    } else if (key !== "top_level_assemblies" && next !== "off") {
-      clearMetricFilters(new Set(["top_level_assemblies"]));
     }
     if (next === "off") {
       rows().forEach((row) => markRowSelected(row, false));
@@ -4611,6 +4695,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     writeStoredFilters();
     updateMetricCounts();
     syncToolbar();
+    closeFilterMenu();
   }
 
   document.querySelector("#metric-filters")?.addEventListener("click", onMetricChip, true);
@@ -4621,6 +4706,27 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     event.preventDefault();
     onMetricChip(event);
   });
+
+  $("#filter-trigger")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (filterMenuEl()?.hidden === false) closeFilterMenu();
+    else openFilterMenu();
+  });
+  $("#filter-reset")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    resetMetricFilters();
+  });
+  document.addEventListener("click", (event) => {
+    const box = document.getElementById("filter-dropdown");
+    if (box && filterMenuEl()?.hidden === false && !box.contains(eventEl(event))) closeFilterMenu();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && filterMenuEl()?.hidden === false) {
+      closeFilterMenu();
+      document.getElementById("filter-trigger")?.focus();
+    }
+  });
+  syncFilterMenu();
 
   async function postAction(url, body, method = "POST", busyMessage = "Working…") {
     showError($("#toolbar-error"), "");
@@ -7902,15 +8008,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     document.querySelector('.tabs .tab[data-tab="discussion"]')?.click();
   }
 
-  // The "N Baselines" pill (not a file filter) opens the Baselines tab.
-  document.querySelector("#metric-filters")?.addEventListener("click", (event) => {
-    const link = eventEl(event)?.closest("[data-tab-link]");
-    if (!link) return;
-    document
-      .querySelector(`.tabs .tab[data-tab="${link.getAttribute("data-tab-link")}"]`)
-      ?.click();
-  });
-
   // A link with ?baseline=<uuid> (and a refresh while browsing one) opens that baseline's files.
   {
     const params = new URLSearchParams(window.location.search);
@@ -8541,7 +8638,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     },
   };
 
+  resetFiltersOnProductSwitch();
   restoreStoredFilters();
+  syncFilterMenu();
   syncToolbar();
   // Administration -> Baselines: a soft navigation never runs <script> tags, so the page's own
   // module is started here, after every page swap.

@@ -698,7 +698,7 @@ def test_product_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "vertical-align: top" in css.text
     assert "span.object-open" in css.text
     assert "background: transparent !important" in css.text
-    assert "appearance: none" in css.text.split(".metric {")[1].split("}")[0]
+    assert "appearance: none" in css.text.split("\n.metric {")[1].split("}")[0]
     assert ".toolbar-menu" in css.text
     assert "overflow: visible" in css.text.split(".toolbar-actions")[1].split("}")[0]
     assert "tr.is-row-hidden" in css.text
