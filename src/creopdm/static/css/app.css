@@ -2694,3 +2694,5 @@ dialog.cm-lightbox[open] { display: flex; flex-direction: column; gap: 0.6rem; }
 /* The scroller spans the panel (scrollbar at the far right); the comments keep a readable width. */
 .content .tab-panel > .cm-panel-host.cm-host { max-width: none; padding-right: 0; }
 .content .tab-panel > .cm-panel-host.cm-host > * { max-width: 880px; }
+/* Checked out / Modified / New files show only while they have something in them. */
+.tabs .tab[hidden] { display: none !important; }

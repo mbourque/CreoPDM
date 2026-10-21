@@ -3214,6 +3214,20 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
+  /**
+   * Checked out / Modified / New files appear only while they have something in them. The tab
+   * you are on stays (its count can read 0 for a moment while the agent scans, and it must not
+   * vanish under you); it hides as soon as you move to another tab.
+   */
+  function syncEmptyTabs() {
+    for (const name of ["checked-out", "modified", "changes"]) {
+      const tab = document.querySelector(`.tabs .tab[data-tab="${name}"]`);
+      if (!tab) continue;
+      const counted = /·\s*[1-9]\d*\s*$/.test(tab.textContent || "");
+      tab.hidden = !(counted || tab.classList.contains("is-active"));
+    }
+  }
+
   function setCheckinQueueCounts(pendingSaves, newFiles) {
     for (const el of [checkinBtn, checkinMenuBtn]) {
       if (!el) continue;
@@ -3230,6 +3244,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const n = Number(newFiles || 0);
       tab.textContent = n ? `New files · ${n}` : "New files";
     }
+    syncEmptyTabs();
     syncToolbar();
   }
 
@@ -3238,6 +3253,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!tab) return;
     const n = Number(count) || 0;
     tab.textContent = n ? `Checked out · ${n}` : "Checked out";
+    syncEmptyTabs();
     // The tab counts everyone's checkouts; "Check in product…" can only act on MY checkouts,
     // so the button reads the count of files checked out by the signed-in user.
     const own = Number(mine == null ? 0 : mine) || 0;
@@ -7845,6 +7861,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       document.querySelectorAll(".tab-panel").forEach((panel) => {
         panel.hidden = panel.id !== `panel-${name}`;
       });
+      syncEmptyTabs();
       // Discussion is a conversation page: no count pills above it, no file toolbar below it.
       document.body.classList.toggle("is-discussion-tab", name === "discussion" && Boolean($("#metric-filters")));
       if (name === "changes") loadChangesTab();
