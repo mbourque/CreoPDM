@@ -182,6 +182,14 @@ def test_product_discussion_intro_reads_comments_on_the_product_at_the_file_page
     assert '<p class="muted small discussion-intro">' in detail  # the file page uses the same line style
 
 
+def test_feed_threads_start_with_re_and_a_bold_name():
+    """In the product's feed each thread says what it is about: "Re: **name**" (regarding)."""
+    js = (JS / "comments.js").read_text(encoding="utf-8")
+    assert '<div class="cm-where small">Re: ${whereLink(thread)}' in js
+    where = js.split("function whereLink(comment)", 1)[1].split("/** `threadTools`", 1)[0]
+    assert where.count("<strong>${name}</strong>") == 3  # file, baseline and product / other targets
+
+
 def test_all_links_under_a_comment_share_one_line():
     """Edit · Delete · Reply · Resolve are one row under the comment, not two."""
     js = (JS / "comments.js").read_text(encoding="utf-8")

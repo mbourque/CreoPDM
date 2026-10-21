@@ -452,9 +452,9 @@ window.__creopdmModules.comments = {
         const p = encodeURIComponent(cfg.product);
         const t = `&thread=${encodeURIComponent(comment.uuid)}`;
         const name = esc(comment.target_name || "Product");
-        if (comment.target_type === "OBJECT") return `<a href="/products/${p}/objects/${encodeURIComponent(comment.target_uuid)}?tab=discussion${t}">${name}</a>`;
-        if (comment.target_type === "BASELINE") return `<a href="/?product=${p}&tab=baselines&baseline=${encodeURIComponent(comment.target_uuid)}&discussion=1${t}">Baseline ${name}</a>`;
-        return `<span>${name}</span>`;
+        if (comment.target_type === "OBJECT") return `<a href="/products/${p}/objects/${encodeURIComponent(comment.target_uuid)}?tab=discussion${t}"><strong>${name}</strong></a>`;
+        if (comment.target_type === "BASELINE") return `<a href="/?product=${p}&tab=baselines&baseline=${encodeURIComponent(comment.target_uuid)}&discussion=1${t}">Baseline <strong>${name}</strong></a>`;
+        return `<span><strong>${name}</strong></span>`;
       }
 
       /** `threadTools`: the thread's own links (Reply, Resolve / Reopen), shown on the first comment's line. */
@@ -512,7 +512,7 @@ window.__creopdmModules.comments = {
         }
         return (
           `<article class="cm-thread${resolved ? " is-resolved" : ""}" data-thread="${thread.uuid}" id="cm-${thread.uuid}">` +
-          (cfg.feed ? `<div class="cm-where small">${whereLink(thread)}${thread.version_display ? ` ${esc(thread.version_display)}` : ""}</div>` : "") +
+          (cfg.feed ? `<div class="cm-where small">Re: ${whereLink(thread)}${thread.version_display ? ` ${esc(thread.version_display)}` : ""}</div>` : "") +
           // Every link under a comment is one line: Edit · Delete · Reply · Resolve.
           commentHtml(thread, false, actions) +
           (thread.replies || []).map((reply) => commentHtml(reply, true)).join("") +
