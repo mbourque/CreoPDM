@@ -284,3 +284,8 @@ def test_help_and_docs_describe_discussion():
     assert 'id="discussion"' in user and 'href="#discussion"' in user and "Ctrl+V" in user and "Resolve" in user
     assert 'id="collaboration"' in admin and "comments.resolve" in admin and "E-mail is optional" in admin
     assert "## 19. Discussion" in docs and "toast" in docs.lower()
+
+
+def test_a_baseline_files_discussion_intro_names_baseline_and_file():
+    page = (Path(__file__).resolve().parents[2] / "src" / "creopdm" / "templates" / "object_detail.html").read_text(encoding="utf-8")
+    assert "Comments on baseline <strong>{{ from_baseline.name }}</strong> / <strong>{{ object.filename }}</strong>." in page

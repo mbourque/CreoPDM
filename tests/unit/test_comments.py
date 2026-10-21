@@ -373,6 +373,8 @@ def test_the_mail_link_goes_to_the_exact_thread_for_every_kind_of_target(auth_cl
         assert made.status_code == 201, (target_type, made.text)
         message = next(kw["message"] for event, kw in sent if event == "comment_mention")
         assert expected in message, (target_type, message)
+        if target_type == "BASELINE_MEMBER":  # back to that file's Details → Discussion inside the baseline
+            assert f"?baseline={baseline['uuid']}&tab=discussion&thread=" in message, message
         assert f"thread={made.json()['uuid']}" in message, target_type
     # a reply links to its thread (the first comment), not to the reply itself
     sent.clear()
