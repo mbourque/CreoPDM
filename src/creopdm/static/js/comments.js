@@ -111,7 +111,7 @@ window.__creopdmModules.comments = {
       const root = document.createElement("div");
       root.className = "cm-composer";
       root.innerHTML =
-        `<div class="cm-input-wrap"><textarea class="cm-input" rows="${cfg.rows || 3}" maxlength="4000" ` +
+        `<div class="cm-input-wrap"><textarea class="cm-input" rows="${cfg.rows || 2}" maxlength="4000" ` +
         `placeholder="${esc(cfg.placeholder || "Write a comment. Type @ to mention someone; paste an image with Ctrl+V.")}"></textarea>` +
         `<div class="cm-mention-list" role="listbox" hidden></div></div>` +
         `<div class="cm-chips"></div>` +
