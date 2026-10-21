@@ -461,6 +461,12 @@ def test_filters_and_summary_counts(auth_client, auth_ctx):
     assert len(auth_client.get(base, params={"filter": "mentions"}).json()) == 1
     assert auth_client.get(base, params={"filter": "mine"}).json() == []
     assert len(auth_client.get(base).json()) == 3
+    # a mention stays in "Mentions me" after the thread is resolved (it leaves "Open", not this list)
+    mention_thread = auth_client.get(base, params={"filter": "mentions"}).json()[0]
+    assert auth_client.post(f"/api/comments/{mention_thread['uuid']}/resolve", json={"note": "ok"}).status_code == 200
+    assert [t["uuid"] for t in auth_client.get(base, params={"filter": "mentions"}).json()] == [mention_thread["uuid"]]
+    assert mention_thread["uuid"] not in [t["uuid"] for t in auth_client.get(base).json()]
+    assert auth_client.get(f"{base}/summary").json()["mentions_me"] == 0  # the bell/pill count is open mentions only
 
 
 # ------------------------------------------------------------------ baselines and versions

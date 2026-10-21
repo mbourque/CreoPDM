@@ -1029,7 +1029,8 @@ class CommentService:
             roots = [r for r in roots if self._is_author(actor, r)]
         elif mode == "mentions" and actor.user is not None:
             mentioned = self._threads_mentioning(db, product, actor.user.id)
-            roots = [r for r in roots if r.id in mentioned and r.resolved_at is None]
+            # Every thread that mentions you, open or resolved (Open / Resolved narrow it by state).
+            roots = [r for r in roots if r.id in mentioned]
         elif mode == "mentions":
             roots = []
         # A deleted thread with no replies left carries nothing to show.
