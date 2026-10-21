@@ -195,6 +195,24 @@ def test_the_highlighted_thread_outline_is_inside_its_box():
     assert ".cm-thread.is-target { box-shadow: inset 0 0 0 2px var(--accent); }" in css  # not clipped
 
 
+def test_selection_text_sits_in_the_tab_row_so_the_pills_have_no_extra_gap():
+    """The "N selected." line used to reserve a whole row under the pills. It is now the last item
+    of the tab row (right-aligned), so the gap under the pills equals the gap above them."""
+    page = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
+    tabs = page.split('<div class="tabs" role="tablist">', 1)[1].split("</div>", 1)[0]
+    assert 'id="selection-summary"' in tabs  # inside the tab row ...
+    assert page.count('id="selection-summary"') == 1  # ... and only there
+    css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    rule = css.split("#selection-summary {", 1)[1].split("}", 1)[0]  # the first one is the main rule
+    assert "margin: 0 0.2rem 0 auto" in rule and "min-height" not in rule
+
+
+def test_an_empty_discussion_shows_no_placeholder_text():
+    js = (JS / "comments.js").read_text(encoding="utf-8")
+    assert "No open comments yet" not in js and "Nothing matches this filter" not in js
+    assert "cm-empty" not in js
+
+
 def test_attach_image_sits_beside_the_main_button_on_the_right():
     js = (JS / "comments.js").read_text(encoding="utf-8")
     row = js.split('<div class="cm-actions">', 1)[1].split('<p class="error cm-error"', 1)[0]

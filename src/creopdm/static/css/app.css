@@ -339,10 +339,12 @@ a.brand:hover { text-decoration: none; color: inherit; }
   width: 100%; padding: 0.32rem 0.55rem; border: 1px solid var(--line); border-radius: 4px;
 }
 #selection-summary {
-  margin: 0.15rem 0 0;
+  /* At the right end of the tab row (a flex row): no vertical space of its own under the pills. */
+  margin: 0 0.2rem 0 auto;
+  align-self: center;
   display: block;
-  min-height: 1.15em;
   line-height: 1.15;
+  white-space: nowrap;
 }
 #selection-summary:not(.is-active) {
   visibility: hidden;
@@ -2674,7 +2676,6 @@ body.is-file-drag #file-drop-overlay {
 .cm-resolved { margin-top: 0.45rem; color: var(--ok); }
 .cm-inline { margin-top: 0.4rem; }
 .cm-note { min-width: 16rem; }
-.cm-empty { padding: 0.8rem 0; }
 .cm-lightbox { max-width: 94vw; max-height: 94vh; }
 .cm-lightbox-bar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
 .cm-lightbox-img { max-width: 90vw; max-height: 78vh; display: block; margin: 0 auto; }

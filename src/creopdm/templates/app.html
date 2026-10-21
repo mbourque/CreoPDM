@@ -141,8 +141,6 @@
       {% endif %}
     </ul>
     {% endif %}
-    <p class="muted small" id="selection-summary">&nbsp;</p>
-
     <div class="tabs" role="tablist">
       <button type="button" class="tab is-active" data-tab="files">Files</button>
       <button type="button" class="tab" data-tab="checked-out"{% if not checkout_count|default(0) %} hidden{% endif %}>{% if checkout_count|default(0) %}Checked out · {{ checkout_count }}{% else %}Checked out{% endif %}</button>
@@ -154,6 +152,8 @@
       {% if can_view_comments %}
       <button type="button" class="tab" data-tab="discussion">Discussion</button>
       {% endif %}
+      {# "N selected." sits at the right end of the tab row: it takes no row of its own under the pills. #}
+      <p class="muted small" id="selection-summary">&nbsp;</p>
     </div>
 
     <section class="tab-panel" id="panel-files" data-folder="{{ current_folder }}">

@@ -532,11 +532,8 @@ window.__creopdmModules.comments = {
       }
 
       function paint() {
-        listEl.innerHTML = state.threads.length
-          ? state.threads.map(threadHtml).join("")
-          : `<p class="muted cm-empty">${
-              state.filter === "open" ? "No open comments yet." : "Nothing matches this filter."
-            }</p>`;
+        // No threads: nothing is shown (no "No comments yet" line).
+        listEl.innerHTML = state.threads.map(threadHtml).join("");
         const map = allComments();
         // edit boxes
         listEl.querySelectorAll(".cm-edit-host").forEach((hostEl) => {
