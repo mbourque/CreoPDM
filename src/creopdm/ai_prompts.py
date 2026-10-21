@@ -1801,6 +1801,15 @@ def _insert_mode_diff_lines(older: dict[str, Any], newer: dict[str, Any]) -> lis
     return lines
 
 
+_ASSEMBLY_NOISE_FEATURE_MARKERS = ("COORDINATE_SYSTEM", "DATUM_", "CSYS")  # compared with spaces as _
+
+
+def _is_assembly_noise_feature_label(label: str) -> bool:
+    """Coordinate systems and datums: unstable between gathers, so not a computed difference."""
+    upper = str(label or "").upper().replace(" ", "_")
+    return any(marker in upper for marker in _ASSEMBLY_NOISE_FEATURE_MARKERS)
+
+
 def format_snapshot_compare_diff_text(
     older_snapshot: dict[str, Any] | None,
     newer_snapshot: dict[str, Any] | None,
@@ -1904,8 +1913,17 @@ def format_snapshot_compare_diff_text(
     both_have_structure = older_has_struct and newer_has_struct
     has_structure = older_has_struct or newer_has_struct
     if both_have_structure:
-        feat_removed = []
-        feat_added = []
+        # Pending Check In gathers differ on coordinate systems and datums even when nothing
+        # changed, so those stay out of the diff. Every other feature still counts: in a
+        # manufacturing assembly the milling / operation / setup features ARE the content.
+        # A side that captured no features at all (a thinner pending gather) says nothing
+        # about what was removed, so nothing is invented from it.
+        if older_feats and newer_feats:
+            feat_removed = [item for item in feat_removed if not _is_assembly_noise_feature_label(item)]
+            feat_added = [item for item in feat_added if not _is_assembly_noise_feature_label(item)]
+        else:
+            feat_removed = []
+            feat_added = []
 
     # Diff facts only — narrative instructions live in System Settings → AI prompt.
     lines = ["=== Computed differences ==="]

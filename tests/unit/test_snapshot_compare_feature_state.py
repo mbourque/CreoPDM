@@ -262,3 +262,65 @@ def test_the_prompt_makes_the_model_name_every_part():
     assert "Name EVERY part listed under Components removed / added" in prompt
     assert "plate_3.prt" in prompt and "family word" in prompt
     assert "constraints of components that were removed or added are not listed" in prompt
+
+
+def _mfg_assembly(features):
+    return {
+        "identity": {"filename": "as_nc.asm", "model_type": "ASSEMBLY"},
+        "features": [{"name": name, "type": kind} for name, kind in features],
+        "bom": [
+            {
+                "filename": "as_nc.asm",
+                "quantity": 1,
+                "dependency_type": "ASSEMBLY_ROOT",
+                "children": [
+                    {
+                        "filename": "as.prt",
+                        "quantity": 1,
+                        "dependency_type": "ASSEMBLY_MEMBER",
+                        "children": [],
+                    }
+                ],
+            }
+        ],
+    }
+
+
+def test_manufacturing_features_are_diffed_even_when_both_sides_have_a_structure():
+    """A manufacturing assembly's milling / operation features are its content: the compare
+    used to throw every feature difference away whenever both sides had a Structure."""
+    from creopdm.ai_prompts import format_snapshot_compare_diff_text
+
+    old = _mfg_assembly(
+        [
+            ("NC", "COORDINATE SYSTEM"),
+            ("RETRACT", "DATUM PLANE"),
+            ("MILLING", "MILLING"),
+            ("CUT_MOTION", "CUT_MOTION"),
+        ]
+    )
+    new = _mfg_assembly(
+        [
+            ("NC", "COORDINATE SYSTEM"),
+            ("EXTRA_PLANE", "DATUM PLANE"),
+            ("NONAME001", "MILLING"),
+            ("NONAME002", "MILLING"),
+        ]
+    )
+    diff = format_snapshot_compare_diff_text(old, new)
+    assert "No computed differences" not in diff
+    removed = diff.split("Features removed:", 1)[1].split("Features added:", 1)[0]
+    added = diff.split("Features added:", 1)[1].split("Dimensions", 1)[0]
+    assert "MILLING" in removed and "CUT_MOTION" in removed
+    assert "NONAME001" in added and "NONAME002" in added
+    # coordinate systems and datums stay out (unstable between gathers)
+    assert "RETRACT" not in removed and "EXTRA_PLANE" not in added
+
+
+def test_a_side_with_no_features_invents_no_removals():
+    from creopdm.ai_prompts import format_snapshot_compare_diff_text
+
+    old = _mfg_assembly([("MILLING", "MILLING"), ("OP010", "OPERATION")])
+    thin = _mfg_assembly([])  # a pending gather that captured no features
+    diff = format_snapshot_compare_diff_text(old, thin)
+    assert "Features removed: (none)" in diff and "Features added: (none)" in diff
