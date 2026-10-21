@@ -175,6 +175,8 @@ def test_product_discussion_intro_reads_comments_on_the_product_at_the_file_page
     css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
     # same size as the file's Discussion intro (.detail text is 0.95rem)
     assert ".discussion-intro { font-size: 0.95rem;" in css
+    # spacing above the filter pills equals the file page (flex margins would add up otherwise)
+    assert ".content .tab-panel > .discussion-intro { margin-bottom: 0; }" in css
 
 
 def test_discussion_pages_do_not_repeat_the_mention_hint():

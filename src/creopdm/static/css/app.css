@@ -2698,3 +2698,6 @@ dialog.cm-lightbox[open] { display: flex; flex-direction: column; gap: 0.6rem; }
 .tabs .tab[hidden] { display: none !important; }
 /* The product Discussion intro reads at the same size as a file's ("Comments on <file>."). */
 .discussion-intro { font-size: 0.95rem; line-height: 1.45; }
+/* The product panel is a flex column, where margins add up instead of merging as on a file's page: drop the
+   line's bottom margin so the gap above the filter pills matches the file page. */
+.content .tab-panel > .discussion-intro { margin-bottom: 0; }
