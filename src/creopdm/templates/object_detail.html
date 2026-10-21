@@ -740,7 +740,7 @@
            {% if version_view and from_baseline %}data-target-type="BASELINE_MEMBER" data-target="{{ from_baseline.uuid }}/{{ object.uuid }}"
            {% elif version_view %}data-target-type="VERSION" data-target="{{ version_view.uuid }}"
            {% else %}data-target-type="OBJECT" data-target="{{ object.uuid }}"{% endif %} hidden>
-    <p class="muted small">
+    <p class="muted small discussion-intro">
       {% if version_view and from_baseline %}Comments on this file as it is in the baseline <strong>{{ from_baseline.name }}</strong>.
       {% elif version_view %}Comments on <strong>{{ object.filename }} {{ version_view.display }}</strong>.
       {% else %}Comments on <strong>{{ object.filename }}</strong>.{% endif %}

@@ -176,7 +176,10 @@ def test_product_discussion_intro_reads_comments_on_the_product_at_the_file_page
     # same size as the file's Discussion intro (.detail text is 0.95rem)
     assert ".discussion-intro { font-size: 0.95rem;" in css
     # spacing above the filter pills equals the file page (flex margins would add up otherwise)
-    assert ".content .tab-panel > .discussion-intro { margin-bottom: 0; }" in css
+    assert ".content .tab-panel > .discussion-intro { margin: 0.7rem 0 0; }" in css
+    assert ".cm-bar { display: flex; gap: 0.35rem; margin: 0.95rem 0 0.6rem;" in css
+    detail = (ROOT / "src" / "creopdm" / "templates" / "object_detail.html").read_text(encoding="utf-8")
+    assert '<p class="muted small discussion-intro">' in detail  # the file page uses the same line style
 
 
 def test_discussion_pages_do_not_repeat_the_mention_hint():

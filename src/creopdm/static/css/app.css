@@ -2632,7 +2632,7 @@ body.is-file-drag #file-drop-overlay {
 .tabs .tab.has-mention { color: var(--accent); }
 
 .cm-host { display: block; max-width: 880px; }
-.cm-bar { display: flex; gap: 0.35rem; margin: 0.6rem 0; flex-wrap: wrap; }
+.cm-bar { display: flex; gap: 0.35rem; margin: 0.95rem 0 0.6rem; flex-wrap: wrap; }
 .cm-filter {
   border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 999px;
   padding: 0.15rem 0.7rem; font: inherit; font-size: 0.8rem; cursor: pointer;
@@ -2697,7 +2697,8 @@ dialog.cm-lightbox[open] { display: flex; flex-direction: column; gap: 0.6rem; }
 /* Checked out / Modified / New files show only while they have something in them. */
 .tabs .tab[hidden] { display: none !important; }
 /* The product Discussion intro reads at the same size as a file's ("Comments on <file>."). */
-.discussion-intro { font-size: 0.95rem; line-height: 1.45; }
-/* The product panel is a flex column, where margins add up instead of merging as on a file's page: drop the
-   line's bottom margin so the gap above the filter pills matches the file page. */
-.content .tab-panel > .discussion-intro { margin-bottom: 0; }
+.discussion-intro { font-size: 0.95rem; line-height: 1.45; margin: 0.95rem 0 0; }
+/* The line has no bottom margin on either page (the filter row's top margin sets the gap below it).
+   Above it, a file's page lets the tab row's margin merge with this one (0.95rem in all); the product
+   panel is a flex column where they add, so it takes the 0.25rem tab margin off (0.7rem + 0.25rem). */
+.content .tab-panel > .discussion-intro { margin: 0.7rem 0 0; }
