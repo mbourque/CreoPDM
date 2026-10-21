@@ -69,6 +69,10 @@
   {% endif %}
   {% endfor %}
 {% endmacro %}
+<section class="workspace{% if sidebar_collapsed %} is-sidebar-collapsed{% endif %}">
+{% set selected = product %}
+{% include "_sidebar.html" %}
+<section class="content detail-content">
 <article class="detail">
   <nav class="crumb">
     <a href="/?product={{ product.uuid }}"
@@ -819,6 +823,8 @@
     </div>
   </section>
 </article>
+</section>
+</section>
 
 {% if not version_view %}
 <footer class="toolbar" id="detail-toolbar">

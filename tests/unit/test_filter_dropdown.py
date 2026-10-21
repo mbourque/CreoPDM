@@ -185,3 +185,16 @@ def test_the_shortcut_pills_are_gone_from_the_scripts():
     baselines = (JS / "baselines.js").read_text(encoding="utf-8")
     assert "discussion-pill" not in notifications and "baselines-pill" not in baselines
     assert "data-tab-link" not in _app_js()
+
+
+@requires_git
+def test_the_product_sidebar_stays_on_the_details_page(auth_client, auth_ctx):
+    _signed_in_admin(auth_client, auth_ctx)
+    product = auth_client.post("/api/products", json={"name": "Sidebar"}).json()
+    _add(auth_client, product["uuid"], "a.prt")
+    obj = auth_client.get(f"/api/products/{product['uuid']}/objects").json()[0]
+    page = auth_client.get(f"/products/{product['uuid']}/objects/{obj['uuid']}").text
+    assert 'class="sidebar"' in page and 'id="product-list"' in page and 'id="sidebar-collapse-btn"' in page
+    assert f'href="/?product={product["uuid"]}"' in page.split('id="product-list"', 1)[1]
+    assert "product-item is-active" in page  # the file's own product is the highlighted one
+    assert 'class="detail"' in page

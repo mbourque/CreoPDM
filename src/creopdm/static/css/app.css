@@ -1819,6 +1819,8 @@ body.is-file-drag #file-drop-overlay {
 }
 #chosen-file-summary { text-align: left; margin: 0.35rem 0 0; }
 
+/* The Details page keeps the product sidebar; its article scrolls inside the content area. */
+.content.detail-content { padding: 0; }
 .detail {
   padding: 1.2rem 1.4rem 2rem;
   flex: 1;

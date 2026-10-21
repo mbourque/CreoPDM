@@ -1384,7 +1384,7 @@ def test_new_product_and_sidebar_collapse_handlers_present():
     assert "openCreateProduct" in _admin_js()
     assert "sidebarCollapseBtn?.addEventListener(\"click\"" in script
     assert "is-sidebar-collapsed" in script
-    assert 'id="new-product-btn"' in APP_HTML.read_text(encoding="utf-8")
+    assert 'id="new-product-btn"' in (APP_HTML.parent / "_sidebar.html").read_text(encoding="utf-8")
     html = APP_HTML.read_text(encoding="utf-8")
     # Empty-home create invite is only for products.create (not for Viewer, etc.).
     assert re.search(

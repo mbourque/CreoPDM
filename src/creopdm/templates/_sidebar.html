@@ -1,0 +1,37 @@
+{# The product list: shared by the Files page and the file Details pages. #}
+  <aside class="sidebar">
+    <div class="sidebar-head">
+      <div class="sidebar-head-start">
+        <button type="button" class="sidebar-menu-btn" id="product-menu-btn"
+                aria-expanded="false" aria-controls="product-list" aria-label="Products"
+                {% if selected %}{% set tip = [selected.number, selected.description]|select|join(" — ") %}{% if tip %}title="{{ tip }}"{% endif %}{% endif %}>
+          <span class="hamburger" aria-hidden="true"><span></span><span></span><span></span></span>
+          <span class="sidebar-current">{{ selected.name if selected else "Products" }}</span>
+        </button>
+        <h2 class="sidebar-title">Products</h2>
+        <button type="button" class="sidebar-collapse-btn" id="sidebar-collapse-btn"
+                title="{% if sidebar_collapsed %}Show product list{% else %}Collapse product list{% endif %}"
+                aria-label="{% if sidebar_collapsed %}Show product list{% else %}Collapse product list{% endif %}"
+                aria-pressed="{% if sidebar_collapsed %}true{% else %}false{% endif %}">
+          <span class="sidebar-collapse-icon" aria-hidden="true"></span>
+        </button>
+      </div>
+      {% if can_create_product %}
+      <button type="button" class="btn btn-small" id="new-product-btn">New</button>
+      {% endif %}
+    </div>
+    <ul class="product-list" id="product-list">
+      {% for product in products %}
+      <li>
+        <a class="product-item {% if selected and product.uuid == selected.uuid %}is-active{% endif %}"
+           href="/?product={{ product.uuid }}"
+           {% set tip = [product.number, product.description]|select|join(" — ") %}{% if tip %}title="{{ tip }}"{% endif %}>
+          <span class="product-name">{{ product.name }}</span>
+          {% if product.number %}<span class="product-number">{{ product.number }}</span>{% endif %}
+        </a>
+      </li>
+      {% else %}
+      <li class="empty">No products yet.</li>
+      {% endfor %}
+    </ul>
+  </aside>

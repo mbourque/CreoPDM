@@ -858,6 +858,8 @@ def _object_detail_page(
             "app_version": APP_VERSION,
             **_creo_page(ctx),
             "product": product_to_response(product),
+            "products": [product_to_response(item) for item in accessible_products(request, ctx, db)],
+            "sidebar_collapsed": _sidebar_collapsed(request),
             "object": payload,
             "history": history,
             "workspace_pending": pending,
