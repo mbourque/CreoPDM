@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+from urllib.parse import quote
 import uuid as uuid_lib
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -520,6 +521,45 @@ class CommentService:
             add(by_name.get(target.owner_username.lower()), NOTIFY_ON_MINE)
         return chosen
 
+    def _deep_link(
+        self, db: Session, base_url: str, product: Product, comment: Comment, target: _Target
+    ) -> str:
+        """The exact place the thread is shown: the same links the toast and the bell use."""
+        base = (base_url or "").rstrip("/")
+        if not base:
+            return ""
+        p = quote(product.uuid, safe="")
+        thread = comment.uuid
+        if comment.parent_id:
+            thread = db.scalar(select(Comment.uuid).where(Comment.id == comment.parent_id)) or thread
+        t = f"&thread={quote(thread, safe='')}"
+        kind = comment.target_type
+        if kind == TARGET_OBJECT:
+            return f"{base}/products/{p}/objects/{quote(comment.target_uuid, safe='')}?tab=discussion{t}"
+        version_uuid = ""
+        if comment.version_id:
+            version_uuid = db.scalar(select(ObjectVersion.uuid).where(ObjectVersion.id == comment.version_id)) or ""
+        if kind == TARGET_VERSION:
+            obj_uuid = (
+                db.scalar(select(EngineeringObject.uuid).where(EngineeringObject.id == target.object_id))
+                if target.object_id
+                else None
+            )
+            if obj_uuid:
+                return (
+                    f"{base}/products/{p}/objects/{quote(obj_uuid, safe='')}"
+                    f"/versions/{quote(comment.target_uuid, safe='')}?tab=discussion{t}"
+                )
+        if kind == TARGET_BASELINE:
+            return f"{base}/?product={p}&tab=baselines&baseline={quote(comment.target_uuid, safe='')}&discussion=1{t}"
+        if kind == TARGET_BASELINE_MEMBER and version_uuid:
+            baseline_uuid, _, obj_uuid = comment.target_uuid.partition("/")
+            return (
+                f"{base}/products/{p}/objects/{quote(obj_uuid, safe='')}/versions/{quote(version_uuid, safe='')}"
+                f"?baseline={quote(baseline_uuid, safe='')}&tab=discussion{t}"
+            )
+        return f"{base}/?product={p}&tab=discussion{t}"
+
     def _tell_new(
         self,
         db: Session,
@@ -589,7 +629,7 @@ class CommentService:
         address = _usable_watch_email(user.email)
         if not address:
             return
-        link = f"{base_url.rstrip('/')}/" if base_url else ""
+        link = self._deep_link(db, base_url, product, comment, target)
         try:
             self._notifications.notify(
                 NotificationEvent.COMMENT_MENTION,
@@ -611,6 +651,7 @@ class CommentService:
         body: str,
         add_attachment_uuids: list[str] | None = None,
         remove_attachment_uuids: list[str] | None = None,
+        base_url: str = "",
     ) -> dict[str, Any]:
         comment = self._get(db, comment_uuid)
         if comment.product_id != product.id or comment.deleted_at is not None:
@@ -665,7 +706,7 @@ class CommentService:
                         target=target,
                         actor=actor,
                         images=images,
-                        base_url="",
+                        base_url=base_url,
                     )
         out = self.serialize(db, [comment], actor)[0]
         out["not_notified"] = ignored

@@ -333,6 +333,54 @@ def test_mail_goes_to_the_mentioned_user_only_when_email_is_enabled(auth_client,
     _post(auth_client, product, "@eng hello")
     mails = [kw for event, kw in sent if event == "comment_mention"]
     assert len(mails) == 1 and mails[0]["to"] == "eng@example.com"
+    # the mail links straight to the thread (a product-level comment: the product's Discussion tab)
+    assert f"/?product={product['uuid']}&tab=discussion&thread=" in mails[0]["message"]
+
+
+@requires_git
+def test_the_mail_link_goes_to_the_exact_thread_for_every_kind_of_target(auth_client, auth_ctx, monkeypatch):
+    _setup(auth_client, auth_ctx)
+    sent = []
+    monkeypatch.setattr(
+        auth_ctx.notifications, "notify", lambda event, **kw: sent.append((str(event), kw))
+    )
+    auth_ctx.settings.email.enabled = True
+    product, objects = _product(auth_client)
+    shaft = objects["shaft.prt"]
+    version = auth_client.get(f"/api/objects/{shaft['uuid']}").json()["current_version"]["uuid"]
+    baseline = _create(auth_client, product, "Review").json()
+    cases = [
+        ("OBJECT", shaft["uuid"], f"/products/{product['uuid']}/objects/{shaft['uuid']}?tab=discussion&thread="),
+        (
+            "VERSION",
+            version,
+            f"/products/{product['uuid']}/objects/{shaft['uuid']}/versions/{version}?tab=discussion&thread=",
+        ),
+        (
+            "BASELINE",
+            baseline["uuid"],
+            f"/?product={product['uuid']}&tab=baselines&baseline={baseline['uuid']}&discussion=1&thread=",
+        ),
+        (
+            "BASELINE_MEMBER",
+            f"{baseline['uuid']}/{shaft['uuid']}",
+            f"/products/{product['uuid']}/objects/{shaft['uuid']}/versions/",
+        ),
+    ]
+    for target_type, target, expected in cases:
+        sent.clear()
+        made = _post(auth_client, product, "@eng look", target_type, target)
+        assert made.status_code == 201, (target_type, made.text)
+        message = next(kw["message"] for event, kw in sent if event == "comment_mention")
+        assert expected in message, (target_type, message)
+        assert f"thread={made.json()['uuid']}" in message, target_type
+    # a reply links to its thread (the first comment), not to the reply itself
+    sent.clear()
+    root = _post(auth_client, product, "@eng root", "OBJECT", shaft["uuid"]).json()
+    sent.clear()
+    _post(auth_client, product, "@eng again", parent=root["uuid"])
+    reply_mail = next(kw["message"] for event, kw in sent if event == "comment_mention")
+    assert f"thread={root['uuid']}" in reply_mail
 
 
 @requires_git

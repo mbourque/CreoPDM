@@ -179,6 +179,7 @@ def edit_comment(
         body=payload.body,
         add_attachment_uuids=payload.add_attachment_uuids,
         remove_attachment_uuids=payload.remove_attachment_uuids,
+        base_url=str(request.base_url),
     )
 
 
