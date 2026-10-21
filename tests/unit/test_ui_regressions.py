@@ -345,10 +345,12 @@ def test_locked_product_changes_help_does_not_offer_add_checkin():
     mod_panel = _between(html, 'id="panel-modified"', 'id="panel-changes"')
     assert 'id="modified-help"' not in mod_panel
     assert "muted small" not in mod_panel.split('id="modified-table"', 1)[0]
-    assert 'id="checked-out-help"' in html
+    # Checked out: no tip blurb either (the count and the list are enough).
+    assert 'id="checked-out-help"' not in html
+    assert "Active checkout locks in this product" not in html
     assert "Use <strong>Add</strong> to bring them in" not in html
     assert "Use <strong>Check In</strong> to record them" not in html
-    assert "Open, Check In, and Undo Checkout still apply" in html
+    assert "Open, Check In, and Undo Checkout still apply" not in html
     assert "are blocked while this product is" not in html
     assert "function canOfferAdd" in script
     assert "function canOfferCheckin" in script
