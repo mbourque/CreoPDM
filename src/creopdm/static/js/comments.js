@@ -457,13 +457,15 @@ window.__creopdmModules.comments = {
         return `<span>${name}</span>`;
       }
 
-      function commentHtml(comment, isReply) {
+      /** `threadTools`: the thread's own links (Reply, Resolve / Reopen), shown on the first comment's line. */
+      function commentHtml(comment, isReply, threadTools = []) {
         if (comment.deleted) {
           return `<div class="cm-comment is-deleted" data-comment="${comment.uuid}"><span class="muted small">This comment was deleted.</span></div>`;
         }
         const tools = [];
         if (comment.can_edit && canAdd) tools.push(`<button type="button" class="cm-link" data-act="edit">Edit</button>`);
         if (comment.can_delete) tools.push(`<button type="button" class="cm-link" data-act="delete">Delete</button>`);
+        tools.push(...threadTools);
         const images = (comment.images || [])
           .map(
             (image, index) =>
@@ -511,10 +513,10 @@ window.__creopdmModules.comments = {
         return (
           `<article class="cm-thread${resolved ? " is-resolved" : ""}" data-thread="${thread.uuid}" id="cm-${thread.uuid}">` +
           (cfg.feed ? `<div class="cm-where small">${whereLink(thread)}${thread.version_display ? ` ${esc(thread.version_display)}` : ""}</div>` : "") +
-          commentHtml(thread, false) +
+          // Every link under a comment is one line: Edit · Delete · Reply · Resolve.
+          commentHtml(thread, false, actions) +
           (thread.replies || []).map((reply) => commentHtml(reply, true)).join("") +
           status +
-          (live.length ? `<div class="cm-thread-actions small">${actions.join(" · ")}</div>` : "") +
           `<div class="cm-inline" hidden></div></article>`
         );
       }

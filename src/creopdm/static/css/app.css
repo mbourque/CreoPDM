@@ -2671,7 +2671,6 @@ body.is-file-drag #file-drop-overlay {
 .cm-images { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 .cm-thumb img { max-width: 140px; max-height: 100px; border: 1px solid var(--line); border-radius: 4px; display: block; }
 .cm-resolved { margin-top: 0.45rem; color: var(--ok); }
-.cm-thread-actions { margin-top: 0.35rem; }
 .cm-inline { margin-top: 0.4rem; }
 .cm-note { min-width: 16rem; }
 .cm-empty { padding: 0.8rem 0; }
