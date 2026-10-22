@@ -40,6 +40,7 @@ from creopdm.auth_session import (
 from creopdm.config import ConfigManager
 from creopdm.constants import APP_NAME, APP_VERSION
 from creopdm.context import AppContext
+from creopdm.http_compression import TextGZipMiddleware
 from creopdm.creo.connector_factory import create_creo_connector
 from creopdm.database.migrate import run_migrations
 from creopdm.database.session import create_db_engine, create_session_factory
@@ -483,5 +484,7 @@ def create_app(context: AppContext | None = None) -> FastAPI:
         https_only=False,
         max_age=60 * 60 * 24 * 14,
     )
+    # Outermost: the big Files page and file list go out compressed (text types only).
+    app.add_middleware(TextGZipMiddleware)
 
     return app
