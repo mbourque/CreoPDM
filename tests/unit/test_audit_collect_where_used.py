@@ -184,3 +184,20 @@ def test_manual_collect_and_add_collect_send_one_summary_not_one_per_file():
     assert "metadata-collect-summary" not in (
         ROOT / "src" / "creopdm" / "api" / "objects.py"
     ).read_text(encoding="utf-8")
+
+
+def test_audit_day_filters_use_this_pcs_calendar_day_not_utc():
+    """Regression: "To today" was a UTC day, so every event after the local evening (already tomorrow in
+    UTC) was hidden and a fresh Metadata collected row never showed."""
+    from datetime import datetime, timezone
+
+    from creopdm.api.auth_pages import _parse_audit_day
+
+    start = _parse_audit_day("2026-10-21")
+    end = _parse_audit_day("2026-10-21", end_of_day=True)
+    assert start == datetime(2026, 10, 21).astimezone(timezone.utc)
+    assert end == datetime(2026, 10, 21, 23, 59, 59, 999999).astimezone(timezone.utc)
+    # an event late on the local day is inside [start, end]
+    late = datetime(2026, 10, 21, 22, 30).astimezone(timezone.utc)
+    assert start <= late <= end
+    assert _parse_audit_day("") is None and _parse_audit_day("nope") is None

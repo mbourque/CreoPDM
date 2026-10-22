@@ -220,3 +220,10 @@ def test_add_selected_collects_metadata_as_an_audited_add_run():
     script = (JS / "checkin.js").read_text(encoding="utf-8")
     tail = script.split('await withBusy("Collecting Creo metadata…", async () => {', 1)[1][:500]
     assert "metadataTargetsFromResult(result)" in tail and "audit: true" in tail and "addOnlyCheckin" in tail
+
+
+def test_add_selected_looks_up_ids_the_reply_left_out():
+    script = (JS / "checkin.js").read_text(encoding="utf-8")
+    assert "async function fillAddedIds(result, productId)" in script
+    tail = script.split('await withBusy("Collecting Creo metadata…", async () => {', 1)[1][:400]
+    assert "await fillAddedIds(" in tail and tail.index("fillAddedIds") < tail.index("pushCreoMetadataForItems")

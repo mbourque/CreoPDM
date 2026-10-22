@@ -3355,19 +3355,23 @@ def _audit_action_choices() -> list[tuple[str, str]]:
 
 
 def _parse_audit_day(raw: str | None, *, end_of_day: bool = False):
-    """Parse YYYY-MM-DD filter into timezone-aware UTC bounds (or None)."""
+    """Parse a YYYY-MM-DD filter into UTC bounds (or None).
+
+    The day is this PC's calendar day (the same clock the page shows and the To / From defaults use),
+    not a UTC day: with a UTC day, an evening event (already tomorrow in UTC) fell outside "To today".
+    """
     from datetime import datetime, timezone
 
     text = (raw or "").strip()
     if not text:
         return None
     try:
-        day = datetime.strptime(text, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        day = datetime.strptime(text, "%Y-%m-%d")
     except ValueError:
         return None
     if end_of_day:
-        return day.replace(hour=23, minute=59, second=59, microsecond=999999)
-    return day
+        day = day.replace(hour=23, minute=59, second=59, microsecond=999999)
+    return day.astimezone().astimezone(timezone.utc)
 
 
 def _default_audit_since() -> str:

@@ -61,6 +61,33 @@ window.__creopdmModules.checkin = {
     const openWorkspaceBtn = $("#open-workspace-btn");
     const addForm = $("#add-form");
 
+    /**
+     * Files added by a check-in come back with their object ids; if a reply names a new file without
+     * one (an older server, or a path that did not match), look the object up in the product so
+     * Creo metadata is still collected for it.
+     */
+    async function fillAddedIds(result, productId) {
+      const rows = Array.isArray(result?.ok) ? result.ok : [];
+      const missing = rows.filter(
+        (item) => item && !item.uuid && String(item.status || "").trim().toLowerCase() === "added"
+      );
+      if (!missing.length || !productId) return;
+      const logical = (value) =>
+        String(value || "").replace(/\\/g, "/").replace(/\.\d+$/, "").toLowerCase();
+      const objects = await ensureProductObjects(productId, { force: true });
+      missing.forEach((item) => {
+        const wanted = logical(item.path || item.relative_path || item.filename);
+        const found = (objects || []).find(
+          (obj) => logical(obj.relative_path || obj.filename) === wanted
+        );
+        if (found?.uuid) {
+          item.uuid = found.uuid;
+          item.filename = found.filename || item.filename;
+          item.relative_path = found.relative_path || item.relative_path || "";
+        }
+      });
+    }
+
     async function beginAddSelected() {
       const selected = selectedRows();
       if (!canOfferAdd() || !selectionIsAddOnly(selected)) {
@@ -942,6 +969,10 @@ window.__creopdmModules.checkin = {
         }
         if (canGatherCreoMetadata()) {
           await withBusy("Collecting Creo metadata…", async () => {
+            await fillAddedIds(
+              result,
+              checkinDialog?.dataset.productId || checkinBtn?.dataset.product || currentProductId()
+            );
             // Add selected… is an Add → Collect run: one audit summary, like Add files…
             await pushCreoMetadataForItems(
               metadataTargetsFromResult(result),
