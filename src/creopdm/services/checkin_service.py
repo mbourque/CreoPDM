@@ -197,7 +197,7 @@ class CheckinService:
             if to_add:
                 created = self._add_workspace_files(session, product, to_add, message, obj.filename)
                 if added_out is not None:
-                    added_out.extend(created)
+                    added_out.extend(obj_added for _relative, obj_added in created)
             # Revert passes the restored logical tip so a leftover higher .N cannot
             # win locate_content and re-commit the wrong bytes as the "revert".
             if source_path is not None:
@@ -604,7 +604,7 @@ class CheckinService:
             try:
                 with session.begin_nested():
                     created = self._add_workspace_files(session, product, to_add, message, "workspace")
-                    by_path = {str(o.relative_path or "").replace("\\", "/").lower(): o for o in created}
+                    by_path = {relative.replace("\\", "/").lower(): o for relative, o in created}
                     for relative in to_add:
                         # The uuid lets the page collect Creo metadata for what was just added.
                         obj = by_path.get(relative.replace("\\", "/").lower())
@@ -706,8 +706,12 @@ class CheckinService:
         relative_paths: list[str],
         comment: str,
         source_label: str = "workspace",
-    ) -> list[EngineeringObject]:
-        """Add new vault files as objects; returns the created objects (callers need their uuids)."""
+    ) -> list[tuple[str, EngineeringObject]]:
+        """Add new vault files as objects; returns (requested path, created object) pairs.
+
+        The pairing matters: a Creo numbered save (``part.prt.2``) is stored under its logical name
+        (``part.prt``), so the new object's own path cannot be matched back to what was asked for.
+        """
         siblings = self._objects.list_objects(session, product.id)
         available = {
             str(item["relative_path"]).replace("\\", "/").lower(): item
@@ -731,12 +735,13 @@ class CheckinService:
             jobs.append((source, source.name, relative))
         if not jobs:
             return []
-        created: list[EngineeringObject] = []
+        requested = {str(source): relative for source, _name, relative in jobs}
+        created: list[tuple[str, EngineeringObject]] = []
         for outcome in self._objects.import_files(session, product, jobs, comment):
             if outcome.error is not None:
                 raise outcome.error
             if outcome.obj is not None:
-                created.append(outcome.obj)
+                created.append((requested.get(str(outcome.source)) or "", outcome.obj))
             logger.info("Added %s during check-in of %s", outcome.filename, source_label)
         return created
 

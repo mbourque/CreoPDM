@@ -1142,3 +1142,24 @@ def test_checkin_queue_continues_after_oserror(client, app, repo_parent, data_di
     assert shaft["owned_by_me"] is True
     assert pin["iteration"] == second["iteration"] + 1
     assert pin["owned_by_me"] is False
+
+
+@requires_git
+def test_add_selected_reports_the_uuid_even_for_a_numbered_creo_save(client, repo_parent, data_dir):
+    """A new ``washer.prt.2`` is stored as ``washer.prt``; the reply must still name its object."""
+    product, _obj = _create_part(client, repo_parent)
+    vault = data_dir / "vaults" / product["uuid"]
+    (vault / "washer.prt.2").write_bytes(b"creo-washer")
+    queue = client.get(f"/api/products/{product['uuid']}/checkin-queue").json()
+    pending = [item["relative_path"] for item in queue["new_files"] if item["filename"].startswith("washer")]
+    assert pending, queue
+    added = client.post(
+        f"/api/products/{product['uuid']}/checkin-queue",
+        json={"comment": "Add washer", "add_relative_paths": pending},
+    )
+    assert added.status_code == 200, added.text
+    row = added.json()["ok"][0]
+    objects = client.get(f"/api/products/{product['uuid']}/objects").json()
+    washer = next(item for item in objects if item["filename"].startswith("washer"))
+    assert row["uuid"] == washer["uuid"], (row, washer)
+    assert row["filename"] == washer["filename"]
