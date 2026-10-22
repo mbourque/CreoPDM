@@ -41,6 +41,7 @@ from creopdm.utils.classify import (
 )
 from creopdm.utils.creo_model_class import creo_subtype_display, model_type_display
 from creopdm.utils.sketch_metadata import sketch_error, sketch_overview
+from creopdm.utils.file_rows_html import render_file_rows
 from creopdm.utils.files import format_byte_size
 from creopdm.utils.folders import folder_crumbs, folder_of, folder_view_counts, normalize_folder_query
 from creopdm.utils.native_dialog import native_picker_available
@@ -286,6 +287,15 @@ def render(request: Request, name: str, context: dict) -> HTMLResponse:
             key = product_state_value(selected)
             desc = (configured_product_state_descriptions().get(key) or "").strip()
         payload["product_state_description"] = desc
+    if name == "app.html" and payload.get("list_entries") and payload.get("selected") is not None:
+        # The Files rows are built as strings (not through Jinja): thousands of rows per page.
+        payload["file_rows_html"] = render_file_rows(
+            payload["list_entries"],
+            selected_uuid=payload["selected"].uuid,
+            product_ui=payload["product_ui"],
+            where_used_present=bool(payload.get("where_used_present")),
+            top_level_assembly_uuids=payload.get("top_level_assembly_uuids") or (),
+        )
     try:
         return templates.TemplateResponse(request, name, payload)
     except TypeError:

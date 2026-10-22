@@ -290,3 +290,45 @@ def test_the_agent_lists_the_workspace_with_one_scan():
     listing = server.split("def list_cache_files(", 1)[1].split("@app.post(\"/hash-paths\"", 1)[0]
     assert "os.scandir(" in listing
     assert ".resolve()" not in listing  # no per-file resolve of 4,000 paths
+
+
+# ------------------------------------------------------------------ the compact workspace list
+@requires_git
+def test_workspace_index_agrees_with_the_full_list_on_the_fields_it_carries(client):
+    product = client.post("/api/products", json={"name": "Index"}).json()
+    shaft = _add(client, product["uuid"], "shaft.prt")
+    _add(client, product["uuid"], "gear.prt")
+    _add(client, product["uuid"], "plate.asm")
+    assert client.post(f"/api/objects/{shaft['uuid']}/checkout").status_code == 200
+    full = client.get(f"/api/products/{product['uuid']}/objects").json()
+    lean_response = client.get(f"/api/products/{product['uuid']}/workspace-index")
+    assert lean_response.status_code == 200, lean_response.text
+    lean = lean_response.json()
+    assert [row["uuid"] for row in lean] == [row["uuid"] for row in full]  # same order
+    for lean_row, full_row in zip(lean, full):
+        for field in ("uuid", "filename", "relative_path", "object_type", "owned_by_me", "can_checkin", "can_checkout"):
+            assert lean_row[field] == full_row[field], (field, lean_row["filename"])
+        version = full_row["current_version"]
+        assert lean_row["current_version"] == {
+            "uuid": version["uuid"],
+            "filename": version["filename"],
+            "content_hash": version["content_hash"],
+        }
+    mine = {row["filename"]: row for row in lean}
+    assert mine["shaft.prt"]["owned_by_me"] is True and mine["gear.prt"]["owned_by_me"] is False
+    assert len(str(lean)) < len(str(full)) // 2  # a fraction of the full rows
+
+
+@requires_git
+def test_workspace_index_needs_a_product_you_can_open(client):
+    assert client.get("/api/products/00000000-0000-4000-8000-000000000000/workspace-index").status_code == 404
+
+
+def test_the_page_reads_the_compact_list_unless_it_asks_for_fresh_full_rows():
+    script = _app_js()
+    ensure = script.split("async function ensureProductObjects(", 1)[1].split("async function countLocalWorkspacePending", 1)[0]
+    assert 'const listPath = force ? "objects" : "workspace-index";' in ensure
+    # callers that read creo_metadata_captured / version ids ask for fresh full rows
+    for name in ("metadata.js", "checkin.js", "modifications.js"):
+        source = (JS / name).read_text(encoding="utf-8")
+        assert "ensureProductObjects(productId, { force: true })" in source, name

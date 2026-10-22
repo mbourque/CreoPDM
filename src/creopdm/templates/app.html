@@ -154,8 +154,7 @@
         </thead>
         <tbody>
           {% if list_entries %}
-          {% set entries = list_entries %}
-          {% include "partials/file_rows.html" %}
+          {{ file_rows_html }}
           {% else %}
           <tr class="empty-row">
             <td colspan="7">{% if current_folder %}This folder is empty.{% elif product_ui.show_add %}No files in this product. Add a Creo model, PDF, or document to get started.{% else %}No files in this product.{% endif %}</td>

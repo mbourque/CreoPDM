@@ -288,10 +288,10 @@ def test_a_reopened_browser_returns_to_the_last_folder_and_tab():
 def test_the_files_rows_live_in_one_partial_and_the_page_sends_every_row():
     """The row markup is a partial of app.html; a big folder is NOT split into pages (it felt sluggish to scroll)."""
     app_html = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
-    assert '{% include "partials/file_rows.html" %}' in app_html
+    assert "{{ file_rows_html }}" in app_html  # the rows are built as strings (utils/file_rows_html.py)
     assert "data-rows-tail-url" not in app_html
-    rows = (ROOT / "src" / "creopdm" / "templates" / "partials" / "file_rows.html").read_text(encoding="utf-8")
-    assert "{% for entry in entries %}" in rows and 'class="object-row"' in rows
+    rows = (ROOT / "src" / "creopdm" / "utils" / "file_rows_html.py").read_text(encoding="utf-8")
+    assert "def render_file_rows(" in rows and 'class="object-row"' in rows
     pages = (ROOT / "src" / "creopdm" / "api" / "pages.py").read_text(encoding="utf-8")
     assert "files-rows" not in pages and "FILES_FIRST_PAGE" not in pages
     app = _app_js()

@@ -129,6 +129,67 @@ def present_objects(ctx: AppContext, db: Session, objects: list) -> list[ObjectR
     return presented
 
 
+def present_workspace_index(ctx: AppContext, db: Session, objects: list) -> list[dict]:
+    """The few fields the page compares with the local workspace, for every file.
+
+    Same ``owned_by_me`` / ``can_checkin`` / ``can_checkout`` answers as ``present_objects``, without
+    the Type label, the icon, the whole version, the local-copy check or the response models (a big
+    product's full list is ~5 MB and takes seconds; this is a fraction of it).
+    """
+    if not objects:
+        return []
+    from creopdm.product_state import product_allows_mutation
+
+    user = ctx.users.get_current_user()
+    checkouts = ctx.checkouts.active_map(db, [obj.id for obj in objects])
+    product = objects[0].product
+    mutable = product_allows_mutation(product)
+    status = ctx.workspaces._git_status(product, shared=True)
+    extras, vault, dirty_paths, untracked_by_logical = ctx.workspaces._status_lookups(product, status)
+    rows: list[dict] = []
+    for obj in objects:
+        checkout = checkouts.get(obj.id)
+        view = ctx.checkouts.describe(obj, checkout, user)
+        pending = ctx.workspaces._pending_from_status(
+            product,
+            obj,
+            status,
+            extras=extras,
+            vault=vault,
+            dirty_paths=dirty_paths,
+            untracked_by_logical=untracked_by_logical,
+        )
+        force_checkin = (
+            mutable
+            and checkout is None
+            and pending is not None
+            and obj.lifecycle_state == LifecycleState.IN_WORK.value
+        )
+        can_checkin = (view.can_checkin or force_checkin) if mutable else False
+        version = obj.current_version
+        rows.append(
+            {
+                "uuid": obj.uuid,
+                "filename": obj.filename,
+                "relative_path": obj.relative_path,
+                "object_type": obj.object_type,
+                "owned_by_me": bool(view.owned_by_me),
+                "can_checkin": bool(can_checkin),
+                "can_checkout": bool(view.can_checkout),
+                "current_version": (
+                    {
+                        "uuid": version.uuid,
+                        "filename": version.filename or obj.filename,
+                        "content_hash": version.content_hash,
+                    }
+                    if version is not None
+                    else None
+                ),
+            }
+        )
+    return rows
+
+
 def _notify_batch_by_product(
     request: Request,
     ctx: AppContext,

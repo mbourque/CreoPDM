@@ -6570,7 +6570,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     const promise = (async () => {
       try {
-        const response = await fetch(`/api/products/${encodeURIComponent(productId)}/objects`);
+        // The workspace comparisons only need a few fields per file (a fraction of the full
+        // list's size and server time). A caller that asks for fresh data (force) wants the
+        // whole row — creo_metadata_captured, version ids — and gets /objects.
+        const listPath = force ? "objects" : "workspace-index";
+        const response = await fetch(`/api/products/${encodeURIComponent(productId)}/${listPath}`);
         const rows = response.ok ? await response.json().catch(() => []) : [];
         cachedProductObjects = {
           id: productId,

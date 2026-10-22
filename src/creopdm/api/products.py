@@ -7,12 +7,12 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, Request, Response, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from creopdm.api.checkout import present_object, present_objects
+from creopdm.api.checkout import present_object, present_objects, present_workspace_index
 from creopdm.api.deps import (
     accessible_products,
     get_context,
@@ -297,6 +297,28 @@ def forget_product(
         ctx.config.remember_product(None)
     ctx.config.forget_product_view(product_id)
     return ForgetProductResponse.model_validate(result)
+
+
+@router.get("/api/products/{product_id}/workspace-index")
+def workspace_index(
+    product_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> JSONResponse:
+    """Compact file list for comparing with the local workspace (see ``present_workspace_index``)."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    product = load_accessible_product(request, ctx, db, product_id)
+    try:
+        ctx.objects.migrate_numbered_vault_tips(
+            db, product, vault=ctx.workspaces.ensure_vault(product)
+        )
+    except Exception:
+        get_logger("products").exception(
+            "Vault-name migrate failed for product %s", product.uuid
+        )
+    objects = ctx.objects.list_objects(db, product.id)
+    return JSONResponse(present_workspace_index(ctx, db, objects))
 
 
 @router.get("/api/products/{product_id}/objects", response_model=list[ObjectResponse])
