@@ -45,7 +45,7 @@
     </a>
     <div class="status-cluster">
       {% if can_view_comments and auth_user %}
-      <span class="notif-wrap">
+      <div class="notif-wrap">
         <button type="button" class="status-pill notif-bell" id="notif-bell" hidden aria-haspopup="true" aria-expanded="false"
                 title="Notifications">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0-6 6v3.6L4.4 15.5A1 1 0 0 0 5.3 17h13.4a1 1 0 0 0 .9-1.5L18 12.6V9a6 6 0 0 0-6-6Zm-2 15a2 2 0 0 0 4 0Z"/></svg>
@@ -57,7 +57,7 @@
               <button type="button" class="cm-link" id="notif-clear" hidden title="Remove everything from this list (offered once everything is read)">Clear</button></span></div>
           <div class="notif-list" id="notif-list"></div>
         </div>
-      </span>
+      </div>
       {% endif %}
       {# On Administration and System Settings the Help pill opens the administrator help. #}
       {% if request.url.path.startswith('/admin') or request.url.path.startswith('/settings') %}
@@ -202,9 +202,6 @@
   <div id="file-drop-overlay" hidden>
     <p>Drop files, folders, or file links to add them</p>
   </div>
-  <script type="text/creojs" id="creo-inventory-features.creojs" src="/static/creo_inventory/features.creojs?v={{ app_version }}"></script>
-  <script type="text/creojs" id="creo-inventory-assembly.creojs" src="/static/creo_inventory/assembly.creojs?v={{ app_version }}"></script>
-  <script type="text/creojs" id="creo-inventory-drawing.creojs" src="/static/creo_inventory/drawing.creojs?v={{ app_version }}"></script>
   <script type="text/creojs" id="creopdm-open.creojs">
 function creoLogicalFileName(filename) {
     var base = String(filename || "");

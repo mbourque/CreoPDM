@@ -235,3 +235,10 @@ def test_a_bulk_item_is_saved_from_its_identity_when_the_full_collect_fails():
     assert 'domains: "identity"' in script and 'kind === "BULK" ? snapshot : null' in script
     gather = script.split("async function gatherViaToolkitAgent(", 1)[1][:3200]
     assert gather.count("bulkIdentitySnapshot(base, tip, path)") == 2  # a refused reply and an unusable one
+
+
+def test_the_notification_panel_is_not_inside_a_span():
+    """HTML validity: a div (the panel) is not allowed inside a span; the wrapper is a div."""
+    base = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
+    assert '<div class="notif-wrap">' in base and '<span class="notif-wrap">' not in base
+    assert ".notif-wrap { position: relative; display: inline-flex; }" in CSS.read_text(encoding="utf-8")

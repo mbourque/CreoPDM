@@ -15,8 +15,6 @@ from creopdm.services.metadata_service import (
 )
 
 ROOT = Path(__file__).resolve().parents[2]
-BASE_HTML = ROOT / "src" / "creopdm" / "templates" / "base.html"
-INV_DIR = ROOT / "src" / "creopdm" / "static" / "creo_inventory"
 
 
 def test_pack_unpack_features_json_envelope():
@@ -163,72 +161,6 @@ def test_pack_unpack_relations_in_envelope():
     assert round_rels == relations
 
 
-def test_assembly_inventory_gathers_simp_reps():
-    """SimpRep capture lives in assembly inventory (probe + wrapped creojs)."""
-    probe = (
-        ROOT / "src" / "creopdm" / "static" / "assembly_probe" / "assembly_probe.creojs"
-    ).read_text(encoding="utf-8")
-    asm = (INV_DIR / "assembly.creojs").read_text(encoding="utf-8")
-    for body, label in ((probe, "assembly_probe"), (asm, "creo_inventory/assembly")):
-        assert "function listAssemblySimpRepsForModel(" in body, label
-        assert "ITEM_SIMPREP" in body, label
-        assert "GetActiveSimpRep" in body, label
-        assert "GetInstructions" in body, label
-        assert "isSimpRepAssembly" in body, label
-    assert "function listAssemblySimpRepsForModel(" in asm
-    assert "listAssemblySimpRepsForModel: listAssemblySimpRepsForModel" in asm
-    text = BASE_HTML.read_text(encoding="utf-8")
-    assert "listAssemblySimpRepsForModel" in text
-    assert "simp_reps: simp_reps" in text
-    assert "active_simp_rep" in text
-    # Orchestration only — inventory owns the Toolkit walk.
-    assert "function creoGatherSimpReps(" not in text
-
-
-def test_assembly_inventory_gathers_constraints():
-    """Constraint capture uses GetConstraintsWithCompPath + owner path (probe + inventory)."""
-    probe = (
-        ROOT / "src" / "creopdm" / "static" / "assembly_probe" / "assembly_probe.creojs"
-    ).read_text(encoding="utf-8")
-    asm = (INV_DIR / "assembly.creojs").read_text(encoding="utf-8")
-    for body, label in ((probe, "assembly_probe"), (asm, "creo_inventory/assembly")):
-        assert "function listAssemblyConstraintsForModel(" in body, label
-        assert "GetConstraintsWithCompPath" in body, label
-        assert "pfcCreateComponentPath" in body, label
-        assert "isToolkitNotFound" in body, label
-        assert "captureComponentConstraints" in body, label
-        # NotFound → empty list, not capture failure.
-        assert "raw = []" in body, label
-        # Creo returns Offset=0 for Coincident — drop unless type allows offset.
-        assert "function constraintTypeAllowsOffset(" in body, label
-        assert "MATE_OFF" in body, label
-    assert "listAssemblyConstraintsForModel: listAssemblyConstraintsForModel" in asm
-    assert "function listSessionAssemblyConstraints(" in asm
-    text = BASE_HTML.read_text(encoding="utf-8")
-    assert "listAssemblyConstraintsForModel" in text
-    assert "constraints: constraints" in text
-    assert "function creoGatherConstraints(" not in text
-
-
-def test_feature_inventory_gathers_relations():
-    """Relations capture lives in feature inventory (probe + wrapped creojs)."""
-    probe = (
-        ROOT / "src" / "creopdm" / "static" / "feature_probe" / "feature_probe.creojs"
-    ).read_text(encoding="utf-8")
-    feat = (INV_DIR / "features.creojs").read_text(encoding="utf-8")
-    for body, label in ((probe, "feature_probe"), (feat, "creo_inventory/features")):
-        assert "function listModelRelationsForModel(" in body, label
-        assert "PostRegenerationRelations" in body, label
-        assert "relationLinesFrom" in body, label
-        assert ".Relations" in body, label
-    assert "listModelRelationsForModel: listModelRelationsForModel" in feat
-    assert "function listSessionModelRelations(" in feat
-    text = BASE_HTML.read_text(encoding="utf-8")
-    assert "listModelRelationsForModel" in text
-    assert "relations: relations" in text
-    assert "function creoGatherRelations(" not in text
-
-
 def test_normalize_feature_rows_keeps_inventory_fields():
     rows = normalize_feature_rows(
         [
@@ -249,18 +181,6 @@ def test_normalize_feature_rows_keeps_inventory_fields():
     assert rows[0]["sheet"] == 1
 
 
-def test_base_html_loads_creo_inventory_and_list_features_for_model():
-    text = BASE_HTML.read_text(encoding="utf-8")
-    assert "/static/creo_inventory/features.creojs" in text
-    assert "/static/creo_inventory/assembly.creojs" in text
-    assert "/static/creo_inventory/drawing.creojs" in text
-    assert "function creoInventoryFeatureRows(" in text
-    assert "listFeaturesForModel" in text
-    assert "listAssemblyStructureForModel" in text
-    assert "listDrawingStructureForModel" in text
-    assert "structure: structure || null" in text
-
-
 def test_object_detail_inventory_table_tolerates_missing_level():
     """Legacy features without level must not crash Details (Jinja Undefined)."""
     detail = (ROOT / "src" / "creopdm" / "templates" / "object_detail.html").read_text(
@@ -272,117 +192,8 @@ def test_object_detail_inventory_table_tolerates_missing_level():
     assert "{% if lvl < 1 %}" in detail
 
 
-def test_creo_inventory_wrapped_files_exist():
-    """Generated by scripts/wrap_creo_inventory.py (also pytest_configure when missing)."""
-    for name in ("features.creojs", "assembly.creojs", "drawing.creojs"):
-        path = INV_DIR / name
-        assert path.is_file(), f"missing {path} — run: python scripts/wrap_creo_inventory.py"
-        body = path.read_text(encoding="utf-8")
-        assert "listForModel" in body
-        assert "__creoInv" in body
-    feat = (INV_DIR / "features.creojs").read_text(encoding="utf-8")
-    assert "function listFeaturesForModel(" in feat
-    assert "function listSessionFeatures(" in feat
-    assert "function listModelRelationsForModel(" in feat
-    assert "function listSessionModelRelations(" in feat
-    asm = (INV_DIR / "assembly.creojs").read_text(encoding="utf-8")
-    assert "function listAssemblyStructureForModel(" in asm
-    assert "function listAssemblySimpRepsForModel(" in asm
-    assert "function listSessionAssemblySimpReps(" in asm
-    assert "function listAssemblyConstraintsForModel(" in asm
-    assert "function listSessionAssemblyConstraints(" in asm
-    drw = (INV_DIR / "drawing.creojs").read_text(encoding="utf-8")
-    assert "function listDrawingStructureForModel(" in drw
-    # Public globals must not collide (each file exports unique names only).
-    for name in (
-        "listFeaturesForModel",
-        "listAssemblyStructureForModel",
-        "listDrawingStructureForModel",
-    ):
-        assert name in feat or name in asm or name in drw
-    assert "function listFeaturesForModel(" in feat
-    assert "function listAssemblyStructureForModel(" in asm
-    assert "function listDrawingStructureForModel(" in drw
-
-
-def test_feature_probe_and_inventory_omit_pattern_members():
-    """Probe + app inventory stay in sync: no IFX staircase, no pattern copies.
-
-    plate_3.prt: contiguous group fallback must not nest GROUP→GROUP; pattern
-    IFX/HOLE copies are omitted (skippedPatternMemberCount), not listed.
-    """
-    probe = (
-        ROOT / "src" / "creopdm" / "static" / "feature_probe" / "feature_probe.creojs"
-    ).read_text(encoding="utf-8")
-    feat = (INV_DIR / "features.creojs").read_text(encoding="utf-8")
-    for body, label in ((probe, "feature_probe"), (feat, "creo_inventory/features")):
-        assert "staircase" in body, label
-        assert "function endsPatternMemberRun(" in body, label
-        assert "drop the whole member run" in body, label
-        assert "No ListChildren" in body, label
-        assert "Pattern members are omitted from the list" in body, label
-        assert "Unnamed GROUP_HEAD shells are IFX UDF" in body, label
-        assert 'typeName === "HOLE"' in body, label
-        claim_break = (
-            "if (isGroupHeadFeature(next.feat)) {\n"
-            "        claimGroupMember(gsid2, next, gorder2);\n"
-            "        break;\n"
-            "      }"
-        )
-        assert claim_break not in body, label
-        assert "if (isGroupHeadFeature(next.feat)) {\n        break;\n      }" in body, label
-        # Must not re-emit pattern children under the PATTERN head.
-        assert "emitEntry(pcs[pi], level + 1)" not in body, label
-
-
-def test_assembly_probe_and_inventory_prefer_ref_model_over_no_name():
-    """Probe + app inventory stay in sync: never label structure rows no_name.
-
-    IFX assemble COMPONENTs often GetName() === 'no_name'; labels must prefer
-    ModelDescr/GetModel tip, and unclaimed IFX assemble siblings nest under IFX_*.
-    """
-    probe = (
-        ROOT / "src" / "creopdm" / "static" / "assembly_probe" / "assembly_probe.creojs"
-    ).read_text(encoding="utf-8")
-    asm = (INV_DIR / "assembly.creojs").read_text(encoding="utf-8")
-    for body, label in ((probe, "assembly_probe"), (asm, "creo_inventory/assembly")):
-        assert "function usableComponentLabel(" in body, label
-        assert 'lower === "no_name"' in body, label
-        assert "function descrFileName(" in body, label
-        assert "GetModelDescr" in body, label
-        assert "never surface the literal placeholder" in body, label
-        assert "leave Assemble COMPONENT" in body, label
-        assert 'if (!/^IFX_/.test(gstored)) continue;' in body, label
-        # Must resolve child tip even when componentModelName was empty.
-        assert "if (!name && childModel)" in body, label
-        # featureStoredName still uses GetName; componentModelName must not
-        # (that painted ASM_RIGHT / xsec A as fake Structure COMPONENTs).
-        assert "function featureStoredName(" in body, label
-        assert "function componentModelName(" in body, label
-        model_name_fn = body.split("function componentModelName(", 1)[1].split(
-            "\nfunction ", 1
-        )[0]
-        assert "GetModelDescr" in model_name_fn, label
-        assert "feat.GetName()" not in model_name_fn, label
-        assert "feat.Name" not in model_name_fn, label
-
-
 def test_assembly_structure_excludes_datums_and_bare_feature_names():
     """Structure is real components/groups only — not datums, CSYS, or cross-sections."""
-    probe = (
-        ROOT / "src" / "creopdm" / "static" / "assembly_probe" / "assembly_probe.creojs"
-    ).read_text(encoding="utf-8")
-    asm = (INV_DIR / "assembly.creojs").read_text(encoding="utf-8")
-    for body, label in ((probe, "assembly_probe"), (asm, "creo_inventory/assembly")):
-        assert "function isNonComponentAssemblyFeature(" in body, label
-        assert "isNonComponentAssemblyFeature(feat)" in body, label
-        assert 't.indexOf("DATUM") >= 0' in body, label
-        assert "Do NOT fall back to feat.GetName()/Name here" in body, label
-        # CompType alone must not promote every solid feat to a component.
-        assert "if (ct) return true;" not in body.split(
-            "function isComponentFeature(", 1
-        )[1].split("\nfunction ", 1)[0], label
-
     from creopdm.services.metadata_service import (
         filter_assembly_structure_rows,
         is_assembly_structure_noise_row,
@@ -426,11 +237,6 @@ def test_assembly_structure_excludes_datums_and_bare_feature_names():
     packed = pack_features_json([], cleaned)
     _, struct, _, _, _ = unpack_features_json(packed)
     assert [r["name"] for r in struct] == ["shaft.prt", "IFX_ID_1"]
-
-    for body, label in ((probe, "assembly_probe"), (asm, "creo_inventory/assembly")):
-        assert "do not append to Structure" in body, label
-        # Call site removed (helper may remain unused in the probe file).
-        assert "appendCrossSectionStructureRows(flat, treeChildren, solid);" not in body, label
 
     base = (
         ROOT / "src" / "creopdm" / "templates" / "base.html"

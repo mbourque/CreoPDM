@@ -1,8 +1,8 @@
 """Map CreoPDM Toolkit ``/collect`` JSON into a gatherModelMetadata-shaped snapshot.
 
 Used by the local agent ``/toolkit/snapshot`` proxy so the browser can POST the
-same ``CreoMetadataRequest`` body as Creo.JS gather. Probes / creo_inventory stay
-untouched as the Creo.JS fallback.
+same ``CreoMetadataRequest`` body the page posts. The Creo.JS inventory scripts and probe
+pages no longer exist; the Toolkit is the only collector.
 """
 
 from __future__ import annotations

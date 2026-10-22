@@ -345,7 +345,7 @@ window.__creopdmModules.creo_workspace = {
 
     async function gatherCreoMetadataForFilename(filename, filePath, options) {
       if (!canGatherCreoMetadata() || !filename) return null;
-      // Toolkit via agent only — probes / creo_inventory stay as manual Creo.JS tools.
+      // Toolkit via agent only (the Creo.JS inventory scripts and probe pages are gone).
       const snapshot = await gatherViaToolkitAgent(filename, filePath || "");
       if (snapshot && snapshot.__error) {
         return {
