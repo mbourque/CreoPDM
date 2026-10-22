@@ -304,3 +304,11 @@ def test_there_is_no_early_connecting_cover_that_could_hold_the_page():
     assert "creo-booting" not in base and "creopdm.creoBrowser" not in base
     assert "creo-booting" not in CSS.read_text(encoding="utf-8")
     assert "rememberCreoBrowser" not in _app_js() and "creo-booting" not in _app_js()
+
+
+def test_slow_requests_are_logged_with_path_and_time_only():
+    app_py = (ROOT / "src" / "creopdm" / "app.py").read_text(encoding="utf-8")
+    assert 'get_logger("slow-request")' in app_py and "slow_request_ms = 400" in app_py
+    middleware = app_py.split("async def log_slow_requests(request, call_next):", 1)[1].split("# Outermost so request.session", 1)[0]
+    assert "request.url.path" in middleware and "query" not in middleware  # never the query string
+    assert 'startswith(("/static", "/client"))' in middleware

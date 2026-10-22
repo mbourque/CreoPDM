@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -304,6 +305,23 @@ def create_app(context: AppContext | None = None) -> FastAPI:
         content_type = (response.headers.get("content-type") or "").lower()
         if "text/html" in content_type:
             response.headers["Cache-Control"] = "no-store"
+        return response
+
+    slow_log = get_logger("slow-request")
+    # A request slower than this is logged (path and time only, never the query string).
+    slow_request_ms = 400
+
+    @app.middleware("http")
+    async def log_slow_requests(request, call_next):
+        started = time.perf_counter()
+        response = await call_next(request)
+        try:
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            path = request.url.path or "/"
+            if elapsed_ms >= slow_request_ms and not path.startswith(("/static", "/client")):
+                slow_log.info("Slow %s %s %d ms status=%s", request.method, path, round(elapsed_ms), response.status_code)
+        except Exception:  # logging must never break a request
+            pass
         return response
 
     # Outermost so request.session is available in auth_guard.
