@@ -306,6 +306,39 @@ def create_app(context: AppContext | None = None) -> FastAPI:
             response.headers["Cache-Control"] = "no-store"
         return response
 
+    page_log = get_logger("page-load")
+
+    @app.middleware("http")
+    async def log_page_loads(request, call_next):
+        """One line per HTML page the browser asks for: how it asked, so a reload is told from a
+        fresh visit or a soft navigation (Creo's embedded browser can reload on its own)."""
+        response = await call_next(request)
+        try:
+            content_type = (response.headers.get("content-type") or "").lower()
+            path = request.url.path or "/"
+            if request.method == "GET" and "text/html" in content_type and not path.startswith(("/static", "/client")):
+                h = request.headers
+                query = ",".join(sorted(request.query_params.keys())) or "-"
+                page_log.info(
+                    "Page %s ?%s status=%s soft=%s mode=%s dest=%s site=%s user_gesture=%s cache=%s pragma=%s "
+                    "ref=%s ua=%s",
+                    path,
+                    query,
+                    response.status_code,
+                    "yes" if h.get("x-creopdm-soft") else "no",
+                    h.get("sec-fetch-mode", "-"),
+                    h.get("sec-fetch-dest", "-"),
+                    h.get("sec-fetch-site", "-"),
+                    h.get("sec-fetch-user", "-"),
+                    h.get("cache-control", "-"),
+                    h.get("pragma", "-"),
+                    (h.get("referer", "-") or "-").split("?", 1)[0][-60:],
+                    (h.get("user-agent", "-") or "-")[:90],
+                )
+        except Exception:  # logging must never break a page
+            pass
+        return response
+
     # Outermost so request.session is available in auth_guard.
     secret = ensure_session_secret(ctx.config.config_dir)
     app.state.session_secret = secret
