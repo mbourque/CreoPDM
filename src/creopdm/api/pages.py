@@ -75,10 +75,20 @@ def _bom_generic_label(filename: str) -> str | None:
 
 
 def _product_bom_index(ctx: AppContext, db: Session, product_id: int) -> dict[str, str]:
+    """Lookup key -> object uuid for every file of the product (two columns, no object loading)."""
+    from sqlalchemy import select
+
+    from creopdm.models.object import EngineeringObject
+
     index: dict[str, str] = {}
-    for row in ctx.objects.list_objects(db, product_id):
-        for key in _bom_lookup_keys(row.filename):
-            index.setdefault(key, row.uuid)
+    rows = db.execute(
+        select(EngineeringObject.uuid, EngineeringObject.filename).where(
+            EngineeringObject.product_id == product_id
+        )
+    ).all()
+    for uuid, filename in rows:
+        for key in _bom_lookup_keys(str(filename)):
+            index.setdefault(key, str(uuid))
     return index
 
 
@@ -780,12 +790,10 @@ def _object_detail_page(
     where_used_rows: list = []
     is_top_level_assembly = False
     if version is None:
-        where_used = (
-            ctx.metadata.where_used(db, object_id, vault_scan=False)
-            if show_where_used
-            else None
-        )
-        where_used_rows = where_used.items if where_used is not None else []
+        # The Where Used tab loads its rows from /api/objects/{id}/where-used when it is opened
+        # (data-lazy-where-used), so the page does not look through the whole product for them.
+        where_used = None
+        where_used_rows = []
         if is_assembly and ctx.metadata.where_used_index_present(db, product.id):
             is_top_level_assembly = str(obj.uuid) in set(
                 ctx.metadata.top_level_assembly_uuids(db, product.id)
@@ -814,9 +822,11 @@ def _object_detail_page(
     )
     bom = metadata.bom if isinstance(metadata.bom, list) else []
     is_drawing = obj.object_type == ObjectType.CREO_DRAWING.value
-    product_index = _product_bom_index(ctx, db, product.id)
-    bom = _enrich_bom_tree(bom, product_index)
-    structure = _enrich_structure_rows(structure, product_index)
+    # The name lookup is only needed to link BOM / Structure rows; a plain part has neither.
+    if bom or structure:
+        product_index = _product_bom_index(ctx, db, product.id)
+        bom = _enrich_bom_tree(bom, product_index)
+        structure = _enrich_structure_rows(structure, product_index)
     show_mass_tab = bool(
         mass
         and (
@@ -846,8 +856,7 @@ def _object_detail_page(
         db, product.id, ctx.users.get_current_user().user_name
     )
     checkoutable_count = ctx.checkouts.count_checkoutable_for_product(db, product.id)
-    siblings = ctx.objects.list_objects(db, product.id)
-    watch = ctx.workspaces.watch_stamp(product, [(o.relative_path, o.filename) for o in siblings])
+    watch = ctx.workspaces.watch_stamp(product, ctx.objects.list_path_index(db, product.id))
     pending_saves = int(watch.get("pending_saves") or 0)
     new_workspace_files = int(watch.get("new_files") or 0)
     return render(

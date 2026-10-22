@@ -3,6 +3,9 @@ from __future__ import annotations
 import os
 import time
 from collections import Counter
+
+# Tests write into a vault and ask again at once: never share a ``git status`` between two calls.
+os.environ.setdefault("CREOPDM_STATUS_CACHE_SEC", "0")
 from pathlib import Path
 
 import pytest

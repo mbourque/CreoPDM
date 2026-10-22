@@ -90,7 +90,11 @@
   var syncingContext = false;
   /** Creo CEF often never fires focus/visibility when the pane stays loaded. */
   var followPollTimer = null;
-  var FOLLOW_POLL_MS = 2000;
+  // How often the pane looks for changes. Each look is two small requests (a stamp and the product
+  // context); the whole file list is downloaded only when the stamp moved.
+  var FOLLOW_POLL_MS = 5000;
+  var listRefreshing = false;
+  var lastListStamp = "";
   var postHandoffRefreshTimers = [];
 
   function agentBase() {
@@ -1067,6 +1071,61 @@
     }
   }
 
+  /** A short string that moves when the list, a checkout, the vault or the local workspace changed. */
+  async function fetchListStamp() {
+    if (!productId) return "";
+    var parts = [];
+    try {
+      var response = await fetch(
+        "/api/products/" + encodeURIComponent(productId) + "/objects-stamp?_=" + String(Date.now()),
+        { credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" } }
+      );
+      if (!response.ok) return "";
+      var body = await response.json();
+      parts.push(String((body && body.stamp) || ""));
+    } catch (err) {
+      return "";
+    }
+    // Local saves in the agent's workspace never reach the server stamp: look at them too (a local call).
+    try {
+      agentOnline = await probeAgent();
+      if (agentOnline) {
+        var listed = await listAgentCacheFilesPreferringVault();
+        var files = (listed && listed.files) || [];
+        var hash = 5381;
+        files.forEach(function (file) {
+          var text =
+            String((file && (file.relative_path || file.path)) || "") +
+            "|" + String((file && (file.size != null ? file.size : file.bytes)) || "") +
+            "|" + String((file && (file.mtime || file.modified || file.modified_at)) || "");
+          for (var i = 0; i < text.length; i += 1) hash = ((hash << 5) + hash + text.charCodeAt(i)) | 0;
+        });
+        parts.push(String(files.length) + ":" + String(hash));
+      }
+    } catch (err) {
+      /* agent offline / old agent: the server stamp alone decides */
+    }
+    return parts.join("#");
+  }
+
+  /**
+   * The periodic look: reload the file list (and the check-in state) only when something changed,
+   * and never start a second look while one is still running.
+   */
+  async function refreshIfChanged() {
+    if (!productId || busy || syncingContext || listRefreshing || document.hidden) return;
+    if (Date.now() < interactGraceUntil) return;
+    listRefreshing = true;
+    try {
+      var stamp = await fetchListStamp();
+      if (!stamp || stamp === lastListStamp) return;
+      await softRefreshList();
+      lastListStamp = stamp;
+    } finally {
+      listRefreshing = false;
+    }
+  }
+
   async function softRefreshList() {
     // Reload checkout / Modified badges without "Loading files…" flash.
     if (!productId || busy || syncingContext) return;
@@ -1129,10 +1188,14 @@
       if (Date.now() < interactGraceUntil) return;
       if (followActive) {
         void syncActiveProduct({ quiet: true, onlyIfChanged: true }).then(function (switched) {
-          if (!switched) scheduleSoftRefresh(0);
+          if (switched) {
+            lastListStamp = "";
+            return;
+          }
+          return refreshIfChanged();
         });
       } else {
-        scheduleSoftRefresh(0);
+        void refreshIfChanged();
       }
     }, FOLLOW_POLL_MS);
   }

@@ -214,8 +214,35 @@ class GitRemote:
 class GitService:
     """Small explicit Git abstraction using argument arrays, never shell=True."""
 
+    # Commands that change a repository: after one runs, any remembered ``git status`` is out of date.
+    _MUTATING = frozenset(
+        {
+            "add", "rm", "mv", "commit", "reset", "checkout", "restore", "clone", "init", "tag", "fetch",
+            "pull", "push", "stash", "clean", "branch", "symbolic-ref", "update-index", "remote", "merge",
+            "rebase", "cherry-pick", "revert", "gc", "worktree",
+        }
+    )
+
     def __init__(self, executable: str = "git") -> None:
         self.executable = executable or "git"
+        # Counts git commands that changed a repository, so a cached status can tell it is stale.
+        self.generation = 0
+
+    @classmethod
+    def _subcommand(cls, args: list[str]) -> str:
+        """The git subcommand in an argument list (skips ``-c key=value`` and other options)."""
+        skip = False
+        for item in args:
+            if skip:
+                skip = False
+                continue
+            if item == "-c" or item == "-C":
+                skip = True
+                continue
+            if item.startswith("-"):
+                continue
+            return item
+        return ""
 
     def _command(self, args: list[str], cwd: Path) -> list[str]:
         """Trust this vault for this process only. Do not write git config."""
@@ -242,6 +269,9 @@ class GitService:
             logger.debug("git %s", " ".join(args))
         else:
             logger.info("git %s", " ".join(args))
+        mutating = self._subcommand(args) in self._MUTATING
+        if mutating:
+            self.generation += 1  # before and after: a reader in between must not cache a half-done state
         try:
             result = subprocess.run(
                 command,
@@ -258,6 +288,9 @@ class GitService:
                 "Git is not installed or is not on PATH.",
                 details={"executable": self.executable},
             ) from exc
+        finally:
+            if mutating:
+                self.generation += 1
         if check and result.returncode != 0:
             message = (result.stderr or result.stdout or "Git command failed").strip()
             logger.error("Git failure: %s", message)

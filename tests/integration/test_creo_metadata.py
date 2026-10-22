@@ -266,7 +266,10 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     assert shaft_meta.status_code == 200, shaft_meta.text
     shaft_detail = client.get(f"/products/{product['uuid']}/objects/{shaft['uuid']}")
     assert shaft_detail.status_code == 200
-    assert "frame.asm" in shaft_detail.text
+    # Where Used rows are not computed for the page: the tab loads them from the API when it is opened.
+    assert 'data-lazy-where-used="1"' in shaft_detail.text
+    shaft_where = client.get(f"/api/objects/{shaft['uuid']}/where-used")
+    assert "frame.asm" in {item["filename"] for item in shaft_where.json()["items"]}
     assert "ALUMINUM_WROUGHT" in shaft_detail.text
     assert "(Assigned)" in shaft_detail.text
     assert 'class="is-assigned"' in shaft_detail.text
@@ -363,7 +366,7 @@ def test_where_used_from_nested_bom_and_family_table_name(client, repo_parent, t
 
     pin_detail = client.get(f"/products/{product['uuid']}/objects/{pin['uuid']}")
     assert pin_detail.status_code == 200
-    assert "frame.asm" in pin_detail.text
+    assert 'data-lazy-where-used="1"' in pin_detail.text  # the rows come from the API (checked above)
 
 
 @requires_git

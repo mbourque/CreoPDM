@@ -642,7 +642,28 @@ class WorkspaceService:
             return False
         return self._file_modified(path, obj)
 
-    def _git_status(self, product: Product) -> GitStatus:
+    # How long the listing / polling paths may share one ``git status`` (seconds; 0 turns it off).
+    # ``git status -uall`` on a big vault is the heaviest part of a page or poll, and several requests
+    # arrive at once. A git command that changes the repository ends the sharing at once.
+    STATUS_SHARE_SEC = float(os.environ.get("CREOPDM_STATUS_CACHE_SEC", "2"))
+
+    def _git_status(self, product: Product, *, shared: bool = False) -> GitStatus:
+        """``git status`` of the vault; ``shared=True`` may reuse a result from the last few seconds."""
+        if not shared or self.STATUS_SHARE_SEC <= 0 or self._git is None:
+            return self._git_status_now(product)
+        import time as _time
+
+        cache = self.__dict__.setdefault("_status_cache", {})
+        key = str(self.vault_for(product))
+        generation = getattr(self._git, "generation", 0)
+        hit = cache.get(key)
+        if hit and hit[2] == generation and _time.monotonic() - hit[0] < self.STATUS_SHARE_SEC:
+            return hit[1]
+        status = self._git_status_now(product)
+        cache[key] = (_time.monotonic(), status, generation)
+        return status
+
+    def _git_status_now(self, product: Product) -> GitStatus:
         empty = GitStatus(branch="main", dirty=False, staged=[], unstaged=[], untracked=[], raw="")
         if self._git is None:
             return empty
@@ -745,7 +766,7 @@ class WorkspaceService:
         objects: list[EngineeringObject],
     ) -> dict[str, list]:
         """Files in the workspace that would be recorded on check-in."""
-        status = self._git_status(product)
+        status = self._git_status(product, shared=True)
         extras, vault, dirty_paths, untracked_by_logical = self._status_lookups(product, status)
         saves: list[dict[str, str | int | bool]] = []
         for obj in objects:
@@ -777,7 +798,7 @@ class WorkspaceService:
         known_paths: list[tuple[str, str]] | None = None,
     ) -> dict[str, str | int]:
         """Fingerprint of git status so the UI can notice Creo saves without hashing files."""
-        status = self._git_status(product)
+        status = self._git_status(product, shared=True)
         digest = hashlib.sha256(status.raw.encode("utf-8")).hexdigest()[:20]
         extras = self._cad_extensions()
         known = {

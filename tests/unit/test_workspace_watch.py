@@ -29,7 +29,7 @@ def _status(*, staged=None, unstaged=None, untracked=None, raw=""):
 
 def _watch(status, known=None):
     service = WorkspaceService(_Config())
-    service._git_status = lambda product: status
+    service._git_status = lambda product, **kwargs: status
     return service.watch_stamp(SimpleNamespace(uuid="product"), known)
 
 

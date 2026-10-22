@@ -288,8 +288,13 @@ class CreoFileManager:
         if not directory.is_dir():
             return None
         wanted = cls.logical_filename(canonical_name, extra_extensions).lower()
+        # Every save of this object starts with the same stem (shaft.prt, shaft.prt.2, shaft.2.prt):
+        # most names in a big folder are rejected by that test alone, before any stat() or parsing.
+        stem = wanted.split(".", 1)[0]
         matches: list[Path] = []
         for path in directory.iterdir():
+            if not path.name.lower().startswith(stem):
+                continue
             if not path.is_file():
                 continue
             if cls.logical_filename(path.name, extra_extensions).lower() == wanted:

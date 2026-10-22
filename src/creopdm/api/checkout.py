@@ -77,7 +77,7 @@ def present_objects(ctx: AppContext, db: Session, objects: list) -> list[ObjectR
     checkouts = ctx.checkouts.active_map(db, [obj.id for obj in objects])
     product = objects[0].product
     mutable = product_allows_mutation(product)
-    status = ctx.workspaces._git_status(product)
+    status = ctx.workspaces._git_status(product, shared=True)
     name_labels, ext_labels = type_label_maps(ctx.config.type_labels())
     in_workspace = ctx.workspaces.local_copy_uuids(product, objects)
     extras, vault, dirty_paths, untracked_by_logical = ctx.workspaces._status_lookups(product, status)

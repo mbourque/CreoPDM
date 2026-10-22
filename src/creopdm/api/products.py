@@ -426,6 +426,63 @@ def workspace_watch(
     return WorkspaceWatchResponse.model_validate(ctx.workspaces.watch_stamp(product, known))
 
 
+@router.get("/api/products/{product_id}/objects-stamp")
+def objects_stamp(
+    product_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> dict:
+    """A short fingerprint of everything the file list shows (files, versions, checkouts, workspace).
+
+    The Creo navigator polls this instead of downloading the whole list: it reloads the list only when
+    the stamp moved.
+    """
+    import hashlib
+
+    from sqlalchemy import func
+
+    from creopdm.constants import CheckoutStatus
+    from creopdm.models.checkout import Checkout
+    from creopdm.models.object import EngineeringObject
+    from creopdm.models.version import ObjectVersion
+
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    product = load_accessible_product(request, ctx, db, product_id)
+    objects = db.execute(
+        select(
+            func.count(EngineeringObject.id),
+            func.max(EngineeringObject.id),
+            func.max(EngineeringObject.updated_at),
+        ).where(EngineeringObject.product_id == product.id)
+    ).one()
+    versions = db.execute(
+        select(func.count(ObjectVersion.id), func.max(ObjectVersion.id))
+        .join(EngineeringObject, ObjectVersion.object_id == EngineeringObject.id)
+        .where(EngineeringObject.product_id == product.id)
+    ).one()
+    checkouts = db.execute(
+        select(func.count(Checkout.id), func.max(Checkout.id))
+        .join(EngineeringObject, Checkout.object_id == EngineeringObject.id)
+        .where(EngineeringObject.product_id == product.id, Checkout.status == CheckoutStatus.ACTIVE.value)
+    ).one()
+    known = ctx.objects.list_path_index(db, product.id)
+    workspace = ctx.workspaces.watch_stamp(product, known)
+    raw = "|".join(
+        str(part)
+        for part in (
+            *objects,
+            *versions,
+            *checkouts,
+            product.state,
+            workspace.get("stamp"),
+            workspace.get("pending_saves"),
+            workspace.get("new_files"),
+        )
+    )
+    return {"stamp": hashlib.sha1(raw.encode("utf-8")).hexdigest()[:20]}
+
+
 @router.get("/api/products/{product_id}/checkin-preview", response_model=CheckinPreviewResponse)
 def product_checkin_preview(
     product_id: str,
