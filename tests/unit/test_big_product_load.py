@@ -186,3 +186,31 @@ def test_the_navigator_pane_asks_for_a_stamp_before_downloading_the_list():
     assert "/objects-stamp?_=" in stamp and "listAgentCacheFilesPreferringVault()" in stamp
     tick = pane.split("function startFollowActivePoll() {", 1)[1].split("async function openInMainEmbeddedBrowser", 1)[0]
     assert "refreshIfChanged()" in tick and "scheduleSoftRefresh(0)" not in tick
+
+
+# ------------------------------------------------------------------ the Files page workspace poll
+def _app_js() -> str:
+    return (JS / "app.js").read_text(encoding="utf-8")
+
+
+def test_the_product_list_is_downloaded_once_for_callers_that_ask_together():
+    script = _app_js()
+    ensure = script.split("async function ensureProductObjects(", 1)[1].split("async function countLocalWorkspacePending", 1)[0]
+    assert "productObjectsInFlight" in ensure and "WORKSPACE_LIST_CACHE_MS" in ensure
+    known = script.split("async function loadKnownWorkspacePaths(", 1)[1].split("async function ensureKnownWorkspacePaths", 1)[0]
+    assert "ensureProductObjects(productId)" in known
+    assert "/objects`" not in known  # no second full download of the list
+
+
+def test_the_workspace_poll_compares_with_its_own_last_estimate():
+    script = _app_js()
+    poll = script.split("async function pollWorkspaceWatch() {", 1)[1].split("if (watchProductId) {", 1)[0]
+    assert "lastPollChangesCount" in poll and "lastPollModifiedCount" in poll
+    # not with the counts a confirmed queue load wrote (they can differ and re-trigger every poll)
+    assert "lastChangesPending !== newCount" not in poll
+    assert "lastModifiedPending !== modCount" not in poll
+
+
+def test_slow_requests_name_the_page_that_asked():
+    app_py = (ROOT / "src" / "creopdm" / "app.py").read_text(encoding="utf-8")
+    assert 'request.headers.get("referer"' in app_py and "from=%s" in app_py

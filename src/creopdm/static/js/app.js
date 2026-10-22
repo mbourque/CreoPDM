@@ -6241,16 +6241,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const basenames = new Set();
     (extraRels || []).forEach((rel) => markKnownPath(rel, exact, logical, basenames));
     try {
-      const [objectsResponse, queueResponse] = await Promise.all([
-        fetch(`/api/products/${encodeURIComponent(productId)}/objects`),
+      // The shared list (one fetch, reused) — not a second full download of the product.
+      const [objects, queueResponse] = await Promise.all([
+        ensureProductObjects(productId),
         fetch(`/api/products/${encodeURIComponent(productId)}/checkin-queue`),
       ]);
-      if (objectsResponse.ok) {
-        const objects = await objectsResponse.json().catch(() => []);
-        (Array.isArray(objects) ? objects : []).forEach((item) => {
-          markKnownPath(item.relative_path || item.filename || "", exact, logical, basenames);
-        });
-      }
+      (Array.isArray(objects) ? objects : []).forEach((item) => {
+        markKnownPath(item.relative_path || item.filename || "", exact, logical, basenames);
+      });
       if (queueResponse.ok) {
         const queue = await queueResponse.json().catch(() => null);
         (queue?.new_files || []).forEach((item) => {
@@ -6268,7 +6266,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (
       !force &&
       knownWorkspacePaths.at &&
-      Date.now() - knownWorkspacePaths.at < 15000 &&
+      Date.now() - knownWorkspacePaths.at < WORKSPACE_LIST_CACHE_MS &&
       knownWorkspacePaths.exact.size + knownWorkspacePaths.logical.size > 0
     ) {
       return knownWorkspacePaths;
@@ -6517,27 +6515,45 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   let cachedProductObjects = { id: "", at: 0, rows: [] };
 
+  // The workspace poll runs every few seconds; the product list is re-read only when the vault
+  // stamp moves (the poll clears these caches then) or after this long.
+  const WORKSPACE_LIST_CACHE_MS = 60000;
+  let productObjectsInFlight = null;
+
   async function ensureProductObjects(productId, { force = false } = {}) {
     if (
       !force &&
       cachedProductObjects.id === productId &&
       cachedProductObjects.at &&
-      Date.now() - cachedProductObjects.at < 15000
+      Date.now() - cachedProductObjects.at < WORKSPACE_LIST_CACHE_MS
     ) {
       return cachedProductObjects.rows;
     }
-    try {
-      const response = await fetch(`/api/products/${encodeURIComponent(productId)}/objects`);
-      const rows = response.ok ? await response.json().catch(() => []) : [];
-      cachedProductObjects = {
-        id: productId,
-        at: Date.now(),
-        rows: Array.isArray(rows) ? rows : [],
-      };
-    } catch {
-      cachedProductObjects = { id: productId, at: Date.now(), rows: [] };
+    // Callers that ask together share one download.
+    if (!force && productObjectsInFlight && productObjectsInFlight.id === productId) {
+      return productObjectsInFlight.promise;
     }
-    return cachedProductObjects.rows;
+    const promise = (async () => {
+      try {
+        const response = await fetch(`/api/products/${encodeURIComponent(productId)}/objects`);
+        const rows = response.ok ? await response.json().catch(() => []) : [];
+        cachedProductObjects = {
+          id: productId,
+          at: Date.now(),
+          rows: Array.isArray(rows) ? rows : [],
+        };
+      } catch {
+        cachedProductObjects = { id: productId, at: Date.now(), rows: [] };
+      }
+      return cachedProductObjects.rows;
+    })();
+    const entry = { id: productId, promise };
+    productObjectsInFlight = entry;
+    try {
+      return await promise;
+    } finally {
+      if (productObjectsInFlight === entry) productObjectsInFlight = null;
+    }
   }
 
   async function countLocalWorkspacePending(productId) {
@@ -8362,6 +8378,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   let pollDenied = false;
   let watchReloadTimer = 0;
   let lastPendingCheckinCount = null;
+  // The poll's own previous estimate. Compared with itself, not with the counts a confirmed queue
+  // load wrote (those can differ from the estimate, and then every poll looked like a change and
+  // re-downloaded the product list and the queue).
+  let lastPollChangesCount = null;
+  let lastPollModifiedCount = null;
   let lastUserActivityAt = Date.now();
 
   function noteUserActivity() {
@@ -8405,8 +8426,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const activeTab = activeListTab();
       if (activeTab === "changes") {
         const changesNeedsLoad =
-          (lastChangesPending === null && newCount > 0)
-          || (lastChangesPending !== null && newCount !== lastChangesPending);
+          (lastPollChangesCount === null && newCount > 0)
+          || (lastPollChangesCount !== null && newCount !== lastPollChangesCount);
         lastChangesPending = newCount;
         if (changesNeedsLoad && !changesReloadBusy) {
           changesReloadBusy = true;
@@ -8422,8 +8443,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
       } else if (activeTab === "modified") {
         const modifiedNeedsLoad =
-          (lastModifiedPending === null && modCount > 0)
-          || (lastModifiedPending !== null && modCount !== lastModifiedPending);
+          (lastPollModifiedCount === null && modCount > 0)
+          || (lastPollModifiedCount !== null && modCount !== lastPollModifiedCount);
         lastModifiedPending = modCount;
         if (modifiedNeedsLoad && !modifiedReloadBusy) {
           modifiedReloadBusy = true;
@@ -8438,7 +8459,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
       } else {
         const countsMoved =
-          lastChangesPending !== newCount || lastModifiedPending !== modCount;
+          lastPollChangesCount !== newCount || lastPollModifiedCount !== modCount;
         lastChangesPending = newCount;
         lastModifiedPending = modCount;
         // Poll estimate moved — confirm with the full queue before touching badges.
@@ -8449,6 +8470,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           void prefetchCheckinQueueParts(watchProductId);
         }
       }
+      lastPollChangesCount = newCount;
+      lastPollModifiedCount = modCount;
       const next = data.stamp || "";
       if (watchStamp === null) {
         watchStamp = next;

@@ -6,7 +6,7 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
@@ -319,7 +319,12 @@ def create_app(context: AppContext | None = None) -> FastAPI:
             elapsed_ms = (time.perf_counter() - started) * 1000
             path = request.url.path or "/"
             if elapsed_ms >= slow_request_ms and not path.startswith(("/static", "/client")):
-                slow_log.info("Slow %s %s %d ms status=%s", request.method, path, round(elapsed_ms), response.status_code)
+                # Which page asked (path only): tells the Files page from the Creo navigator pane.
+                source = urlsplit(request.headers.get("referer", "")).path or "-"
+                slow_log.info(
+                    "Slow %s %s %d ms status=%s from=%s",
+                    request.method, path, round(elapsed_ms), response.status_code, source,
+                )
         except Exception:  # logging must never break a request
             pass
         return response
