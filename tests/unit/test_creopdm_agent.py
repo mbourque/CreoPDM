@@ -1725,6 +1725,39 @@ def test_agent_files_includes_index_content_hash_when_size_matches(tmp_path):
         assert by_path["stale.prt"]["size"] == 2
 
 
+def test_agent_files_lists_nested_folders_and_skips_hidden_and_ignored_entries(tmp_path):
+    """GET /files walks the workspace in one scan: nested paths, sizes and times, no noise."""
+    root = tmp_path / "cache"
+    product_id = "proj-scan"
+    cache = root / product_id
+    (cache / "deep" / "deeper").mkdir(parents=True)
+    (cache / ".git").mkdir()
+    (cache / ".creopdm").mkdir()
+    (cache / "__pycache__").mkdir()
+    (cache / "Top.prt.3").write_bytes(b"abc")
+    (cache / "deep" / "Mid Part.asm.1").write_bytes(b"12345")
+    (cache / "deep" / "deeper" / "leaf.drw").write_bytes(b"1")
+    (cache / ".hidden.prt").write_bytes(b"x")
+    (cache / "_creopdm_marker.txt").write_bytes(b"x")
+    (cache / ".git" / "config").write_bytes(b"x")
+    (cache / ".creopdm" / "state.json").write_bytes(b"x")
+    (cache / "__pycache__" / "x.pyc").write_bytes(b"x")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    with TestClient(create_agent_app(settings)) as client:
+        listed = client.get(f"/files?product_id={product_id}")
+        assert listed.status_code == 200, listed.text
+        files = listed.json()["files"]
+    assert [item["relative_path"] for item in files] == [
+        "deep/deeper/leaf.drw",
+        "deep/Mid Part.asm.1",
+        "Top.prt.3",
+    ]  # sorted case-insensitively, forward slashes, nothing hidden or ignored
+    by_path = {item["relative_path"]: item for item in files}
+    assert by_path["Top.prt.3"]["filename"] == "Top.prt.3" and by_path["Top.prt.3"]["size"] == 3
+    assert by_path["deep/Mid Part.asm.1"]["size"] == 5
+    assert len(by_path["Top.prt.3"]["saved_at"]) == len("2026-10-22 13:00")
+
+
 def test_agent_lists_and_pushes_new_cache_paths(tmp_path, monkeypatch):
     root = tmp_path / "cache"
     product_id = "proj-new"

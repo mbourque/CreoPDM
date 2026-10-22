@@ -5988,19 +5988,32 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       String(vaultFolderOverride || "").trim() || currentVaultFolder();
     const params = new URLSearchParams({ product_id: productId });
     if (vaultFolder) params.set("vault_folder", vaultFolder);
-    try {
-      const response = await fetch(
-        `${agentBase()}/files?${params}`,
-        { method: "GET", headers: agentAuthHeaders() }
-      );
-      if (!response.ok) return null;
-      const body = await response.json().catch(() => null);
-      if (!body || !Array.isArray(body.files)) return null;
-      return body.files;
-    } catch {
-      return null;
-    }
+    // Callers that ask while a listing is still on its way (the page load asks from several
+    // places) share it: a big workspace is ~750 kB and the agent walks the folder for each ask.
+    const key = `${agentBase()}|${params}`;
+    const running = agentFileListsInFlight.get(key);
+    if (running) return running;
+    const promise = (async () => {
+      try {
+        const response = await fetch(
+          `${agentBase()}/files?${params}`,
+          { method: "GET", headers: agentAuthHeaders() }
+        );
+        if (!response.ok) return null;
+        const body = await response.json().catch(() => null);
+        if (!body || !Array.isArray(body.files)) return null;
+        return body.files;
+      } catch {
+        return null;
+      }
+    })().finally(() => {
+      agentFileListsInFlight.delete(key);
+    });
+    agentFileListsInFlight.set(key, promise);
+    return promise;
   }
+
+  const agentFileListsInFlight = new Map();
 
   async function listAgentCacheFilesPreferringVault(productId, vaultFolderOverride) {
     /** Try panel vault first, then page vault / product id — Details has no metric-filters. */

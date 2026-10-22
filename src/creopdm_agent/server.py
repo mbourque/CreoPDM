@@ -1876,36 +1876,52 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         index = _load_cache_index(target)
         files: list[CacheFileInfo] = []
         skip_dirs = {".git", ".creopdm", "__pycache__"}
-        for dirpath, dirnames, filenames in os.walk(target):
-            dirnames[:] = [name for name in dirnames if name.lower() not in skip_dirs]
-            folder = Path(dirpath)
-            for name in filenames:
-                if name.startswith(".") or name.startswith("_creopdm") or CreoFileManager.is_ignored(name):
-                    continue
-                path = folder / name
-                if not path.is_file():
-                    continue
-                try:
-                    rel = path.resolve().relative_to(target.resolve()).as_posix()
-                except ValueError:
-                    continue
-                size = 0
-                stamp = ""
-                try:
-                    info = path.stat()
+        # One directory scan: the entry already knows its type and (on Windows) its size and time,
+        # so there is no per-file resolve()/stat. A workspace of thousands of files is listed in a
+        # fraction of the time the Files page and the navigator pane each wait for, every poll.
+        base = os.path.realpath(target)
+        stack: list[tuple[str, str]] = [("", base)]
+        while stack:
+            rel_dir, abs_dir = stack.pop()
+            try:
+                scan = os.scandir(abs_dir)
+            except OSError:
+                continue
+            with scan:
+                for entry in scan:
+                    name = entry.name
+                    try:
+                        if entry.is_dir(follow_symlinks=False):
+                            if name.lower() not in skip_dirs:
+                                stack.append((f"{rel_dir}{name}/", entry.path))
+                            continue
+                        if name.startswith(".") or name.startswith("_creopdm") or CreoFileManager.is_ignored(name):
+                            continue
+                        if not entry.is_file():
+                            continue
+                        if entry.is_symlink():
+                            # A link that points outside the workspace is not part of it.
+                            real = os.path.realpath(entry.path)
+                            if os.path.commonpath([base, real]) != base:
+                                continue
+                        info = entry.stat()
+                    except (OSError, ValueError):
+                        continue
                     size = int(info.st_size)
-                    stamp = datetime.fromtimestamp(info.st_mtime).strftime("%Y-%m-%d %H:%M")
-                except OSError:
-                    pass
-                files.append(
-                    CacheFileInfo(
-                        relative_path=rel,
-                        filename=path.name,
-                        size=size,
-                        saved_at=stamp,
-                        content_hash=_index_hash_for_file(index, rel, path.name, size),
+                    try:
+                        stamp = datetime.fromtimestamp(info.st_mtime).strftime("%Y-%m-%d %H:%M")
+                    except (OSError, OverflowError, ValueError):
+                        stamp = ""
+                    rel = f"{rel_dir}{name}"
+                    files.append(
+                        CacheFileInfo(
+                            relative_path=rel,
+                            filename=name,
+                            size=size,
+                            saved_at=stamp,
+                            content_hash=_index_hash_for_file(index, rel, name, size),
+                        )
                     )
-                )
         files.sort(key=lambda item: item.relative_path.lower())
         return CacheFilesResponse(root=str(target), files=files)
 

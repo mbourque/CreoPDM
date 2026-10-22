@@ -276,3 +276,17 @@ def test_extension_sets_are_built_once_per_list():
     assert extra_cad_set([".PRT", "asm"]) is first
     assert extra_cad_set(None) == frozenset() and extra_cad_set([]) == frozenset()
     assert matches_extension_list("shaft.prt.3", [".prt"]) and not matches_extension_list("a.txt", [".prt"])
+
+
+def test_overlapping_asks_for_the_agent_file_list_share_one_call():
+    script = _app_js()
+    listing = script.split("async function listAgentCacheFiles(", 1)[1].split("async function listAgentCacheFilesPreferringVault", 1)[0]
+    assert "agentFileListsInFlight" in listing and "running" in listing
+    assert ".finally(" in listing and "agentFileListsInFlight.delete(key)" in listing  # no stale list kept
+
+
+def test_the_agent_lists_the_workspace_with_one_scan():
+    server = (ROOT / "src" / "creopdm_agent" / "server.py").read_text(encoding="utf-8")
+    listing = server.split("def list_cache_files(", 1)[1].split("@app.post(\"/hash-paths\"", 1)[0]
+    assert "os.scandir(" in listing
+    assert ".resolve()" not in listing  # no per-file resolve of 4,000 paths
