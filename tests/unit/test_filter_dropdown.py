@@ -214,3 +214,9 @@ def test_a_checkin_that_adds_files_collects_metadata_for_them_too():
     app = _app_js()
     targets = app.split("function metadataTargetsFromResult(result) {", 1)[1].split("function checkedInItemsFromResult", 1)[0]
     assert "result.added" in targets and "targets.push(" in targets
+
+
+def test_add_selected_collects_metadata_as_an_audited_add_run():
+    script = (JS / "checkin.js").read_text(encoding="utf-8")
+    tail = script.split('await withBusy("Collecting Creo metadata…", async () => {', 1)[1][:500]
+    assert "metadataTargetsFromResult(result)" in tail and "audit: true" in tail and "addOnlyCheckin" in tail

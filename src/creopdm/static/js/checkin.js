@@ -942,7 +942,11 @@ window.__creopdmModules.checkin = {
         }
         if (canGatherCreoMetadata()) {
           await withBusy("Collecting Creo metadata…", async () => {
-            await pushCreoMetadataForItems(metadataTargetsFromResult(result));
+            // Add selected… is an Add → Collect run: one audit summary, like Add files…
+            await pushCreoMetadataForItems(
+              metadataTargetsFromResult(result),
+              addOnlyCheckin ? { audit: true, productId: checkinDialog?.dataset.productId || "" } : undefined
+            );
           });
         }
         if (localSync?.agentOffline) {
