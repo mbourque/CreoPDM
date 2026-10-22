@@ -268,7 +268,10 @@ def test_search_objects_supports_glob_wildcards(client, repo_parent):
     home = client.get(f"/?product={product['uuid']}")
     assert home.status_code == 200
     assert 'placeholder="Search all files in product"' in home.text
-    assert 'title="Wildcards:' in home.text
+    assert "Wildcards:" in home.text
+    # The tooltip teaches the field search with examples.
+    tip = home.text.split('id="search-input"', 1)[1].split("autocomplete", 1)[0]
+    assert "type=bulk" in tip and "param.MATERIAL=steel*" in tip and "field=value is an exact match" in tip
     assert "^ = starts with" in home.text
     assert "$ = ends with" in home.text
     assert "^CAD/" in home.text

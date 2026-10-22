@@ -186,7 +186,6 @@ class ObjectService:
         self,
         session: Session,
         product_id: int,
-        query: str | None = None,
         object_type: str | None = None,
         lifecycle_state: str | None = None,
     ) -> list[EngineeringObject]:
@@ -198,41 +197,6 @@ class ObjectService:
             stmt = stmt.where(EngineeringObject.object_type == object_type)
         if lifecycle_state:
             stmt = stmt.where(EngineeringObject.lifecycle_state == lifecycle_state)
-        if query:
-            from creopdm.utils.search_query import sql_like_from_search_query
-
-            like = sql_like_from_search_query(query)
-            if like:
-                param_match = select(Parameter.object_id).where(
-                    or_(
-                        Parameter.name.ilike(like, escape="\\"),
-                        Parameter.value.ilike(like, escape="\\"),
-                    )
-                )
-                # Files Type column uses identity model_role/model_type (SHEETMETAL, SKELETON, …).
-                identity_match = (
-                    select(ObjectVersion.id)
-                    .where(
-                        ObjectVersion.id == EngineeringObject.current_version_id,
-                        ObjectVersion.identity_json.is_not(None),
-                        ObjectVersion.identity_json.ilike(like, escape="\\"),
-                    )
-                    .correlate(EngineeringObject)
-                    .exists()
-                )
-                stmt = stmt.where(
-                    or_(
-                        EngineeringObject.name.ilike(like, escape="\\"),
-                        EngineeringObject.number.ilike(like, escape="\\"),
-                        EngineeringObject.filename.ilike(like, escape="\\"),
-                        EngineeringObject.relative_path.ilike(like, escape="\\"),
-                        EngineeringObject.object_type.ilike(like, escape="\\"),
-                        EngineeringObject.revision.ilike(like, escape="\\"),
-                        EngineeringObject.lifecycle_state.ilike(like, escape="\\"),
-                        EngineeringObject.id.in_(param_match),
-                        identity_match,
-                    )
-                )
         return list(
             session.scalars(
                 stmt.order_by(
@@ -1433,14 +1397,47 @@ class ObjectService:
         query: str | None = None,
         object_type: str | None = None,
         lifecycle_state: str | None = None,
+        type_label_for: Callable[[EngineeringObject], str] | None = None,
     ) -> list[EngineeringObject]:
-        return self.list_objects(
+        """Product Search box. Plain text looks at names and types only; ``field=value`` terms
+        (``type=bulk``, ``subtype=bulk``, ``param.MATERIAL=steel*``) pick one field exactly.
+
+        ``type_label_for`` must return the Type the Files list shows for a file (it depends on the
+        System Settings type labels), so ``type=bulk`` finds exactly what the Type column reads.
+        """
+        from creopdm.utils.search_query import (
+            object_matches_search,
+            object_search_fields,
+            parse_search_query,
+        )
+
+        objects = self.list_objects(
             session,
             product.id,
-            query=query,
             object_type=object_type,
             lifecycle_state=lifecycle_state,
         )
+        terms = parse_search_query(query)
+        if not terms:
+            return objects
+        params_by_object: dict[int, dict[str, str]] = {}
+        if any(term.field == "param" for term in terms):
+            current = {o.id: o.current_version_id for o in objects}
+            for object_id, version_id, name, value in session.execute(
+                select(Parameter.object_id, Parameter.version_id, Parameter.name, Parameter.value).where(
+                    Parameter.object_id.in_(list(current))
+                )
+            ):
+                # The current version's parameters (older rows without a version still count).
+                if version_id is None or version_id == current.get(object_id):
+                    params_by_object.setdefault(object_id, {})[str(name or "")] = str(value or "")
+        found = []
+        for obj in objects:
+            label = type_label_for(obj) if type_label_for is not None else ""
+            fields = object_search_fields(obj, label)
+            if object_matches_search(terms, fields, params_by_object.get(obj.id)):
+                found.append(obj)
+        return found
 
     def list_folder_view(
         self,

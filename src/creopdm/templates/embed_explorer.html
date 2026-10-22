@@ -65,7 +65,7 @@
       <span class="visually-hidden">Search</span>
       <input type="search" id="ex-search"
              placeholder="Search all files in product"
-             title="Wildcards:&#10;* = any characters&#10;? = one character&#10;^ = starts with&#10;$ = ends with&#10;&#10;Examples:&#10;*.prt&#10;*.prt.*&#10;^CAD/&#10;.prt$"
+             title="Plain text searches the name, number, path, Type and Subtype.&#10;field=value is an exact match: type, subtype, model, state, rev, creo, name, number, path, param.NAME&#10;&#10;Wildcards:&#10;* = any characters&#10;? = one character&#10;^ = starts with&#10;$ = ends with&#10;&#10;Examples:&#10;type=bulk&#10;param.MATERIAL=steel*&#10;name=*shaft*&#10;*.prt&#10;*.prt.*&#10;^CAD/&#10;.prt$"
              autocomplete="off" {% if not selected %}disabled{% endif %}>
     </label>
   </header>
@@ -87,7 +87,7 @@
 
   <div id="ex-context-menu" class="ex-context-menu" role="menu" hidden></div>
 
-  <script src="/static/js/files_search_match.js?v={{ app_version }}-files-search"></script>
+  <script src="/static/js/files_search_match.js?v={{ app_version }}-files-search2"></script>
   <script src="/static/js/local_cache_pending.js?v={{ app_version }}-local-cache"></script>
   <script src="/static/js/files_context_menu.js?v={{ app_version }}-files-ctx-nonopen"></script>
   <script src="/static/js/embed_explorer.js?v={{ app_version }}-comment"></script>

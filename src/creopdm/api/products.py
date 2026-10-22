@@ -322,12 +322,28 @@ def list_objects(
         get_logger("products").exception(
             "Vault-name migrate failed for product %s", product.uuid
         )
+    # Same Type the Files list shows (System Settings labels, then Creo model role), so
+    # ``type=bulk`` in the Search box finds exactly what the Type column reads.
+    from creopdm.utils.classify import display_type_label, type_label_maps
+    from creopdm.utils.creo_model_class import files_list_type_from_identity_json
+
+    name_labels, ext_labels = type_label_maps(ctx.config.type_labels())
+
+    def type_label_for(obj) -> str:
+        meta = ""
+        if obj.current_version is not None:
+            meta = files_list_type_from_identity_json(obj.current_version.identity_json)
+        return meta or display_type_label(
+            obj.filename, obj.object_type, names=name_labels, extensions=ext_labels
+        )
+
     objects = ctx.objects.search(
         db,
         product,
         query=q,
         object_type=object_type,
         lifecycle_state=lifecycle_state,
+        type_label_for=type_label_for,
     )
     return present_objects(ctx, db, objects)
 

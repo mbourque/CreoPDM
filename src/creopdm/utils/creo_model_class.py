@@ -242,6 +242,26 @@ _FILES_LIST_ROLE_LABELS: frozenset[str] = frozenset(
 )
 
 
+def model_fields_from_identity_json(raw: str | None) -> tuple[str, str]:
+    """(model_type, subtype) a file's collected identity reports, or ("", "").
+
+    ``subtype`` is the model role (BULK, SOLID, PROCESS …), else the raw Toolkit subtype, upper-cased:
+    what Details shows as Subtype and what ``subtype=`` finds in the Search box.
+    """
+    if not raw:
+        return "", ""
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return "", ""
+    if not isinstance(data, dict):
+        return "", ""
+    normalize_creo_identity(data)
+    model = str(data.get("model_type") or "")
+    subtype = str(data.get("model_role") or data.get("subtype") or "").strip().upper()
+    return model, subtype
+
+
 def files_list_type_from_identity_json(raw: str | None) -> str:
     """
     Label for the Files list Type column from collected Creo identity.

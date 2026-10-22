@@ -284,6 +284,9 @@ class ObjectResponse(BaseModel):
     in_workspace: bool = False
     # Tip already has Collect identity/materials — Collect all can skip Toolkit.
     creo_metadata_captured: bool = False
+    # Collected Creo identity: model type (PART, ASSEMBLY …) and Subtype (BULK, SOLID …); "" until collected.
+    model_type: str = ""
+    model_role: str = ""
     created_at: datetime | None
     updated_at: datetime | None
     current_version: ObjectVersionResponse | None = None

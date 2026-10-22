@@ -1,11 +1,19 @@
 /**
- * Shared Files / navigator search matching — wildcards, ^/$, type labels.
+ * Shared Files / navigator search matching — field terms, wildcards, ^/$.
  * Loaded by base.html (Files) and embed_explorer.html (Creo navigator).
- * Server product-wide Search uses the same rules via search_query.py (SQL ILIKE).
+ * Server product-wide Search uses the same grammar via utils/search_query.py.
  * Do not fork matching logic in app.js or embed_explorer.js.
+ *
+ * Terms are separated by spaces and ALL must match; double quotes keep spaces (name="my part").
+ *   plain text      substring of the file name, number, path, Type label or Subtype label
+ *   field=value     exact (case-insensitive); * and ? make a partial match: type=bulk, name=*shaft*
+ *   fields          name number path type subtype model state rev creo, and param.NAME=VALUE
  */
 (function (global) {
   "use strict";
+
+  var SEARCH_FIELDS = ["name", "number", "path", "type", "subtype", "model", "state", "rev", "creo"];
+  var PARAM_PREFIX = "param.";
 
   function parseSearchAnchors(query) {
     var q = String(query || "").trim();
@@ -24,64 +32,137 @@
     return new RegExp("^" + body + "$", "i");
   }
 
-  /**
-   * Match a query against plain fields (navigator objects / API rows).
-   * @param {{name?:string, path?:string, typeLabel?:string, objectType?:string, haystack?:string}} fields
-   * @param {string} query
-   */
-  function fieldsMatchSearchQuery(fields, query) {
-    var raw = String(query || "").trim();
-    if (!raw) return true;
-    var parsed = parseSearchAnchors(raw);
+  /** Split on spaces; double quotes keep spaces inside a term (the quotes themselves are dropped). */
+  function splitSearchTerms(text) {
+    var terms = [];
+    var current = "";
+    var quoted = false;
+    var started = false;
+    var s = String(text || "");
+    for (var i = 0; i < s.length; i += 1) {
+      var ch = s.charAt(i);
+      if (ch === '"') {
+        quoted = !quoted;
+        started = true;
+        continue;
+      }
+      if (/\s/.test(ch) && !quoted) {
+        if (started) terms.push(current);
+        current = "";
+        started = false;
+        continue;
+      }
+      current += ch;
+      started = true;
+    }
+    if (started) terms.push(current);
+    return terms.filter(function (term) {
+      return term !== "";
+    });
+  }
+
+  /** Terms of a search box text: {field, value, paramName}; field is null for plain text. */
+  function parseSearchQuery(text) {
+    var terms = [];
+    splitSearchTerms(text).forEach(function (token) {
+      var index = token.indexOf("=");
+      if (index > 0) {
+        var rawField = token.slice(0, index).trim();
+        var field = rawField.toLowerCase();
+        var value = token.slice(index + 1).trim();
+        if (SEARCH_FIELDS.indexOf(field) !== -1) {
+          if (value) terms.push({ field: field, value: value, paramName: "" });
+          return;
+        }
+        if (field.indexOf(PARAM_PREFIX) === 0 && field.length > PARAM_PREFIX.length) {
+          if (value) {
+            terms.push({ field: "param", value: value, paramName: rawField.slice(PARAM_PREFIX.length) });
+          }
+          return;
+        }
+      }
+      terms.push({ field: null, value: token, paramName: "" });
+    });
+    return terms;
+  }
+
+  /** One value against one pattern: `exact` for a field=value term, substring for plain text. */
+  function textMatches(candidate, raw, exact) {
+    var parsed = parseSearchAnchors(String(raw || "").trim());
     var body = parsed.body;
-    var anchoredStart = parsed.anchoredStart;
-    var anchoredEnd = parsed.anchoredEnd;
     if (!body) return true;
-
-    var name = String((fields && fields.name) || "");
-    var path = String((fields && fields.path) || "").replace(/\\/g, "/");
-    var base = path.split("/").pop() || "";
-    var typeLabel = String((fields && fields.typeLabel) || "");
-    var objectType = String((fields && fields.objectType) || "");
-
+    var text = String(candidate || "");
     if (body.indexOf("*") !== -1 || body.indexOf("?") !== -1) {
-      var re;
       try {
-        re = globToRegExp(body);
+        return globToRegExp(body).test(text);
       } catch (err) {
         return false;
       }
-      return (
-        re.test(name) ||
-        re.test(path) ||
-        (base && re.test(base)) ||
-        (typeLabel && re.test(typeLabel)) ||
-        (objectType && re.test(objectType))
-      );
     }
-
+    text = text.toLowerCase();
     var needle = body.toLowerCase();
-    var fieldsList = [name, path, base, typeLabel, objectType]
-      .filter(Boolean)
+    if (parsed.anchoredStart && parsed.anchoredEnd) return text === needle;
+    if (parsed.anchoredStart) return text.indexOf(needle) === 0;
+    if (parsed.anchoredEnd) {
+      return text.length >= needle.length && text.slice(-needle.length) === needle;
+    }
+    return exact ? text === needle : text.indexOf(needle) !== -1;
+  }
+
+  function list(value) {
+    return (Array.isArray(value) ? value : [value])
       .map(function (item) {
-        return item.toLowerCase();
-      });
-    if (anchoredStart || anchoredEnd) {
-      return fieldsList.some(function (text) {
-        if (anchoredStart && anchoredEnd) return text === needle;
-        if (anchoredStart) return text.indexOf(needle) === 0;
-        return text.length >= needle.length && text.slice(-needle.length) === needle;
-      });
-    }
-    if (
-      fieldsList.some(function (text) {
-        return text.indexOf(needle) !== -1;
+        return String(item == null ? "" : item);
       })
-    ) {
-      return true;
-    }
-    var hay = String((fields && fields.haystack) || "").toLowerCase();
-    return Boolean(hay) && hay.indexOf(needle) !== -1;
+      .filter(Boolean);
+  }
+
+  /**
+   * Match a query against plain fields (navigator objects / API rows / Files rows).
+   * @param {{name?:string, path?:string, number?:string, typeLabel?:string, subtype?:string,
+   *   model?:string, state?:string, rev?:string, creo?:string, params?:Object}} fields
+   * @param {string} query
+   */
+  function fieldsMatchSearchQuery(fields, query) {
+    var terms = parseSearchQuery(query);
+    if (!terms.length) return true;
+    fields = fields || {};
+    var name = String(fields.name || "");
+    var path = String(fields.path || "").replace(/\\/g, "/");
+    var base = path.split("/").pop() || "";
+    var state = String(fields.state || "");
+    var rev = String(fields.rev || "");
+    var byField = {
+      name: list([name, base]),
+      number: list(fields.number),
+      path: list(path),
+      type: list(fields.typeLabel),
+      subtype: list(fields.subtype),
+      model: list(fields.model),
+      state: list([state, state.replace(/_/g, " ")]),
+      rev: list([rev, rev.split(".")[0]]),
+      creo: list(fields.creo),
+    };
+    var plain = [].concat(byField.name, byField.number, byField.path, byField.type, byField.subtype);
+    return terms.every(function (term) {
+      if (term.field === null) {
+        return plain.some(function (item) {
+          return textMatches(item, term.value, false);
+        });
+      }
+      if (term.field === "param") {
+        // The page does not carry parameters: the server (product-wide Search) decides these.
+        if (!fields.params) return true;
+        return Object.keys(fields.params).some(function (key) {
+          return (
+            textMatches(key, term.paramName, true) && textMatches(fields.params[key], term.value, true)
+          );
+        });
+      }
+      return (byField[term.field] || []).some(function (item) {
+        return textMatches(item, term.value, true);
+      });
+    });
   }
 
   function rowAttr(row, name) {
@@ -109,14 +190,17 @@
     var sortType = rowAttr(row, "data-sort-type");
     var typeLabel =
       sortType.indexOf("/") !== -1 ? sortType.split("/").pop() || "" : sortType;
-    var objectType = rowAttr(row, "data-object-type");
     return fieldsMatchSearchQuery(
       {
         name: name,
         path: path,
+        number: rowAttr(row, "data-number"),
         typeLabel: typeLabel,
-        objectType: objectType,
-        haystack: row.textContent || "",
+        subtype: rowAttr(row, "data-subtype"),
+        model: rowAttr(row, "data-model"),
+        state: rowAttr(row, "data-lifecycle"),
+        rev: rowAttr(row, "data-rev"),
+        creo: rowAttr(row, "data-creo"),
       },
       query
     );
@@ -127,29 +211,17 @@
    */
   function objectMatchesSearchQuery(obj, query) {
     if (!obj) return !String(query || "").trim();
-    var name = String(obj.filename || obj.name || "");
-    var path = String(obj.relative_path || "").replace(/\\/g, "/");
-    var typeLabel = String(obj.type_label || "");
-    var objectType = String(obj.object_type || "");
-    var haystack = [
-      name,
-      path,
-      typeLabel,
-      objectType,
-      obj.revision,
-      obj.lifecycle_state,
-      obj.checkout_status,
-      obj.number,
-    ]
-      .filter(Boolean)
-      .join(" ");
     return fieldsMatchSearchQuery(
       {
-        name: name,
-        path: path,
-        typeLabel: typeLabel,
-        objectType: objectType,
-        haystack: haystack,
+        name: String(obj.filename || obj.name || ""),
+        path: String(obj.relative_path || "").replace(/\\/g, "/"),
+        number: String(obj.number || ""),
+        typeLabel: String(obj.type_label || ""),
+        subtype: String(obj.model_role || ""),
+        model: String(obj.model_type || ""),
+        state: String(obj.lifecycle_state || ""),
+        rev: String(obj.display_revision || obj.revision || ""),
+        creo: String(obj.creo_release || ""),
       },
       query
     );
@@ -158,6 +230,9 @@
   global.CreoPdmFilesSearchMatch = {
     parseSearchAnchors: parseSearchAnchors,
     globToRegExp: globToRegExp,
+    splitSearchTerms: splitSearchTerms,
+    parseSearchQuery: parseSearchQuery,
+    textMatches: textMatches,
     fieldsMatchSearchQuery: fieldsMatchSearchQuery,
     rowMatchesSearchQuery: rowMatchesSearchQuery,
     objectMatchesSearchQuery: objectMatchesSearchQuery,

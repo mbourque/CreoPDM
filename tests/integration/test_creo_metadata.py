@@ -989,3 +989,55 @@ def test_sketch_notes_are_never_shown_but_a_real_gap_is(client, repo_parent, tmp
     assert "ProSectionConstraintIdsGet=-2" in gap_page
     assert "How this was read" not in gap_page
     assert "ProSectionEntityEval" not in gap_page
+
+
+@requires_git
+def test_search_fields_find_type_subtype_and_parameters(client, repo_parent, tmp_path):
+    """type=bulk / subtype=bulk / param.NAME=… pick one field; plain text no longer reads metadata."""
+    product = _create_product(client, repo_parent)
+    bulk = _add_part(client, product["uuid"], tmp_path, "1s0122.prt")
+    plain = _add_part(client, product["uuid"], tmp_path, "shaft.prt")
+    # A bulk item reports BULK as its raw Toolkit subtype (no model role).
+    saved = client.post(
+        f"/api/objects/{bulk['uuid']}/creo-metadata",
+        json={"identity": {"file_name": "1s0122.prt", "model_type": "PART", "subtype": "BULK"}},
+    )
+    assert saved.status_code == 200, saved.text
+    saved = client.post(
+        f"/api/objects/{plain['uuid']}/creo-metadata",
+        json={
+            "identity": {"file_name": "shaft.prt", "model_type": "PART", "model_role": "SOLID", "mass_unit": "sec"},
+            "parameters": [
+                {"name": "MATERIAL", "value": "STEEL_1018", "data_type": "STRING", "units": None, "is_designated": False},
+                {"name": "CYCLE_TIME", "value": "5 sec", "data_type": "STRING", "units": None, "is_designated": False},
+            ],
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    def found(query):
+        reply = client.get(f"/api/products/{product['uuid']}/objects", params={"q": query})
+        assert reply.status_code == 200, reply.text
+        return {item["filename"] for item in reply.json()}
+
+    assert found("type=bulk") == {"1s0122.prt"}  # exactly what the Type column reads
+    assert found("subtype=bulk") == {"1s0122.prt"}
+    assert found("type=bul") == set()  # exact, not partial
+    assert found("type=bul*") == {"1s0122.prt"}
+    assert found("model=part") == {"1s0122.prt", "shaft.prt"}
+    assert found("param.MATERIAL=steel*") == {"shaft.prt"}
+    assert found("param.MATERIAL=*") == {"shaft.prt"}
+    assert found("param.NOPE=*") == set()
+    assert found("type=part param.MATERIAL=steel*") == {"shaft.prt"}  # all terms must match
+    assert found('name="shaft.prt"') == {"shaft.prt"}
+    assert found("state=in_work") == {"1s0122.prt", "shaft.prt"}
+    assert found("state=released") == set()
+    assert found("type=") == {"1s0122.prt", "shaft.prt"}  # an empty value is ignored while typing
+    # Plain text looks at names and types only: a parameter value or a stored unit is not a hit.
+    assert found("sec") == set()
+    assert found("steel") == set()
+    assert found("bulk") == {"1s0122.prt"}  # the Type / Subtype label is searched
+    listed = client.get(f"/api/products/{product['uuid']}/objects").json()
+    by_name = {item["filename"]: item for item in listed}
+    assert by_name["1s0122.prt"]["model_role"] == "BULK" and by_name["1s0122.prt"]["model_type"] == "PART"
+    assert by_name["shaft.prt"]["model_role"] == "SOLID"

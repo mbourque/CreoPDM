@@ -48,7 +48,7 @@ def test_embed_explorer_route_and_assets(client):
     assert "files_context_menu.js" in page.text
     assert "files_search_match.js" in page.text
     assert 'placeholder="Search all files in product"' in page.text
-    assert 'title="Wildcards:' in page.text
+    assert "Wildcards:" in page.text
     assert 'id="ex-retry"' in page.text
     assert 'id="ex-type-toggles"' in page.text
     assert 'id="ex-filter-part"' in page.text

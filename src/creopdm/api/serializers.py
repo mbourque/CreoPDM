@@ -17,7 +17,7 @@ from creopdm.schemas.common import ObjectResponse, ObjectVersionResponse, Produc
 from creopdm.services.checkout_service import CheckoutView
 from creopdm.services.revise_service import object_can_revise
 from creopdm.utils.classify import display_type_label, resolve_type_icon
-from creopdm.utils.creo_model_class import version_has_creo_metadata
+from creopdm.utils.creo_model_class import model_fields_from_identity_json, version_has_creo_metadata
 from creopdm.utils.identity import UserIdentity
 from creopdm.utils.timefmt import as_utc
 
@@ -106,6 +106,9 @@ def object_to_response(
         if creo_metadata_captured is not None
         else version_has_creo_metadata(obj.current_version)
     )
+    model_type, model_role = model_fields_from_identity_json(
+        obj.current_version.identity_json if obj.current_version is not None else None
+    )
     return ObjectResponse(
         uuid=obj.uuid,
         product_uuid=product_uuid,
@@ -138,6 +141,8 @@ def object_to_response(
         can_revise=object_can_revise(obj, checkout),
         in_workspace=in_workspace,
         creo_metadata_captured=captured,
+        model_type=model_type,
+        model_role=model_role,
         created_at=as_utc(obj.created_at),
         updated_at=as_utc(obj.updated_at),
         current_version=version_to_response(
