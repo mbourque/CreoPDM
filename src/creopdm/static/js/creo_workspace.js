@@ -603,6 +603,9 @@ window.__creopdmModules.creo_workspace = {
               if (snapshot.__error === "newer_release") {
                 target.detail = snapshot.__detail;
                 target.newerRelease = true;
+              } else {
+                // Keep the Toolkit's own reason: the notice after Open names it instead of guessing.
+                target.detail = String(snapshot.__detail || snapshot.__error || "").trim();
               }
               snapshot = null;
             }
