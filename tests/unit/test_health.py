@@ -94,6 +94,13 @@ def test_app_js_is_not_cached(client):
     assert "deleteWorkspaceFiles" in bundle
 
 
+def _files_page_template() -> str:
+    """app.html plus the rows partial it shares with GET /products/{id}/files-rows."""
+    page = open("src/creopdm/templates/app.html", encoding="utf-8").read()
+    rows = open("src/creopdm/templates/partials/file_rows.html", encoding="utf-8").read()
+    return page + "\n" + rows
+
+
 def test_home_page(client):
     response = client.get("/")
     assert response.status_code == 200
@@ -135,14 +142,15 @@ def test_home_page(client):
     assert "push169" not in text
     assert "export3" not in text
     assert "compact-busy" not in text
-    assert "/client/app.js?v=" in text and "filter-ontabs17" in text
+    assert "/client/app.js?v=" in text and "filter-ontabs18" in text
     assert 'id="creo-connecting-overlay"' in text
     assert "Connecting to Creo…" in text
     assert "/static/css/app.css?v=" in text and "thumb-preview" in text
-    assert 'class="folder-open"' in open("src/creopdm/templates/app.html", encoding="utf-8").read()
-    assert "a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "<a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
+    rows_html = open("src/creopdm/templates/partials/file_rows.html", encoding="utf-8").read()  # the rows live in a partial shared with /files-rows
+    assert 'class="folder-open"' in rows_html
+    assert "<a class=\"folder-open\"" in rows_html
     assert "folder | urlencode" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "urlencode" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
-    assert "obj.type_icon" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
+    assert "obj.type_icon" in open("src/creopdm/templates/partials/file_rows.html", encoding="utf-8").read()
     assert "function typeIconHtml" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "function resolveTypeIcon" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "data-type-icons" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
@@ -156,8 +164,8 @@ def test_home_page(client):
     assert "vscode-icons" in open("src/creopdm/static/icons/ATTRIBUTION.txt", encoding="utf-8").read()
     assert 'alt="${label}" title="${label}"' in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     # Filename open control: no native title tooltip (blocks thumbnail hover preview).
-    assert 'title="Open this file"' not in open("src/creopdm/templates/app.html", encoding="utf-8").read()
-    assert "obj.type_label" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
+    assert 'title="Open this file"' not in _files_page_template()
+    assert "obj.type_label" in _files_page_template()
     assert ".name-with-icon" in open("src/creopdm/static/css/app.css", encoding="utf-8").read()
     assert (Path("src/creopdm/static/icons/part.png").is_file())
     assert (Path("src/creopdm/static/icons/assembly.png").is_file())
@@ -171,7 +179,7 @@ def test_home_page(client):
     assert "function selectionCanCheckin" in script
     assert "function refreshPendingCheckinIds" in script
     assert "resolveNewerLocalCacheSaves(cacheFiles, objects, productId)" in script.split("async function refreshPendingCheckinIds")[1].split("function rowHasCheckinWork")[0]
-    assert "data-modified-locally" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
+    assert "data-modified-locally" in _files_page_template()
     assert "function stateSortToken" in script
     assert 'if (s === "MODIFIED") return "0-MODIFIED"' in script
     assert "function reapplyActiveTableSorts" in script

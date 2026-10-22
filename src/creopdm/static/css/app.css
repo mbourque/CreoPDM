@@ -1770,6 +1770,21 @@ dialog#open-checkout-dialog[open] {
 body.creo-connecting {
   cursor: wait;
 }
+/* Shown before any script ran (set by the inline snippet in base.html) so a big page is not blank. */
+html.creo-booting body::after {
+  content: "Connecting to Creo…";
+  position: fixed;
+  inset: 0;
+  z-index: 4400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--ink, #1f2933);
+  font-size: 1.05rem;
+  cursor: wait;
+}
+.rows-loading { margin: 0.35rem 0.2rem 0; }
 .busy-panel {
   display: flex; align-items: center; gap: 0.8rem;
   min-width: 16rem; max-width: 28rem;

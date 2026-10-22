@@ -276,7 +276,7 @@ window.__creopdmModules.baselines = {
         return;
       }
       const tops = topLevelAssemblyVersions(browseData, browseEdges);
-      body.innerHTML = sortedRows("browse", browseData)
+      const rowHtml = sortedRows("browse", browseData)
         .map((m) => {
           const newer = m.status === "OUT_OF_DATE";
           const now = newer ? `Newer: ${esc(m.current_display_version || "—")}` : "Same version";
@@ -316,11 +316,33 @@ window.__creopdmModules.baselines = {
             <td>${esc(typeText(m))}</td>
             <td class="${newer ? "is-newer" : ""}">${now}</td>
           </tr>`;
-        })
-        .join("");
+        });
+      // A big baseline: the first rows show at once, the rest follow in chunks (the table is parsed in
+      // small pieces instead of one long block), then counts and the toolbar are refreshed once.
+      const FIRST_ROWS = 300;
+      const CHUNK_ROWS = 400;
+      const token = (browsePaintToken += 1);
+      body.innerHTML = rowHtml.slice(0, FIRST_ROWS).join("");
       shell.refreshTabMetrics?.();
       syncFooterDetails();
+      if (rowHtml.length <= FIRST_ROWS) return;
+      let next = FIRST_ROWS;
+      const addChunk = () => {
+        if (token !== browsePaintToken) return; // another paint replaced the table
+        body.insertAdjacentHTML("beforeend", rowHtml.slice(next, next + CHUNK_ROWS).join(""));
+        next += CHUNK_ROWS;
+        if (next < rowHtml.length) {
+          window.setTimeout(addChunk, 16);
+          return;
+        }
+        shell.refreshTabMetrics?.();
+        syncFooterDetails();
+        document.dispatchEvent(new CustomEvent("creopdm:rows-added"));
+      };
+      window.setTimeout(addChunk, 16);
     }
+
+    let browsePaintToken = 0;
 
     let browseEdges = [];
 

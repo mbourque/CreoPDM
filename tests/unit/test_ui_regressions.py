@@ -26,7 +26,23 @@ OPEN_JS = ROOT / "src" / "creopdm" / "static" / "js" / "open.js"
 CHECKOUT_JS = ROOT / "src" / "creopdm" / "static" / "js" / "checkout.js"
 CHECKIN_JS = ROOT / "src" / "creopdm" / "static" / "js" / "checkin.js"
 APP_CSS = ROOT / "src" / "creopdm" / "static" / "css" / "app.css"
-APP_HTML = ROOT / "src" / "creopdm" / "templates" / "app.html"
+
+
+class _Templates:
+    """The Files page: app.html plus the rows partial it shares with GET /products/{id}/files-rows."""
+
+    def __init__(self, *paths):
+        self.paths = paths
+        self.parent = paths[0].parent
+
+    def read_text(self, encoding="utf-8"):
+        return "\n".join(path.read_text(encoding=encoding) for path in self.paths)
+
+
+APP_HTML = _Templates(
+    ROOT / "src" / "creopdm" / "templates" / "app.html",
+    ROOT / "src" / "creopdm" / "templates" / "partials" / "file_rows.html",
+)
 ICONS = ROOT / "src" / "creopdm" / "static" / "icons"
 
 
@@ -3084,7 +3100,7 @@ def test_sorting_reads_each_key_once_and_writes_the_rows_in_one_go():
 
 def test_file_rows_are_not_padded_with_template_whitespace():
     """Regression: ~1/3 of every Files row (a 10 MB page at 4,000 files) was indentation and line breaks."""
-    page = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8").replace("\r\n", "\n")
+    page = (ROOT / "src" / "creopdm" / "templates" / "partials" / "file_rows.html").read_text(encoding="utf-8").replace("\r\n", "\n")
     row = page.split('<tr data-uuid="{{ obj.uuid }}"', 1)[1].split("</tr>", 1)[0]
     assert "\n" not in row.split('class="object-row"', 1)[0]  # the attributes sit on one line
     assert "\n  " not in row  # no indentation left anywhere in the row

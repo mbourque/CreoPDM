@@ -274,3 +274,67 @@ def test_a_reopened_browser_returns_to_the_last_folder_and_tab():
     assert "applyReopenTab();" in app and "rememberListView(name);" in app
     remember = app.split("function rememberListView(tabName) {", 1)[1].split("function restoreListViewOnReopen()", 1)[0]
     assert "localStorage.setItem(" in remember and "listViewKey(productId)" in remember
+
+
+# ------------------------------------------------------------------ the lighter first view
+def test_the_files_list_loads_a_big_folders_remaining_rows_after_the_first_page():
+    app = _app_js()
+    loader = app.split("function loadRemainingFileRows() {", 1)[1].split("/** The Filter control belongs", 1)[0]
+    assert "table?.dataset.rowsTailUrl" in loader and "signal: pageSignal" in loader
+    # the rows arrive in chunks, never as one block
+    assert "const CHUNK = 400;" in loader and 'insertAdjacentHTML("beforeend"' in loader
+    # a changed folder (the totals differ) reloads the page instead of mixing two lists
+    assert 'response.headers.get("X-Rows-Total")' in loader and "window.location.reload()" in loader
+    # the folder snapshot (what clearing a search restores) always holds every row; a search or a
+    # back-to-folder swap while the tail is arriving stops the insert
+    assert "folderTbodyHtml += html;" in loader and "version !== tableViewVersion" in loader
+    assert 'objectTable.dataset.searching === "1"' in loader
+    # one refresh when the last chunk is in
+    for call in ("reapplyActiveTableSorts();", "syncModifiedStateLabels();", "refreshTabMetrics();", "creopdm:rows-added"):
+        assert call in loader
+    assert app.count("tableViewVersion += 1;") == 2  # showFolderView and showSearchMatches
+    assert "function whenFileRowsReady()" in app
+
+
+def test_everything_that_needs_every_row_waits_for_the_tail():
+    app = _app_js()
+    # boot starts the loader once the page is built
+    boot = app[app.index("  resetFiltersOnProductSwitch();\n"):][:600]
+    assert "loadRemainingFileRows();" in boot
+    # selection restore (Details -> Back) and navigator deep links wait for the rows
+    watch = app.split("function restoreWatchView() {", 1)[1].split("restoreWatchView();", 1)[0]
+    assert "whenFileRowsReady().then(" in watch
+    deep = app.split("async function consumeNavigatorDeepLink() {", 1)[1][:200]
+    assert "await whenFileRowsReady();" in deep
+    notifications = (JS / "notifications.js").read_text(encoding="utf-8")
+    assert 'addEventListener("creopdm:rows-added"' in notifications and "paintGlyphs()" in notifications
+
+
+def test_the_row_template_and_the_fragment_endpoint_share_one_partial():
+    app_html = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
+    assert '{% include "partials/file_rows.html" %}' in app_html and "data-rows-tail-url" in app_html
+    rows = (ROOT / "src" / "creopdm" / "templates" / "partials" / "file_rows.html").read_text(encoding="utf-8")
+    assert "{% for entry in entries %}" in rows and 'class="object-row"' in rows
+    pages = (ROOT / "src" / "creopdm" / "api" / "pages.py").read_text(encoding="utf-8")
+    assert 'render(\n        request,\n        "partials/file_rows.html"' in pages and "FILES_FIRST_PAGE = 300" in pages
+    # counts come from every file in the folder, not from the rows of this page
+    assert "folder_view_counts(\n        all_files," in pages
+
+
+def test_a_creo_browser_says_connecting_before_the_page_is_read():
+    base = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
+    head = base.split("</head>", 1)[0]
+    assert 'localStorage.getItem("creopdm.creoBrowser") === "1"' in head and '"creo-booting"' in head
+    assert "setTimeout" in head  # never stuck
+    css = CSS.read_text(encoding="utf-8")
+    assert "html.creo-booting body::after" in css and 'content: "Connecting to Creo…"' in css
+    app = _app_js()
+    assert "function rememberCreoBrowser(isCreo)" in app
+    assert app.count('document.documentElement.classList.remove("creo-booting")') >= 2
+
+
+def test_a_big_baseline_paints_its_first_rows_at_once_and_the_rest_in_chunks():
+    baselines = (JS / "baselines.js").read_text(encoding="utf-8")
+    assert "const FIRST_ROWS = 300;" in baselines and "const CHUNK_ROWS = 400;" in baselines
+    assert "token !== browsePaintToken" in baselines  # another paint replaced the table: stop
+    assert 'insertAdjacentHTML("beforeend"' in baselines and "creopdm:rows-added" in baselines

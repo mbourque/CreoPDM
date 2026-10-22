@@ -306,6 +306,11 @@ window.__creopdmModules.notifications = {
       );
     }
 
+    // Rows added after the first page (a big folder) get their glyphs too.
+    document.addEventListener("creopdm:rows-added", () => {
+      if (lastSummary) paintGlyphs();
+    });
+
     function paintTabAndPill() {
       const tab = $('.tabs .tab[data-tab="discussion"]');
       // On a file's Details page the tab counts only the thread target it shows (the live file, one
