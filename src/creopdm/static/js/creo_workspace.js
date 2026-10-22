@@ -477,6 +477,7 @@ window.__creopdmModules.creo_workspace = {
         : "";
       // A manual Collect knows the Toolkit's own reason for the first file: show it.
       const detail = String(failed.find((target) => target.detail)?.detail || "").trim();
+      const why = detail ? ` (${detail.slice(0, 160)})` : "";
       // Files from a newer Creo: the reason IS the explanation, without the generic wording.
       let newerText = "";
       if (failed.every((target) => target.newerRelease)) {
@@ -499,10 +500,7 @@ window.__creopdmModules.creo_workspace = {
       }
       const text = newerText
         ? newerText
-        : detail
-          // The real reason beats a guess ("Creo did not report the model" when the save was refused).
-          ? `Metadata was not collected for ${shown}${more}: ${detail.slice(0, 160)}${/[.!?]$/.test(detail) ? "" : "."}${hint} Collect it again once that is fixed.`
-          : `Metadata was not collected for ${shown}${more}. ${reason}${hint} Collect it again once that is fixed.`;
+        : `Metadata was not collected for ${shown}${more}. ${reason}${why}${hint} Collect it again once that is fixed.`;
       showError($("#toolbar-error"), text);
       // A reload right after Add / Check in would clear the message: keep it for the next page,
       // but never past the moment it was meant for.
@@ -605,9 +603,6 @@ window.__creopdmModules.creo_workspace = {
               if (snapshot.__error === "newer_release") {
                 target.detail = snapshot.__detail;
                 target.newerRelease = true;
-              } else {
-                // Keep the Toolkit's own reason: the notice after Open names it instead of guessing.
-                target.detail = String(snapshot.__detail || snapshot.__error || "").trim();
               }
               snapshot = null;
             }
@@ -636,17 +631,11 @@ window.__creopdmModules.creo_workspace = {
             snapshot = null;
           }
         }
-        if (!snapshot) {
-          if (!target.detail) target.detail = "Creo returned no data for this model.";
-          continue;
-        }
+        if (!snapshot) continue;
         const identityName = String(
           snapshot.identity?.file_name || snapshot.identity?.full_name || ""
         ).trim();
-        if (!identityName) {
-          target.detail = "Creo's reply had no model name.";
-          continue;
-        }
+        if (!identityName) continue;
         const body = {
           version_id: target.versionId || null,
           identity: snapshot.identity || null,
@@ -686,10 +675,6 @@ window.__creopdmModules.creo_workspace = {
               body: JSON.stringify(body),
             }
           );
-          if (!response.ok) {
-            // The Toolkit read the model but CreoPDM refused to save it: say what the server said.
-            target.detail = `the server did not save it: ${String(await readError(response)).slice(0, 140)}`;
-          }
           if (response.ok) {
             saved += 1;
             savedIds.add(target.uuid);
@@ -699,9 +684,8 @@ window.__creopdmModules.creo_workspace = {
               objectFilename: target.filename,
             });
           }
-        } catch (err) {
+        } catch {
           /* soft-fail — metadata is best-effort */
-          target.detail = `saving failed: ${String(err?.message || err || "").slice(0, 140)}`;
         }
       }
       // A file the Toolkit could not read leaves no metadata: say so instead of staying silent.
@@ -743,11 +727,38 @@ window.__creopdmModules.creo_workspace = {
       if (!canGatherCreoMetadata()) return 0;
       const items = metadataItemsFromOpenResult(result);
       if (!items.length) return 0;
+      // A Released (or otherwise locked) product cannot take metadata: opening a file there is
+      // read-only, so there is nothing to capture and nothing to report.
+      const productId = String(currentProductId() || "").trim();
+      if (productId) {
+        try {
+          const response = await fetch(`/api/products/${encodeURIComponent(productId)}`);
+          const access = response.ok ? await response.json() : null;
+          if (access && access.allows_edit_metadata === false) return 0;
+        } catch {
+          /* unknown: try the capture as before */
+        }
+      }
+      // Nothing changed since the last collect: the current version already has its metadata
+      // (it belongs to the version, so a new check-in or revise is collected again), so opening
+      // the file again must not scan it again.
+      const pending = [];
+      for (const item of items) {
+        try {
+          const response = await fetch(`/api/objects/${encodeURIComponent(item.uuid)}`);
+          const object = response.ok ? await response.json() : null;
+          if (object && object.creo_metadata_captured === true) continue;
+        } catch {
+          /* unknown: collect */
+        }
+        pending.push(item);
+      }
+      if (!pending.length) return 0;
       let saved = 0;
       await withBusy("Capturing Creo metadata…", async () => {
         // Embedded Open prefers File > Open trail (returns before retrieve finishes).
         // Wait for the model in session; never disk-Retrieve after Open.
-        saved = await pushCreoMetadataForItems(items, {
+        saved = await pushCreoMetadataForItems(pending, {
           sessionOnly: true,
           sessionWaitRounds: 60,
           sessionWaitMs: 500,

@@ -227,9 +227,3 @@ def test_add_selected_looks_up_ids_the_reply_left_out():
     assert "async function fillAddedIds(result, productId)" in script
     tail = script.split('await withBusy("Collecting Creo metadata…", async () => {', 1)[1][:400]
     assert "await fillAddedIds(" in tail and tail.index("fillAddedIds") < tail.index("pushCreoMetadataForItems")
-
-
-def test_the_open_notice_keeps_the_toolkits_own_reason():
-    script = (JS / "creo_workspace.js").read_text(encoding="utf-8")
-    loop = script.split("if (sessionOnly || sessionWaitRounds > 0) {", 1)[1][:900]
-    assert "target.detail = String(snapshot.__detail || snapshot.__error" in loop
