@@ -36,8 +36,9 @@ def test_the_module_has_what_the_notice_needs():
 def test_no_stub_identity_is_saved_for_an_unreadable_file():
     """A stub identity would mark the file as collected and Collect all would then skip it for good."""
     script = _module()
-    save = script.split("const identityName", 1)[1][:200]
-    assert "if (!identityName) continue;" in save  # nothing is posted without a real identity name
+    save = script.split("const identityName", 1)[1][:400]
+    # nothing is posted without a real identity name (and the notice says why)
+    assert "if (!identityName) {" in save and "continue;" in save
     serializers = (ROOT / "src" / "creopdm" / "api" / "serializers.py").read_text(encoding="utf-8")
     assert "creo_metadata_captured" in serializers
 
@@ -55,3 +56,11 @@ def test_a_manual_collect_names_the_files_it_skipped_with_the_toolkit_reason():
     assert 'target.detail)?.detail' in script  # the Toolkit's own reason, when a manual run has it
     app = (ROOT / "src" / "creopdm" / "static" / "js" / "app.js").read_text(encoding="utf-8")
     assert "async function noteCollectFailures(failed, fromOpen)" in app and "    noteCollectFailures,\n" in app.replace("\r\n", "\n")
+
+
+def test_a_refused_or_failed_save_is_named_in_the_notice():
+    script = _module()
+    assert "the server did not save it:" in script and "saving failed:" in script
+    body = script.split("function noteCollectFailures", 1)[1].split("async function pushCreoMetadataForItems", 1)[0]
+    # with a reason the notice states it instead of the generic guess
+    assert "? `Metadata was not collected for ${shown}${more}: ${detail.slice(0, 160)}" in body

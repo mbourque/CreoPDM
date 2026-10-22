@@ -477,7 +477,6 @@ window.__creopdmModules.creo_workspace = {
         : "";
       // A manual Collect knows the Toolkit's own reason for the first file: show it.
       const detail = String(failed.find((target) => target.detail)?.detail || "").trim();
-      const why = detail ? ` (${detail.slice(0, 160)})` : "";
       // Files from a newer Creo: the reason IS the explanation, without the generic wording.
       let newerText = "";
       if (failed.every((target) => target.newerRelease)) {
@@ -500,7 +499,10 @@ window.__creopdmModules.creo_workspace = {
       }
       const text = newerText
         ? newerText
-        : `Metadata was not collected for ${shown}${more}. ${reason}${why}${hint} Collect it again once that is fixed.`;
+        : detail
+          // The real reason beats a guess ("Creo did not report the model" when the save was refused).
+          ? `Metadata was not collected for ${shown}${more}: ${detail.slice(0, 160)}${/[.!?]$/.test(detail) ? "" : "."}${hint} Collect it again once that is fixed.`
+          : `Metadata was not collected for ${shown}${more}. ${reason}${hint} Collect it again once that is fixed.`;
       showError($("#toolbar-error"), text);
       // A reload right after Add / Check in would clear the message: keep it for the next page,
       // but never past the moment it was meant for.
@@ -634,11 +636,17 @@ window.__creopdmModules.creo_workspace = {
             snapshot = null;
           }
         }
-        if (!snapshot) continue;
+        if (!snapshot) {
+          if (!target.detail) target.detail = "Creo returned no data for this model.";
+          continue;
+        }
         const identityName = String(
           snapshot.identity?.file_name || snapshot.identity?.full_name || ""
         ).trim();
-        if (!identityName) continue;
+        if (!identityName) {
+          target.detail = "Creo's reply had no model name.";
+          continue;
+        }
         const body = {
           version_id: target.versionId || null,
           identity: snapshot.identity || null,
@@ -678,6 +686,10 @@ window.__creopdmModules.creo_workspace = {
               body: JSON.stringify(body),
             }
           );
+          if (!response.ok) {
+            // The Toolkit read the model but CreoPDM refused to save it: say what the server said.
+            target.detail = `the server did not save it: ${String(await readError(response)).slice(0, 140)}`;
+          }
           if (response.ok) {
             saved += 1;
             savedIds.add(target.uuid);
@@ -687,8 +699,9 @@ window.__creopdmModules.creo_workspace = {
               objectFilename: target.filename,
             });
           }
-        } catch {
+        } catch (err) {
           /* soft-fail — metadata is best-effort */
+          target.detail = `saving failed: ${String(err?.message || err || "").slice(0, 140)}`;
         }
       }
       // A file the Toolkit could not read leaves no metadata: say so instead of staying silent.
