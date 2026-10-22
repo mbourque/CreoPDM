@@ -72,3 +72,15 @@ def test_opening_a_file_that_already_has_its_metadata_does_not_scan_it_again():
     body = script.split("async function captureCreoMetadataAfterOpen(result) {", 1)[1].split("async function rematerialize", 1)[0]
     assert "object.creo_metadata_captured === true" in body and "if (!pending.length) return 0;" in body
     assert "pushCreoMetadataForItems(pending," in body
+
+
+def test_a_bulk_subtype_makes_the_files_type_column_read_bulk():
+    import json
+
+    from creopdm.utils.creo_model_class import files_list_type_from_identity_json
+
+    identity = json.dumps({"file_name": "1s0122.prt", "model_type": "PART", "subtype": "BULK"})
+    assert files_list_type_from_identity_json(identity) == "BULK"
+    # an explicit role still wins; an ordinary part stays PART
+    assert files_list_type_from_identity_json(json.dumps({"model_type": "PART", "model_role": "BULK"})) == "BULK"
+    assert files_list_type_from_identity_json(json.dumps({"model_type": "PART", "subtype": "SOLID"})) == "PART"

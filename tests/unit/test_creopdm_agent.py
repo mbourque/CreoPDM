@@ -2609,3 +2609,11 @@ def test_agent_add_zip_is_compressed_not_just_stored():
     script = (Path(__file__).resolve().parents[2] / "src" / "creopdm_agent" / "server.py").read_text(encoding="utf-8")
     pack = script.split("creopdm-add-", 1)[1][:1800]
     assert "zipfile.ZIP_DEFLATED" in pack and "compresslevel=1" in pack and "ZIP_STORED" not in pack
+
+
+def test_a_failed_toolkit_snapshot_is_logged_with_the_file_and_the_reason():
+    from pathlib import Path
+
+    script = (Path(__file__).resolve().parents[2] / "src" / "creopdm_agent" / "server.py").read_text(encoding="utf-8")
+    snap = script.split('def toolkit_snapshot(', 1)[1][:3800]
+    assert "Toolkit collect failed for %s" in snap and "Toolkit collect unusable for %s" in snap

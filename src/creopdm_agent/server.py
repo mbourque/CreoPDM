@@ -3453,14 +3453,18 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         if disk_path:
             q.append(f"path={quote(disk_path)}")
         limit = max(10.0, min(180.0, float(timeout or 120.0)))
-        raw = _proxy_toolkit_get(f"/collect?{'&'.join(q)}", timeout=limit)
+        try:
+            raw = _proxy_toolkit_get(f"/collect?{'&'.join(q)}", timeout=limit)
+        except HTTPException as exc:
+            # The page only shows a short notice; the log keeps which file failed and why.
+            logger.warning("Toolkit collect failed for %s (domains=%s): %s", tip or "(no fileName)", domain_list, exc.detail)
+            raise
         # Always pass tip — Toolkit identity often omits file_name / uses filename.
         snapshot = map_toolkit_collect_to_snapshot(raw, fallback_filename=tip)
         if not snapshot:
-            raise HTTPException(
-                status_code=502,
-                detail=toolkit_snapshot_reject_reason(raw, fallback_filename=tip),
-            )
+            reason = toolkit_snapshot_reject_reason(raw, fallback_filename=tip)
+            logger.warning("Toolkit collect unusable for %s (domains=%s): %s", tip or "(no fileName)", domain_list, reason)
+            raise HTTPException(status_code=502, detail=reason)
         timings = raw.get("timings_ms") if isinstance(raw, dict) else None
         if isinstance(timings, dict) and timings:
             logger.info(

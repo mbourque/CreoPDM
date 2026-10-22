@@ -254,6 +254,31 @@ window.__creopdmModules.creo_workspace = {
       }
     }
 
+    /**
+     * A bulk item has no geometry, so the full collect (features, mass, parameters…) fails for it even
+     * though the Toolkit still identifies it. Ask for the identity alone: when it says BULK, that is
+     * the whole metadata a bulk item has, so save it instead of reporting a failure.
+     */
+    async function bulkIdentitySnapshot(base, tip, path) {
+      try {
+        const query = new URLSearchParams({ filename: tip, domains: "identity", timeout: "40" });
+        if (path) query.set("path", path);
+        const resp = await fetch(`${base}/toolkit/snapshot?${query}`, {
+          headers: agentAuthHeaders(),
+          signal: abortSignalAfter(50 * 1000),
+        });
+        if (!resp.ok) return null;
+        const body = await resp.json();
+        const snapshot = body?.snapshot;
+        const identity = snapshot && typeof snapshot === "object" ? snapshot.identity : null;
+        if (!body?.ok || !identity) return null;
+        const kind = String(identity.model_role || identity.subtype || "").trim().toUpperCase();
+        return kind === "BULK" ? snapshot : null;
+      } catch {
+        return null;
+      }
+    }
+
     async function gatherViaToolkitAgent(filename, filePath) {
       const tip = String(filename || "").trim();
       if (!tip) {
@@ -294,11 +319,16 @@ window.__creopdmModules.creo_workspace = {
                 : `${tip} was saved in a newer Creo than this session. A model saved in a newer Creo cannot be opened in an older one.`,
             };
           }
-          return { __error: "toolkit_snapshot_failed", __detail: detail };
+          return (
+            (await bulkIdentitySnapshot(base, tip, path))
+            || { __error: "toolkit_snapshot_failed", __detail: detail }
+          );
         }
         const body = await snapResp.json();
         const snapshot = body?.snapshot;
         if (!body?.ok || !snapshot || typeof snapshot !== "object" || !snapshot.identity) {
+          const bulk = await bulkIdentitySnapshot(base, tip, path);
+          if (bulk) return bulk;
           return {
             __error: "toolkit_snapshot_unusable",
             __detail: "Toolkit snapshot missing identity.",

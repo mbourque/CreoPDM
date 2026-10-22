@@ -64,6 +64,10 @@ _NO_SUBTYPE = frozenset({"NONE", "NIL", "NULL", "N/A", "UNSPECIFIED"})
 # Toolkit identity.subtype → model role, used when the Toolkit sent no recognised role.
 _SUBTYPE_ROLE_ALIASES: dict[str, str] = {
     "ASM_PROCPLAN": "PROCESS",
+    # A bulk item (no geometry): the Toolkit reports it as the subtype, so the Files Type column
+    # would read PART without this.
+    "BULK": "BULK",
+    "BULK_ITEM": "BULK",
 }
 
 

@@ -227,3 +227,11 @@ def test_add_selected_looks_up_ids_the_reply_left_out():
     assert "async function fillAddedIds(result, productId)" in script
     tail = script.split('await withBusy("Collecting Creo metadata…", async () => {', 1)[1][:400]
     assert "await fillAddedIds(" in tail and tail.index("fillAddedIds") < tail.index("pushCreoMetadataForItems")
+
+
+def test_a_bulk_item_is_saved_from_its_identity_when_the_full_collect_fails():
+    script = (JS / "creo_workspace.js").read_text(encoding="utf-8")
+    assert "async function bulkIdentitySnapshot(base, tip, path)" in script
+    assert 'domains: "identity"' in script and 'kind === "BULK" ? snapshot : null' in script
+    gather = script.split("async function gatherViaToolkitAgent(", 1)[1][:3200]
+    assert gather.count("bulkIdentitySnapshot(base, tip, path)") == 2  # a refused reply and an unusable one
