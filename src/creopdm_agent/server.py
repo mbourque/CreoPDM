@@ -33,7 +33,7 @@ logger = logging.getLogger("creopdm_agent")
 # Paths that stay reachable without a browser Bearer (status probe / OpenAPI).
 _AGENT_PUBLIC_PATHS = frozenset({"/health", "/docs", "/openapi.json", "/redoc"})
 
-# Large Add folders…: one ZIP_STORED upload to from-zip instead of 5-file multipart
+# Large Add folders…: one lightly compressed zip upload to from-zip instead of 5-file multipart
 # chunks (keep in sync with ADD_PATHS_ZIP_MIN in static/js/add.js).
 ADD_PATHS_ZIP_MIN_FILES = 50
 
@@ -2204,7 +2204,8 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         import_batch_id = (payload.import_batch_id or "").strip()[:80] or str(uuid.uuid4())
         job_id = (payload.job_id or "").strip()
 
-        # Large folder Adds: one store-only zip → from-zip (same pipe as Compressed data…).
+        # Large folder Adds: one zip (light deflate: smaller upload, small CPU cost) → from-zip
+        # (same pipe as Compressed data…). The 2 GB limit applies to this packed size.
         if len(jobs) >= ADD_PATHS_ZIP_MIN_FILES:
             zip_tmp: Path | None = None
             try:
@@ -2225,7 +2226,9 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                 )
                 progress.start()
                 try:
-                    with zipfile.ZipFile(zip_tmp, "w", compression=zipfile.ZIP_STORED) as zf:
+                    with zipfile.ZipFile(
+                    zip_tmp, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=1
+                ) as zf:
                         for path, rel in jobs:
                             arc = str(rel or path.name).replace("\\", "/").lstrip("/")
                             if not arc:

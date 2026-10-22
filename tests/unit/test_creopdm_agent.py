@@ -2102,7 +2102,7 @@ def test_agent_add_paths_comment_on_every_upload_chunk(tmp_path, monkeypatch):
 
 
 def test_agent_add_paths_uses_zip_for_large_batches(tmp_path, monkeypatch):
-    """50+ files pack one store-only zip → from-zip (not 5-file multipart)."""
+    """50+ files pack one lightly compressed zip → from-zip (not 5-file multipart)."""
     from creopdm_agent.server import ADD_PATHS_ZIP_MIN_FILES
 
     root = tmp_path / "src"
@@ -2600,3 +2600,12 @@ def test_toolkit_proxy_rejects_non_object_and_open_uses_same_decoder(tmp_path, m
         opened = client.get("/toolkit/open", params={"fileName": "cafe.prt"})
         assert opened.status_code == 200, opened.text
         assert opened.json()["toolkit"]["fileName"] == "café.prt"
+
+
+def test_agent_add_zip_is_compressed_not_just_stored():
+    """Large Adds compress (light deflate): a smaller upload keeps big folders under the 2 GB zip limit."""
+    from pathlib import Path
+
+    script = (Path(__file__).resolve().parents[2] / "src" / "creopdm_agent" / "server.py").read_text(encoding="utf-8")
+    pack = script.split("creopdm-add-", 1)[1][:1800]
+    assert "zipfile.ZIP_DEFLATED" in pack and "compresslevel=1" in pack and "ZIP_STORED" not in pack
