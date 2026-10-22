@@ -965,6 +965,10 @@ def test_product_workspace_content_stages_new_file_for_add(client, repo_parent, 
     assert added.status_code == 200, added.text
     objects = client.get(f"/api/products/{product['uuid']}/objects").json()
     assert any(item["filename"] == "notes.txt" for item in objects)
+    # The reply names the new object (uuid, path) so the page can collect its Creo metadata afterwards.
+    row = added.json()["ok"][0]
+    new_obj = next(item for item in objects if item["filename"] == "notes.txt")
+    assert row["uuid"] == new_obj["uuid"] and row["status"] == "added" and row["relative_path"] == "notes.txt"
 
 
 @requires_git

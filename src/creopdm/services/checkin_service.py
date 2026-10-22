@@ -599,10 +599,19 @@ class CheckinService:
         if to_add:
             try:
                 with session.begin_nested():
-                    self._add_workspace_files(session, product, to_add, message, "workspace")
+                    created = self._add_workspace_files(session, product, to_add, message, "workspace")
+                    by_path = {str(o.relative_path or "").replace("\\", "/").lower(): o for o in created}
                     for relative in to_add:
+                        # The uuid lets the page collect Creo metadata for what was just added.
+                        obj = by_path.get(relative.replace("\\", "/").lower())
                         ok.append(
-                            {"uuid": "", "filename": Path(relative).name, "status": "added", "path": relative}
+                            {
+                                "uuid": obj.uuid if obj is not None else "",
+                                "filename": obj.filename if obj is not None else Path(relative).name,
+                                "status": "added",
+                                "path": relative,
+                                "relative_path": str(obj.relative_path or "") if obj is not None else relative,
+                            }
                         )
             except Exception as exc:
                 if not isinstance(exc, CreoPDMError):
@@ -693,7 +702,8 @@ class CheckinService:
         relative_paths: list[str],
         comment: str,
         source_label: str = "workspace",
-    ) -> None:
+    ) -> list[EngineeringObject]:
+        """Add new vault files as objects; returns the created objects (callers need their uuids)."""
         siblings = self._objects.list_objects(session, product.id)
         available = {
             str(item["relative_path"]).replace("\\", "/").lower(): item
@@ -716,11 +726,15 @@ class CheckinService:
                 )
             jobs.append((source, source.name, relative))
         if not jobs:
-            return
+            return []
+        created: list[EngineeringObject] = []
         for outcome in self._objects.import_files(session, product, jobs, comment):
             if outcome.error is not None:
                 raise outcome.error
+            if outcome.obj is not None:
+                created.append(outcome.obj)
             logger.info("Added %s during check-in of %s", outcome.filename, source_label)
+        return created
 
     def _capture_parameters(
         self,
