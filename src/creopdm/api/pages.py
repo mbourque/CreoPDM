@@ -134,35 +134,18 @@ def _enrich_structure_rows(rows: list, by_logical: dict[str, str]) -> list[dict]
     return enriched
 
 
-# A folder with more files than this sends only the first ones in the page; the rest follow from
-# GET /products/{id}/files-rows (same row markup) so the first view appears quickly.
-FILES_FIRST_PAGE = 300
-
-
-def _folder_files(ctx: AppContext, db: Session, product, current_folder: str) -> tuple[list, list[dict]]:
-    """(files in this folder, folder entries) — raw objects, not yet presented."""
-    vault_names = ctx.workspaces.list_immediate_vault_folders(product, current_folder)
-    return ctx.objects.list_folder_view(
-        db, product.id, current_folder, vault_folder_names=vault_names
-    )
-
-
 def _folder_page(
     ctx: AppContext,
     db: Session,
     product,
     current_folder: str,
-    *,
-    first_files: int | None = None,
-) -> tuple[list, list, list[dict]]:
-    """Show imported folders plus the files that belong in this view.
-
-    Returns (every file in the folder, the presented files of this page, list entries). With
-    ``first_files`` only that many files are presented and rendered now; the caller sends the rest later.
-    """
-    files, folder_entries = _folder_files(ctx, db, product, current_folder)
-    shown = files if first_files is None or len(files) <= first_files else files[:first_files]
-    presented = present_objects(ctx, db, shown)
+) -> tuple[list, list[dict]]:
+    """Show imported folders plus only the files that belong in this view."""
+    vault_names = ctx.workspaces.list_immediate_vault_folders(product, current_folder)
+    files, folder_entries = ctx.objects.list_folder_view(
+        db, product.id, current_folder, vault_folder_names=vault_names
+    )
+    presented = present_objects(ctx, db, files)
     list_entries = list(folder_entries)
     for obj in presented:
         list_entries.append(
@@ -173,7 +156,7 @@ def _folder_page(
                 "depth": 0,
             }
         )
-    return files, presented, list_entries
+    return presented, list_entries
 
 
 _PAGE_DEFAULTS = {
@@ -533,7 +516,6 @@ def home(
     else:
         current_folder = normalize_folder_query(request.query_params.get("folder"))
     objects: list = []
-    all_files: list = []
     list_entries: list = []
     checkout_count = 0
     my_checkout_count = 0
@@ -544,9 +526,7 @@ def home(
     new_workspace_files = 0
     product_object_count = 0
     if product is not None:
-        all_files, objects, list_entries = _folder_page(
-            ctx, db, product, current_folder, first_files=FILES_FIRST_PAGE
-        )
+        objects, list_entries = _folder_page(ctx, db, product, current_folder)
         checkout_count = ctx.checkouts.count_for_product(db, product.id)
         my_checkout_count = ctx.checkouts.count_for_product(
             db, product.id, ctx.users.get_current_user().user_name
@@ -560,9 +540,8 @@ def home(
         watch = ctx.workspaces.watch_stamp(product, known)
         pending_saves = int(watch.get("pending_saves") or 0)
         new_workspace_files = int(watch.get("new_files") or 0)
-    # Counts always come from every file in the folder, not only the rows sent in this page.
     status = folder_view_counts(
-        all_files,
+        objects,
         current_folder,
         ctx.config.cad_models_extensions(),
         ctx.config.document_extensions(),
@@ -576,7 +555,7 @@ def home(
             top_level_assembly_uuids = ctx.metadata.top_level_assembly_uuids(db, product.id)
             top_set = set(top_level_assembly_uuids)
             status["top_level_assemblies"] = sum(
-                1 for obj in all_files if getattr(obj, "uuid", None) in top_set
+                1 for obj in objects if getattr(obj, "uuid", None) in top_set
             )
         else:
             status["top_level_assemblies"] = 0
@@ -591,19 +570,6 @@ def home(
             "products": products,
             "selected": selected,
             "objects": objects,
-            # Rows still to come (None: the page already holds every row).
-            "rows_tail": (
-                {
-                    "url": (
-                        f"/products/{quote(selected.uuid)}/files-rows"
-                        f"?folder={quote(current_folder)}&offset={len(objects)}"
-                    ),
-                    "total": len(all_files),
-                    "rendered": len(objects),
-                }
-                if selected is not None and len(all_files) > len(objects)
-                else None
-            ),
             "current_folder": current_folder,
             "folder_crumbs": folder_crumbs(current_folder),
             "list_entries": list_entries,
@@ -635,44 +601,6 @@ def home(
             **_watch_page_flags(request, ctx, db, product),
         },
     )
-
-
-@router.get("/products/{product_id}/files-rows", response_class=HTMLResponse)
-def files_rows(
-    product_id: str,
-    request: Request,
-    folder: str = "",
-    offset: int = 0,
-    db: Session = Depends(get_db),
-    ctx: AppContext = Depends(get_context),
-) -> HTMLResponse:
-    """The Files-list rows after the first page, rendered with the page's own row markup."""
-    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    product = load_accessible_product(request, ctx, db, product_id)
-    current_folder = normalize_folder_query(folder)
-    files, _folders = _folder_files(ctx, db, product, current_folder)
-    start = max(0, int(offset))
-    presented = present_objects(ctx, db, files[start:])
-    where_used_present = ctx.metadata.where_used_index_present(db, product.id)
-    top_level = ctx.metadata.top_level_assembly_uuids(db, product.id) if where_used_present else []
-    response = render(
-        request,
-        "partials/file_rows.html",
-        {
-            "entries": [
-                {"kind": "file", "object": obj, "folder": current_folder, "depth": 0} for obj in presented
-            ],
-            "selected": product_to_response(product),
-            "current_folder": current_folder,
-            "where_used_present": where_used_present,
-            "top_level_assembly_uuids": top_level,
-        },
-    )
-    # The client compares these with the page's own numbers; a mismatch means the folder changed.
-    response.headers["X-Rows-Total"] = str(len(files))
-    response.headers["X-Rows-Offset"] = str(start)
-    response.headers["Cache-Control"] = "no-store"
-    return response
 
 
 @router.get("/products/{product_id}/objects/{object_id}", response_class=HTMLResponse)

@@ -140,7 +140,7 @@
     {% endif %}
     <p class="muted small" id="search-scope" hidden>Showing matches from all folders.</p>
     <div class="table-wrap">
-      <table class="grid" id="object-table"{% if rows_tail %} data-rows-tail-url="{{ rows_tail.url }}" data-rows-total="{{ rows_tail.total }}" data-rows-rendered="{{ rows_tail.rendered }}"{% endif %}>
+      <table class="grid" id="object-table">
         <thead>
           <tr>
             <th data-sort="name" aria-sort="none" title="Sort by name. Click again to reverse.">Name</th>

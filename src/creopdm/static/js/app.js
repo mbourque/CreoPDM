@@ -1455,77 +1455,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     syncToolbar();
   }
 
-  // ---- Files rows after the first page ------------------------------------------------------------
-  // A folder with many files sends the first rows in the page (data-rows-tail-url on #object-table);
-  // the rest are fetched here as the page's own row markup and added in chunks, then everything that
-  // depends on the full list (sort, filter, counts, selection, comment glyphs) is refreshed once.
-  let fileRowsReadyPromise = Promise.resolve();
-
-  /** Resolves when every row of the Files list is in the page (at once when the folder is small). */
-  function whenFileRowsReady() {
-    return fileRowsReadyPromise;
-  }
-
-  function loadRemainingFileRows() {
-    const table = $("#object-table");
-    const url = table?.dataset.rowsTailUrl || "";
-    const tbody = table?.tBodies?.[0];
-    if (!table || !tbody || !url) return;
-    const total = Number(table.dataset.rowsTotal) || 0;
-    const rendered = Number(table.dataset.rowsRendered) || 0;
-    const note = document.createElement("p");
-    note.className = "muted small rows-loading";
-    note.id = "rows-loading";
-    note.textContent = `Loading ${Math.max(0, total - rendered)} more files…`;
-    table.closest(".table-wrap")?.after(note);
-    const finish = () => {
-      note.remove();
-      delete table.dataset.rowsTailUrl;
-    };
-    fileRowsReadyPromise = (async () => {
-      try {
-        const response = await fetch(url, { headers: { Accept: "text/html" }, signal: pageSignal });
-        const serverTotal = Number(response.headers.get("X-Rows-Total"));
-        if (!response.ok || (serverTotal && total && serverTotal !== total)) {
-          // The folder changed since the page was built (or the request failed): load the page again.
-          finish();
-          window.location.reload();
-          return;
-        }
-        const html = await response.text();
-        // The folder snapshot (what clearing a search restores) now holds every row, whatever happens next.
-        folderTbodyHtml += html;
-        if (objectTable.dataset.searching === "1") {
-          finish();
-          return;
-        }
-        const version = tableViewVersion;
-        const parts = html.split("</tr>");
-        const CHUNK = 400;
-        for (let i = 0; i < parts.length; i += CHUNK) {
-          if (pageSignal.aborted || version !== tableViewVersion) {
-            finish();
-            return;
-          }
-          const piece = parts.slice(i, i + CHUNK).join("</tr>");
-          if (piece.trim()) tbody.insertAdjacentHTML("beforeend", piece + (i + CHUNK < parts.length ? "</tr>" : ""));
-          note.textContent = `Loading ${Math.max(0, total - rendered - i - CHUNK)} more files…`;
-          await new Promise((resolve) => window.setTimeout(resolve, 16));
-        }
-        finish();
-        reapplyActiveTableSorts();
-        syncModifiedStateLabels();
-        refreshTabMetrics();
-        // Comment glyphs and anything else that decorates rows paints them again.
-        document.dispatchEvent(new CustomEvent("creopdm:rows-added"));
-      } catch (error) {
-        if (pageSignal.aborted) return;
-        finish();
-        console.warn("Could not load the remaining rows", error);
-      }
-    })();
-  }
-
   /** The Filter control belongs to the Files list and to an open baseline's files; every other tab hides it. */
   function syncFilterTabVisibility() {
     const off = activeListTab() !== "files" && !document.body.classList.contains("is-baseline-browse");
@@ -2581,13 +2510,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           </tr>`;
   }
 
-  // Bumped whenever the table body is replaced wholesale (search results, back to the folder): a
-  // tail of rows that is still being added must stop, the folder snapshot already holds it.
-  let tableViewVersion = 0;
-
   function showFolderView() {
     if (!objectTable || !objectTbody) return;
-    tableViewVersion += 1;
     objectTable.dataset.searching = "";
     objectTbody.innerHTML = folderTbodyHtml;
     if (searchScope) searchScope.hidden = true;
@@ -2599,7 +2523,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function showSearchMatches(items, productId) {
     if (!objectTable || !objectTbody) return;
-    tableViewVersion += 1;
     objectTable.dataset.searching = "1";
     if (searchScope) searchScope.hidden = false;
     if (folderCrumb) folderCrumb.hidden = true;
@@ -8412,11 +8335,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (pendingSearch) return;
     const wanted = new Set(saved.ids || []);
     if (wanted.size) {
-      // A selected file may be in the part of a big folder that is still loading.
-      void whenFileRowsReady().then(() => {
-        rows().forEach((row) => markRowSelected(row, wanted.has(row.dataset.uuid)));
-        syncToolbar();
-      });
+      rows().forEach((row) => markRowSelected(row, wanted.has(row.dataset.uuid)));
+      syncToolbar();
     }
   }
   restoreWatchView();
@@ -8874,7 +8794,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   resetFiltersOnProductSwitch();
   // Going back to the saved folder? Then leave the saved place alone until that page has loaded.
   if (!restoreListViewOnReopen()) rememberListView();
-  loadRemainingFileRows();
   restoreStoredFilters();
   syncFilterMenu();
   syncToolbar();
@@ -9050,7 +8969,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   async function consumeNavigatorDeepLink() {
     if (!isListPage) return;
-    await whenFileRowsReady();
     let params;
     try {
       params = new URLSearchParams(window.location.search);
