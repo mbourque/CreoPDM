@@ -106,12 +106,12 @@ def test_the_menu_follows_the_counts_and_the_control_is_closed_by_esc_and_outsid
 
 def test_switching_products_resets_the_filter_but_a_reload_keeps_it():
     app = _app_js()
-    reset = app.split("function resetFiltersOnProductSwitch() {", 1)[1].split("function clearProductViewStorage(", 1)[0]
-    assert 'sessionStorage.getItem("creopdm.filterProduct")' in reset and "if (last === product) return;" in reset
+    reset = app.split("function resetFiltersOnProductSwitch() {", 1)[1].split("const LIST_VIEW_MAX_AGE_MS", 1)[0]
+    assert 'localStorage.getItem("creopdm.filterProduct")' in reset and "if (last === product) return;" in reset
     assert "clearProductFilterStorage(product);" in reset and "if (last) clearProductFilterStorage(last);" in reset
     # it runs before the stored filter is restored at boot
-    boot = app[app.index("  resetFiltersOnProductSwitch();\n  restoreStoredFilters();"):][:140]
-    assert "syncFilterMenu();" in boot
+    boot = app[app.index("  resetFiltersOnProductSwitch();\n"):][:520]
+    assert "restoreStoredFilters();" in boot and "syncFilterMenu();" in boot
     # filters only: the sort storage is left alone
     clear = app.split("function clearProductFilterStorage(productId) {", 1)[1].split("}\n\n  /**", 1)[0]
     assert "creopdm.filters." in clear and "creopdm.sort." not in clear
@@ -242,3 +242,35 @@ def test_the_notification_panel_is_not_inside_a_span():
     base = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
     assert '<div class="notif-wrap">' in base and '<span class="notif-wrap">' not in base
     assert ".notif-wrap { position: relative; display: inline-flex; }" in CSS.read_text(encoding="utf-8")
+
+
+def test_filter_and_search_survive_a_reopened_browser():
+    """Regression: Creo recreates its embedded browser (new session storage) when its panel is expanded;
+    the filter was reset (marker in sessionStorage) and the search text was lost (sessionStorage)."""
+    app = _app_js()
+    reset = app.split("function resetFiltersOnProductSwitch() {", 1)[1].split("const LIST_VIEW_MAX_AGE_MS", 1)[0]
+    assert "sessionStorage" not in reset  # the marker lives in localStorage
+    assert "function readListSearchState()" in app and "LIST_SEARCH_MAX_AGE_MS" in app
+    persist = app.split("function persistListSearchState() {", 1)[1].split("function persistListTabState(", 1)[0]
+    assert "localStorage.setItem(" in persist and "at: Date.now()" in persist
+    assert "sessionStorage.getItem(LIST_SEARCH_KEY)" not in app and "sessionStorage.setItem(\n        LIST_SEARCH_KEY" not in app
+    # a search older than a working day is dropped, and so is one from another product
+    read = app.split("function readListSearchState() {", 1)[1].split("function persistListSearchState()", 1)[0]
+    assert "LIST_SEARCH_MAX_AGE_MS" in read and "localStorage.removeItem(LIST_SEARCH_KEY)" in read
+    restore = app.split("async function restoreListSearchState() {", 1)[1][:900]
+    assert "saved.productId !== productId" in restore
+
+
+def test_a_reopened_browser_returns_to_the_last_folder_and_tab():
+    app = _app_js()
+    restore = app.split("function restoreListViewOnReopen() {", 1)[1].split("function applyReopenTab()", 1)[0]
+    # only the first page load of a session, never a soft navigation
+    assert 'sessionStorage.getItem("creopdm.sessionStarted")' in restore and "|| soft" in restore
+    # an explicit address always wins
+    assert '["folder", "tab", "baseline", "file", "select", "q"]' in restore
+    assert "LIST_VIEW_MAX_AGE_MS" in restore and "window.location.replace(" in restore
+    boot = app[app.index("  resetFiltersOnProductSwitch();\n  // Going back to the saved folder?"):][:260]
+    assert "if (!restoreListViewOnReopen()) rememberListView();" in boot
+    assert "applyReopenTab();" in app and "rememberListView(name);" in app
+    remember = app.split("function rememberListView(tabName) {", 1)[1].split("function restoreListViewOnReopen()", 1)[0]
+    assert "localStorage.setItem(" in remember and "listViewKey(productId)" in remember

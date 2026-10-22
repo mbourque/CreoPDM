@@ -539,6 +539,24 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   const WATCH_KEY = "creopdmWatchRestore";
   const LIST_RESTORE_TABS = new Set(["files", "checked-out", "modified", "changes"]);
 
+  // The search text outlives a reopened browser (Creo recreates its embedded browser when its panel is
+  // expanded, which starts a new session): kept in localStorage, but only for a working day.
+  const LIST_SEARCH_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+  function readListSearchState() {
+    try {
+      const raw = localStorage.getItem(LIST_SEARCH_KEY);
+      if (!raw) return null;
+      const saved = JSON.parse(raw);
+      if (!saved || (saved.at && Date.now() - Number(saved.at) > LIST_SEARCH_MAX_AGE_MS)) {
+        localStorage.removeItem(LIST_SEARCH_KEY);
+        return null;
+      }
+      return saved;
+    } catch {
+      return null;
+    }
+  }
+
   function persistListSearchState() {
     try {
       const input = document.querySelector("#search-input");
@@ -546,7 +564,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const q = (input.value || "").trim();
       const productId = currentProductId();
       if (!productId || !q) {
-        sessionStorage.removeItem(LIST_SEARCH_KEY);
+        localStorage.removeItem(LIST_SEARCH_KEY);
         return;
       }
       const ids =
@@ -555,9 +573,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           : [...document.querySelectorAll("#object-table tr.object-row.is-selected")]
               .map((row) => row.dataset.uuid)
               .filter(Boolean);
-      sessionStorage.setItem(
+      localStorage.setItem(
         LIST_SEARCH_KEY,
-        JSON.stringify({ productId, q, ids })
+        JSON.stringify({ productId, q, ids, at: Date.now() })
       );
     } catch {
       /* private mode / blocked storage */
@@ -2597,19 +2615,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   async function restoreListSearchState() {
     if (!searchInput || !objectTable || !isListPage) return;
-    let raw = null;
-    try {
-      raw = sessionStorage.getItem(LIST_SEARCH_KEY);
-    } catch {
-      return;
-    }
-    if (!raw) return;
-    let saved;
-    try {
-      saved = JSON.parse(raw);
-    } catch {
-      return;
-    }
+    const saved = readListSearchState();
+    if (!saved) return;
     const productId = currentProductId();
     const query = String(saved?.q || "").trim();
     if (!query || !productId || saved.productId !== productId) return;
@@ -3961,7 +3968,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!product) return;
     let last = "";
     try {
-      last = sessionStorage.getItem("creopdm.filterProduct") || "";
+      last = localStorage.getItem("creopdm.filterProduct") || "";
     } catch {
       last = "";
     }
@@ -3969,10 +3976,91 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     clearProductFilterStorage(product);
     if (last) clearProductFilterStorage(last);
     try {
-      sessionStorage.setItem("creopdm.filterProduct", product);
+      localStorage.setItem("creopdm.filterProduct", product);
     } catch {
       /* private mode */
     }
+  }
+
+  /**
+   * Where the user was (folder and list tab), kept per product on this PC. Creo recreates its embedded
+   * browser (new session, back to the start address) when its panel is expanded; the first page load of
+   * such a session returns to this place. A click on a product in the sidebar later in the session still
+   * opens its top folder.
+   */
+  const LIST_VIEW_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+  function listViewKey(productId) {
+    return `creopdm.view.${productId}`;
+  }
+
+  function rememberListView(tabName) {
+    try {
+      if (!document.querySelector("#object-table")) return;
+      const productId = currentProductId();
+      if (!productId) return;
+      const params = new URLSearchParams(window.location.search);
+      const rawTab = tabName ?? document.querySelector(".tabs .tab.is-active")?.dataset.tab ?? "files";
+      const tab = LIST_RESTORE_TABS.has(String(rawTab)) ? String(rawTab) : "files";
+      localStorage.setItem(
+        listViewKey(productId),
+        JSON.stringify({ folder: params.get("folder") || "", tab, at: Date.now() })
+      );
+    } catch {
+      /* private mode / blocked storage */
+    }
+  }
+
+  /** First page load of a browser session: go back to the folder and tab last used on this product. */
+  function restoreListViewOnReopen() {
+    let firstLoad = false;
+    try {
+      firstLoad = !sessionStorage.getItem("creopdm.sessionStarted");
+      sessionStorage.setItem("creopdm.sessionStarted", "1");
+    } catch {
+      return false;
+    }
+    if (!firstLoad || soft || !document.querySelector("#object-table")) return false;
+    const productId = currentProductId();
+    if (!productId) return false;
+    const params = new URLSearchParams(window.location.search);
+    // An explicit address (a link, a notification, a folder, a tab, a baseline) always wins.
+    if (["folder", "tab", "baseline", "file", "select", "q"].some((key) => params.get(key))) return false;
+    let saved = null;
+    try {
+      saved = JSON.parse(localStorage.getItem(listViewKey(productId)) || "null");
+    } catch {
+      saved = null;
+    }
+    if (!saved || !saved.at || Date.now() - Number(saved.at) > LIST_VIEW_MAX_AGE_MS) return false;
+    const tab = LIST_RESTORE_TABS.has(String(saved.tab || "")) ? String(saved.tab) : "files";
+    if (tab !== "files") {
+      try {
+        sessionStorage.setItem("creopdm.reopenTab", tab);
+      } catch {
+        /* ignore */
+      }
+    }
+    if (saved.folder) {
+      window.location.replace(
+        `/?product=${encodeURIComponent(productId)}&folder=${encodeURIComponent(String(saved.folder))}`
+      );
+      return true;
+    }
+    return false;
+  }
+
+  /** After the page is built: open the list tab that was active before the browser was reopened. */
+  function applyReopenTab() {
+    let tab = "";
+    try {
+      tab = sessionStorage.getItem("creopdm.reopenTab") || "";
+      if (tab) sessionStorage.removeItem("creopdm.reopenTab");
+    } catch {
+      return;
+    }
+    if (!tab || !LIST_RESTORE_TABS.has(tab) || tab === "files") return;
+    const button = document.querySelector(`.tabs .tab[data-tab="${tab}"]`);
+    if (button && !button.hidden && !button.disabled) button.click();
   }
 
   function clearProductViewStorage(productId) {
@@ -8052,6 +8140,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       // Keep list tab ready for Details → Back (Details boot must not consume it).
       if (LIST_RESTORE_TABS.has(String(name || "")) && document.querySelector("#object-table")) {
         persistListTabState(name);
+        rememberListView(name);
       }
     });
   });
@@ -8227,12 +8316,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     // Search restore rewrites the Files tbody — skip folder-row selection when
     // a saved search will re-select after results load.
-    let pendingSearch = null;
-    try {
-      pendingSearch = sessionStorage.getItem(LIST_SEARCH_KEY);
-    } catch {
-      pendingSearch = null;
-    }
+    const pendingSearch = readListSearchState();
     if (pendingSearch) return;
     const wanted = new Set(saved.ids || []);
     if (wanted.size) {
@@ -8242,6 +8326,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
   restoreWatchView();
   void restoreListSearchState();
+  applyReopenTab();
 
   function watchIdleMinutes() {
     const idleMinutesRaw = Number.parseInt(
@@ -8692,6 +8777,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   };
 
   resetFiltersOnProductSwitch();
+  // Going back to the saved folder? Then leave the saved place alone until that page has loaded.
+  if (!restoreListViewOnReopen()) rememberListView();
   restoreStoredFilters();
   syncFilterMenu();
   syncToolbar();
@@ -8796,7 +8883,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (searchInput && String(searchInput.value || "").trim()) {
       searchInput.value = "";
       try {
-        sessionStorage.removeItem(LIST_SEARCH_KEY);
+        localStorage.removeItem(LIST_SEARCH_KEY);
       } catch {
         /* ignore */
       }
