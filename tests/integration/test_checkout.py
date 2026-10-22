@@ -59,6 +59,10 @@ def test_checkout_blocked_when_product_in_review(client, repo_parent):
     assert "product-access-banner" in page.text
     assert "This product is" in page.text
     assert "are blocked" not in page.text
+    # The Details page keeps the same banner (it used to appear on the Files page only).
+    detail = client.get(f"/products/{product['uuid']}/objects/{obj['uuid']}")
+    assert detail.status_code == 200, detail.text
+    assert 'id="product-access-banner"' in detail.text and "This product is" in detail.text
     assert 'id="product-state-badge"' in page.text
     assert 'data-state="IN_REVIEW"' in page.text
     assert "In Review" in page.text

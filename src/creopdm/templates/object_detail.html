@@ -127,6 +127,10 @@
     </div>
   </header>
 
+  {% if product_ui.show_access_banner %}
+  <p class="warn-note" id="product-access-banner">This product is <strong>{{ product.state.replace('_', ' ') | title }}</strong>.</p>
+  {% endif %}
+
   {% if version_view %}
   <p class="baseline-frozen" id="version-banner">
     {% if version_view.baseline %}Frozen in baseline <strong>{{ version_view.baseline.name }}</strong>, read-only. {% endif %}
