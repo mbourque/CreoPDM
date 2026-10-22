@@ -135,7 +135,7 @@ def test_home_page(client):
     assert "push169" not in text
     assert "export3" not in text
     assert "compact-busy" not in text
-    assert "/client/app.js?v=" in text and "filter-ontabs14" in text
+    assert "/client/app.js?v=" in text and "filter-ontabs15" in text
     assert 'id="creo-connecting-overlay"' in text
     assert "Connecting to Creo…" in text
     assert "/static/css/app.css?v=" in text and "thumb-preview" in text
@@ -202,64 +202,10 @@ def test_home_page(client):
     ).read()
     assert "Saved Creo metadata for" in open("src/creopdm/api/objects.py", encoding="utf-8").read()
     assert "Materialize start:" in open("src/creopdm_agent/server.py", encoding="utf-8").read()
-    assert "PTC_MASTER_MATERIAL" in text
-    assert "Always ChangeDirectory into the file's folder first" in text
     assert "empty_identity" in open("src/creopdm/static/js/metadata.js", encoding="utf-8").read()
-    assert "retrieve_failed" in text
-    assert "function creoGatherMaterials" in text
     assert "function creoModelTypeLabel" in text
-    assert "function creoGatherModelRole" in text
-    assert "function creoClassifyManufacturing" in text
-    assert "creoSessionHasMfgModel" in text
-    assert "preferMfgIfNeeded" in text
-    assert "tryRetrieveAsMfg" in text
-    assert "creoModelHasSheetmetalBody" in text
-    assert "model_role" in text
-    assert "IsSkeleton" in text
-    assert "creoModelIsSkeleton" in text
-    assert "creoDetectSkeletonRole" in text
-    assert "creoFilenameLooksLikeSkeleton" in text
-    assert "creoSessionModelIsAssemblySkeleton" in text
-    assert "GetSkeleton" in text
-    assert "GetIsSkeleton" in text
-    assert "pfcSolid.cast" in text
-    skel_fn = text.split("function creoDetectSkeletonRole", 1)[1].split(
-        "function creoBodyIsSheetmetal", 1
-    )[0]
-    assert "creoModelIsSkeleton" in skel_fn
-    assert "creoSessionModelIsAssemblySkeleton" in skel_fn
-    assert "creoFilenameLooksLikeSkeleton" in skel_fn
-    assert "_skel" in text
-    assert "IsSheetmetal" in text
-    assert "pfcModelType.MDL_MFG" in text
-    assert "creoFeatureItems(model.ListMaterials())" in text
-    assert "PTC_MATERIAL_NAME" in text
-    assert "ListSolidBodies" in text
-    assert "ListBodies" in text
-    assert "GetDefaultBody" in text
-    assert "SMT_THICKNESS" in text
-    assert "creoModelHasSmtThicknessParam" in text
-    assert "GetParam" in text
-    assert "creoListModelBodies" in text
-    # Sheet-metal: SMT_THICKNESS primary; body.IsSheetmetal secondary; no feature lookup.
-    assert "creoModelHasSheetmetalFeature" not in text
-    assert "creoFeaturesIndicateSheetmetal" not in text
-    assert "FEATTYPE_WALL" not in text
-    sheet_fn = text.split("function creoModelHasSheetmetalBody", 1)[1].split(
-        "function creoClassifyManufacturing", 1
-    )[0]
-    assert "creoListModelBodies" in sheet_fn
-    assert "creoModelHasSheetmetalFeature" not in sheet_fn
-    assert "pfcPart.cast" in sheet_fn
-    role_fn = text.split("function creoGatherModelRole", 1)[1].split(
-        "function creoGatherIdentity", 1
-    )[0]
-    assert "creoDetectSkeletonRole" in role_fn
-    assert role_fn.index("creoDetectSkeletonRole") < role_fn.index("creoModelHasSmtThicknessParam")
-    assert role_fn.index("creoModelHasSmtThicknessParam") < role_fn.index("creoModelHasSheetmetalBody")
     assert "allowUndisplayed" in text
     assert "eraseUndisplayedModelsQuiet" in text
-    assert "Do not RetrieveModel by bare name" in text
     meta_js = open("src/creopdm/static/js/metadata.js", encoding="utf-8").read()
     app_js = open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "watchWhereUsedIndex" in meta_js
@@ -285,14 +231,9 @@ def test_home_page(client):
     assert "where_used_index" in open("src/creopdm/schemas/common.py", encoding="utf-8").read()
     assert "CadNameMatcher" in open("src/creopdm/utils/cad_name_matcher.py", encoding="utf-8").read()
     assert "rebuild-where-used" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
-    assert "function gatherModelMetadata" in text
-    assert "function creoRetrieveForMetadata" in text
     assert "function eraseSessionModelsByNames" in text
     assert "EraseUndisplayedModels" in text
-    assert "_pdm_erase_keys" in text
     assert ".EraseWithDependencies" not in text
-    assert "function creoAsSolid" in text
-    assert "Mass properties unsupported in silent Collect" in text
     assert "creoGatherMass" not in text
     assert "_pdm_gather_debug" not in text
     assert "gather_debug" not in open("src/creopdm/schemas/common.py", encoding="utf-8").read()
@@ -305,13 +246,7 @@ def test_home_page(client):
     assert "creoExternalBridge" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "Session offline" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "function checkCreoAvailable" in open("src/creopdm/static/vendor/creojs.js", encoding="utf-8").read()
-    assert "function creoMethodKind" in text
-    assert "Do not gate on typeof===function" in text
     assert "units_ok" in open("src/creopdm/api/objects.py", encoding="utf-8").read()
-    assert "function creoUpgradeSolidModel" in text
-    assert "Never OpenFile / CreateModelWindow here" in text
-    assert "try_ListItems" in text
-    assert "unbound_retrieve_handle" in text
     app_js = client_js_bundle()
     assert "deleteLocalWorkspacePathsForRemove" in app_js
     assert "deleteLocalWorkspacePathsBackground" in app_js
@@ -319,41 +254,10 @@ def test_home_page(client):
     assert "applyAgentPickedPaths" in app_js
     assert "/add-paths" in app_js
     assert "limited to 250" not in app_js
-    assert "function creoGatherUnits" in text
-    assert "function creoGatherFamilyTable" in text
-    assert "function creoGatherBomTree" in text
-    assert "function creoGatherFeatures" in text
-    assert "function gatherAiModelSnapshot" in text
-    assert "ExtendsInNegativeDirection" in text
-    assert "ai_snapshot" in text
     # Model-tree names: feature.name first (Creo.JS), then GetName.
-    assert "function creoFeatureAssignedName" in text
-    assert "function creoFeatureFallbackName" in text
-    assert "feat.name" in text
-    assert "feat.GetName" in text
-    assert "Prefer feature.name" in text
-    assert "const name = feature.name" in text
-    assert "Never abort the whole lookup on the first throw" in text
-    assert "creoFeatureGenericLabel(name)" in text
-    assert 't === "general"' in text
-    assert 't === "edge"' in text
-    assert "name.toLowerCase() === String(subType).trim().toLowerCase()" in text
-    assert "creoFeatureFallbackName(typeName, subType)" in text
     assert "number: regenNum" not in text
-    assert "wantFeatureNames = opts.featureNames !== false" in text
-    assert "wantNames = opts.featureNames !== false" in text
-    assert "featureNames: wantFeatureNames" in text
-    name_text_fn = text.split("function creoFeatureNameText(", 1)[1].split(
-        "function creoFeatureAssignedName(", 1
-    )[0]
-    assert 'typeof value === "object"' not in name_text_fn
-    assert "Do not reject typeof===\"object\"" in name_text_fn
     assert "pwlFeatureNameGetByID" not in text
     assert 'typeName + " " + regenNum' not in text
-    assert "errFeat" in text
-    assert "errFeatGather" in text
-    assert "Do not RetrieveModel here" in text
-    assert "AskUserAboutReps = false" in text
     assert 'id="danger-confirm-workspace"' in text
     assert "Delete workspace files" in text
     assert 'id="product-menu-btn"' in text

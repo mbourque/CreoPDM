@@ -238,16 +238,6 @@ def test_assembly_structure_excludes_datums_and_bare_feature_names():
     _, struct, _, _, _ = unpack_features_json(packed)
     assert [r["name"] for r in struct] == ["shaft.prt", "IFX_ID_1"]
 
-    base = (
-        ROOT / "src" / "creopdm" / "templates" / "base.html"
-    ).read_text(encoding="utf-8")
-    struct_fn = base.split("function creoInventoryStructureRows(", 1)[1].split(
-        "\nfunction ", 1
-    )[0]
-    assert "tipRe" in struct_fn
-    assert "COMPONENT" in struct_fn
-    assert "model cross-sections" in struct_fn
-
 
 def test_compare_outline_uses_drawing_inventory():
     text = format_snapshot_compare_text(

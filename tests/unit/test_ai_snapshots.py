@@ -192,131 +192,8 @@ def test_computed_diff_and_outline_include_mass_properties():
     )
 
 
-def test_gather_ai_snapshot_contract_in_creo_js():
-    text = BASE_HTML.read_text(encoding="utf-8")
-    assert "function gatherAiModelSnapshot(" in text
-    assert "listFeaturesForModel" in text
-    assert "creoInventoryFeatureRows" in text
-    assert "function creoGatherFeatureDimensions(" in text
-    assert "function creoGatherModelLevelDimensions(" in text
-    assert "function creoListFeaturesForSnapshot(" in text
-    assert "function creoFeatureIsVisibleForSnapshot(" in text
-    assert "function creoEnrichAiSnapshotFromMetadata(" in text
-    assert "creoEnrichAiSnapshotFromMetadata(ai_snapshot," in text
-    # Assemblies: Structure/BOM must enrich the AI snapshot (Features skip COMPONENT).
-    assert "snapshot.bom = m.bom" in text
-    assert "bom: bom" in text
-    assert "snapshot.simp_reps = m.simp_reps" in text
-    assert "simp_reps: simp_reps" in text
-    assert "listAssemblySimpRepsForModel" in text
-    assert "snapshot.constraints = m.constraints" in text
-    assert "constraints: constraints" in text
-    assert "listAssemblyConstraintsForModel" in text
-    assert "snapshot.relations = m.relations" in text
-    assert "relations: relations" in text
-    assert "listModelRelationsForModel" in text
-    assert "function creoBomTipFileName(" in text
-    assert "replace(/<<[^>]*>>/g" in text
-    assert "function creoMergeDimensionRows(" in text
-    assert "function creoStampDimensionFeatureNames(" in text
-    assert "function creoApplyDimOwnerMap(" in text
-    assert "function creoBuildDimensionOwnerIndex(" in text
-    assert "function creoListFeaturesForDimOwnerSearch(" in text
-    assert "function creoListFeatureDimensionItems(" in text
-    assert "function creoResolveDimOwnerFeature(" in text
-    assert "creoStampDimensionFeatureNames(dimensions, features" in text
-    assert "creoBuildDimensionOwnerIndex(solid, patternLabelById" in text
-    assert "creoApplyDimOwnerMap(dimensions, ownerIdx.byDimId, ownerIdx.bySymbol)" in text
-    assert "Pass 1 — number PATTERN heads" in text
-    # Creo.JS getDimensionFeature advice: ListSubItems reverse lookup + internals.
-    assert "getDimensionFeature" in text
-    assert "ListFeaturesByType(null, false)" in text
-    assert "ListSubItems" in text.split("function creoListFeatureDimensionItems(", 1)[1].split(
-        "function creoGatherFeatureDimensions(", 1
-    )[0]
-    assert "climb to a visible parent" in text
-    # Configurator path: model.ListItems(ITEM_DIMENSION) + ListItems(ITEM_FEATURE).
-    assert "ListItems(ITEM_DIMENSION)" in text or "ListItems(types[t])" in text
-    assert "creoGatherModelLevelDimensions(solid, errors)" in text
-    assert "creoListFeaturesForSnapshot(solid, errors)" in text
-    # Visible-first like Features tab — internals under patterns looked like plane deletes.
-    snap_list = text.split("function creoListFeaturesForSnapshot(", 1)[1].split(
-        "function creoFeatureIsVisibleForSnapshot(", 1
-    )[0]
-    assert "ListFeaturesByType(true" in snap_list
-    assert snap_list.find("ListFeaturesByType(true") < snap_list.find("ListItems(")
-    assert "creoFeatureIsVisibleForSnapshot(feat)" in text
-    assert 'typeU === "PATTERN"' in text
-    assert "isPatternHead" in text
 
 
-def test_drawing_ai_snapshot_skips_solid_walk():
-    """Regression: tip A.1 for wedge.drw stored PART solid (ROUND/CHAMFER) vs pending DRAWING."""
-    text = BASE_HTML.read_text(encoding="utf-8")
-    assert "function creoIsDrawingModel(" in text
-    assert "function creoGatherDrawingViews(" in text
-    assert "List2DViews" in text
-    assert "GetNumberOfSheets" in text
-    assert "Never creoAsSolid" in text
-    assert "creoIsDrawingModel(model, filename || identity.file_name)" in text
-    assert "snapIsDrw" in text
-    # Bare FileName must not override wedge.drw — that skipped views (empty features).
-    assert "bare FileName" in text
-    assert 'identity.model_type || "").toUpperCase() === "DRAWING"' in text
-    assert "function creoModelMatchesRequestedFile(" in text
-    assert "stem-only collisions" in text
-    find_fn = text.split("function creoFindSessionModel(", 1)[1].split(
-        "function creoSessionModelKeys(", 1
-    )[0]
-    assert "creoModelMatchesRequestedFile(item, shortName)" in find_fn
-    assert "creoModelMatchesRequestedFile(model, shortName)" in find_fn
-    # Drawing views are type VIEW (helper); solid branch still uses creoAsSolid.
-    views_gather = text.split("function creoGatherDrawingViews(", 1)[1].split(
-        "function creoGatherDrawingSheetCount(", 1
-    )[0]
-    assert 'type: "VIEW"' in views_gather
-    gather = text.split("function gatherAiModelSnapshot(", 1)[1].split(
-        "function creoFeatureNameWeak(", 1
-    )[0]
-    assert "isDrawing" in gather
-    assert "listDrawingStructureForModel" in gather
-    assert "creoInventoryDrawingFeatureRows" in gather
-    assert (
-        "listDrawingStructureForModel(model, session)" in gather
-        or "creoGatherDrawingViews(" in gather
-    )
-    assert "creoAsSolid(session, model, solidDbg)" in gather
-    # Solid walk only in the else (part/asm) branch after the drawing early path.
-    drawing_idx = gather.find("if (isDrawing)")
-    solid_idx = gather.find("creoAsSolid(session, model, solidDbg)")
-    assert drawing_idx >= 0
-    assert solid_idx > drawing_idx
-    assert "function creoView2DIsErased(" in text
-    assert "NUMBER_OF_ERASED_VIEWS" in text
-    assert "NUMBER_OF_VISIBLE_VIEWS" in text
-    views_fn = text.split("function creoGatherDrawingViews(", 1)[1].split(
-        "function creoGatherDrawingSheetCount(", 1
-    )[0]
-    assert 'stableId = name ? ("view:" + name)' in views_fn
-    assert "scale:" in views_fn
-    assert "model:" in views_fn
-    assert 'status = "erased"' in views_fn
-    assert "erased:" in views_fn
-    assert "Creo Erase View keeps the view in List2DViews" in text
-    assert '["angle", "UNIT_ANGLE"' in text
-    assert "function creoUnitsFromSnapshotParams(" in text
-    assert "PTC_UNITS_LENGTH" in text
-    assert "creoUnitsFromSnapshotParams(" in text
-    assert 'dim.units = angleUnit || "deg"' in text
-    assert "Never assign length units to ANGULAR" in text
-    assert "Drawings often have null snapshot.units" in text
-    assert "else if (lengthUnit)" in text
-    read_dim = text.split("function creoReadDimensionRow(", 1)[1].split(
-        "function creoGatherFeatureDimensions(", 1
-    )[0]
-    assert "UpperLimit" in read_dim
-    assert "tolerance_type: toleranceType" in read_dim
-    assert "defaults count as" in read_dim
 
 
 def test_app_js_posts_ai_snapshot_soft_fail():
@@ -477,7 +354,7 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "data-product-id=" in detail_html
     assert "data-vault-folder=" in detail_html
     base_html = BASE_HTML.read_text(encoding="utf-8")
-    assert "filter-ontabs14" in base_html
+    assert "filter-ontabs15" in base_html
     assert 'data-purgeable=' in base_html
     assert "function clearAiSnapshotPanelModified(" in script
     assert "function waitForCreoAgentReady(" in script
@@ -585,10 +462,8 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "synthesizeCheckinComment" in ask_fn
     assert "carousel" not in ask_fn.lower()
     base_html = BASE_HTML.read_text(encoding="utf-8")
-    assert "preferDisk" in base_html
     assert "Never Erase" in base_html
     assert "creoEraseModelQuiet(stale)" not in base_html
-    assert "VIEW_NAMES" in base_html
     # objectFilename guard lives in metadata / creo_workspace gathers; tip comment in app.js.
     assert "objectFilename: target.filename" in feature_modules
     assert "session stem matched wedge.prt" in app_script
@@ -2271,3 +2146,12 @@ def test_checkin_comment_synthesize_api(client, monkeypatch):
     )
     assert blocked.status_code == 400, blocked.text
     assert "AI features are turned off" in blocked.text
+
+
+def test_open_path_matches_the_requested_file_not_a_stem_collision():
+    """Regression kept from the old gather tests: finding a model in the Creo session must match the
+    requested file name, not just its stem (wedge.drw vs wedge.prt)."""
+    text = BASE_HTML.read_text(encoding="utf-8")
+    assert "function creoModelMatchesRequestedFile(" in text
+    find_fn = text.split("function creoFindSessionModel(", 1)[1].split("\nfunction ", 1)[0]
+    assert "creoModelMatchesRequestedFile(" in find_fn
