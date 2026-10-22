@@ -2180,7 +2180,7 @@ def test_search_results_sort_by_column_not_folder_path():
     """Regression: * search Type sort must not group by vault folder first."""
     script = _app_shell_js()
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
-    sort_fn = _between(script, "function sortValue(row, key, columnIndex) {", "function reapplyActiveTableSorts(")
+    sort_fn = _between(script, "function sortValue(row, key, columnIndex, searchFlatKnown) {", "function reapplyActiveTableSorts(")
     assert 'dataset?.searching === "1"' in sort_fn
     assert 'key === "type"' in sort_fn
     assert "sortValueLeaf" in sort_fn
@@ -3066,3 +3066,28 @@ def test_product_list_never_shows_local_placeholder_for_empty_number():
         assert "{% else %}Local{% endif %}" not in text, name
     app = (root / "_sidebar.html").read_text(encoding="utf-8")
     assert "{% if product.number %}<span class=\"product-number\">" in app
+
+
+def test_sorting_reads_each_key_once_and_writes_the_rows_in_one_go():
+    """Regression: a 4,000-row sort blocked the page for ~1.5 s (closest() per comparison, a new collator
+    per localeCompare, one appendChild per row)."""
+    script = _app_js()
+    sort_fn = _between(script, "function applyTableSort(", "let sortCollatorInstance")
+    assert "searchFlat = table.dataset?.searching" in sort_fn  # looked up once, not per comparison
+    assert "const keyed = sortable.map(" in sort_fn and "sortCollator().compare(" in sort_fn
+    assert ".localeCompare(" not in sort_fn
+    assert "document.createDocumentFragment()" in sort_fn and "tbody.appendChild(fragment)" in sort_fn
+    assert "new Intl.Collator(undefined" in script
+    value_fn = _between(script, "function sortValue(", "function reapplyActiveTableSorts(")
+    assert "searchFlatKnown !== undefined" in value_fn  # other callers still work
+
+
+def test_file_rows_are_not_padded_with_template_whitespace():
+    """Regression: ~1/3 of every Files row (a 10 MB page at 4,000 files) was indentation and line breaks."""
+    page = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8").replace("\r\n", "\n")
+    row = page.split('<tr data-uuid="{{ obj.uuid }}"', 1)[1].split("</tr>", 1)[0]
+    assert "\n" not in row.split('class="object-row"', 1)[0]  # the attributes sit on one line
+    assert "\n  " not in row  # no indentation left anywhere in the row
+    # the button's copy of the content hash is gone: the row carries it (thumbnail_preview falls back to the row)
+    button = row.split('class="object-open"', 1)[1].split("</button>", 1)[0]
+    assert "data-content-hash" not in button

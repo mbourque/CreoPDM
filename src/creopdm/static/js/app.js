@@ -3517,13 +3517,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return text.slice(text.lastIndexOf("/") + 1);
   }
 
-  function sortValue(row, key, columnIndex) {
+  function sortValue(row, key, columnIndex, searchFlatKnown) {
     // Folder browse prefixes rev/state/type/creo/checkout with the parent path so
     // sibling folders and files interleave. Product-wide search (* / *.prt / …)
     // is a flat list — sort by the visible column value only (not by folder).
+    // A sort passes the answer in once; looking it up per row (closest()) made a
+    // 4,000-row sort walk the DOM about 100,000 times.
     const searchFlat =
-      Boolean(row.closest?.("#object-table")) &&
-      row.closest("#object-table")?.dataset?.searching === "1";
+      searchFlatKnown !== undefined
+        ? searchFlatKnown
+        : Boolean(row.closest?.("#object-table")) &&
+          row.closest("#object-table")?.dataset?.searching === "1";
     if (key === "state") {
       if (row.classList.contains("folder-row")) {
         const folder = row.dataset.folder || "";
@@ -4012,18 +4016,29 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const sortable = [...tbody.rows].filter(
       (row) => !row.classList.contains("is-pending") && !row.classList.contains("empty-row")
     );
-    sortable.sort((a, b) => {
-      const left = sortValue(a, key, columnIndex);
-      const right = sortValue(b, key, columnIndex);
-      let cmp = 0;
+    // Read every row's key once (not twice per comparison), compare with one shared collator
+    // (localeCompare with options builds a new collator on every call), and write the rows back in one go.
+    const searchFlat = table.dataset?.searching === "1";
+    const keyed = sortable.map((row) => ({ row, value: String(sortValue(row, key, columnIndex, searchFlat)) }));
+    const sign = dir === "asc" ? 1 : -1;
+    keyed.sort((a, b) => sign * sortCollator().compare(a.value, b.value));
+    const fragment = document.createDocumentFragment();
+    pending.forEach((row) => fragment.appendChild(row));
+    keyed.forEach((item) => fragment.appendChild(item.row));
+    empty.forEach((row) => fragment.appendChild(row));
+    tbody.appendChild(fragment);
+  }
+
+  let sortCollatorInstance = null;
+  function sortCollator() {
+    if (!sortCollatorInstance) {
       try {
-        cmp = left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" });
+        sortCollatorInstance = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
       } catch {
-        cmp = left.localeCompare(right);
+        sortCollatorInstance = { compare: (left, right) => left.localeCompare(right) };
       }
-      return dir === "asc" ? cmp : -cmp;
-    });
-    [...pending, ...sortable, ...empty].forEach((row) => tbody.appendChild(row));
+    }
+    return sortCollatorInstance;
   }
 
   function enableTableSort(table) {
