@@ -31,6 +31,7 @@ from creopdm.exceptions import ValidationAppError
 from creopdm.logging_setup import get_logger
 from creopdm.services.agent_cache_zip import build_agent_cache_zip, manifest_items_for_objects
 from creopdm.schemas.common import (
+    AddedFileResult,
     AgentCacheManifestItem,
     AgentCacheManifestResponse,
     BatchObjectRequest,
@@ -501,7 +502,17 @@ def checkin_object(
     require_permission(request, ctx, PERMISSION_OBJECTS_CHECKIN)
     obj = ctx.objects.get_object(db, object_id)
     require_product_access(request, ctx, obj.product)
-    obj = ctx.checkins.checkin(db, object_id, payload.comment, payload.add_relative_paths)
+    added: list = []
+    obj = ctx.checkins.checkin(db, object_id, payload.comment, payload.add_relative_paths, added_out=added)
+    added_files = [
+        {
+            "uuid": item.uuid,
+            "filename": item.filename,
+            "path": str(item.relative_path or ""),
+            "relative_path": str(item.relative_path or ""),
+        }
+        for item in added
+    ]
     obj = ctx.objects.get_object(db, obj.uuid)
     from creopdm.api.watch_notify import notify_product_watchers
 
@@ -515,4 +526,7 @@ def checkin_object(
         object_uuid=obj.uuid,
         comment=payload.comment,
     )
-    return present_object(ctx, db, obj)
+    response = present_object(ctx, db, obj)
+    if added_files:
+        response.added = [AddedFileResult(**item) for item in added_files]
+    return response

@@ -5238,7 +5238,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }));
     }
     if (result.uuid && result.filename) {
-      return [
+      const targets = [
         {
           uuid: result.uuid,
           filename: result.filename,
@@ -5248,6 +5248,20 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           current_version: result.current_version || null,
         },
       ];
+      // A check-in that also added new files: collect metadata for those too.
+      (Array.isArray(result.added) ? result.added : []).forEach((item) => {
+        if (item?.uuid && item.filename) {
+          targets.push({
+            uuid: item.uuid,
+            filename: item.filename,
+            path: item.path || "",
+            relative_path: item.relative_path || "",
+            version_id: "",
+            current_version: null,
+          });
+        }
+      });
+      return targets;
     }
     return [];
   }

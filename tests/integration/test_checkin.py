@@ -151,6 +151,10 @@ def test_checkin_can_add_new_workspace_file(client, repo_parent, data_dir):
     files = {item["filename"]: item for item in listing.json()}
     assert "shaft.prt" in files
     assert "pin.prt" in files
+    # The reply lists the new file with its uuid so the page can collect Creo metadata for it too.
+    added_rows = checked_in.json()["added"]
+    assert [row["filename"] for row in added_rows] == ["pin.prt"]
+    assert added_rows[0]["uuid"] == files["pin.prt"]["uuid"] and added_rows[0]["relative_path"] == "pin.prt"
     assert files["pin.prt"]["display_revision"] == "A.1"
     assert (data_dir / "vaults" / product["uuid"] / "pin.prt").is_file()
 

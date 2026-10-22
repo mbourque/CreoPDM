@@ -244,6 +244,16 @@ class WorkspaceContentResponse(BaseModel):
     bytes_written: int = 0
 
 
+class AddedFileResult(BaseModel):
+    """A new file added by a check-in (its uuid lets the page collect Creo metadata for it)."""
+
+    uuid: str
+    filename: str
+    status: str = "added"
+    path: str | None = None
+    relative_path: str | None = None
+
+
 class ObjectResponse(BaseModel):
     uuid: str
     product_uuid: str
@@ -277,6 +287,8 @@ class ObjectResponse(BaseModel):
     created_at: datetime | None
     updated_at: datetime | None
     current_version: ObjectVersionResponse | None = None
+    # Only a check-in that also added new files fills this.
+    added: list[AddedFileResult] = Field(default_factory=list)
 
 
 class ReviseEligibilityResponse(BaseModel):

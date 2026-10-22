@@ -208,3 +208,9 @@ def test_the_details_discussion_tab_counts_only_its_own_target():
     paint = js.split("function paintTabAndPill() {", 1)[1].split("function paintGlyphs()", 1)[0]
     assert '#panel-discussion[data-target-type]:not([data-feed])' in paint  # the product feed keeps the total
     assert "slot(panel.dataset.targetType, panel.dataset.target)" in paint
+
+
+def test_a_checkin_that_adds_files_collects_metadata_for_them_too():
+    app = _app_js()
+    targets = app.split("function metadataTargetsFromResult(result) {", 1)[1].split("function checkedInItemsFromResult", 1)[0]
+    assert "result.added" in targets and "targets.push(" in targets

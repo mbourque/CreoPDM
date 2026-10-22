@@ -165,7 +165,9 @@ class CheckinService:
         *,
         allow_unchanged: bool = False,
         source_path: Path | None = None,
+        added_out: list[EngineeringObject] | None = None,
     ) -> EngineeringObject:
+        """``added_out`` (optional) receives the new objects created from ``add_relative_paths``."""
         message = (comment or "").strip()
         if not message:
             raise ValidationAppError("A check-in comment is required.")
@@ -193,7 +195,9 @@ class CheckinService:
                         f"{obj.filename} is {obj.lifecycle_state.replace('_', ' ').title()} and cannot be checked in."
                     )
             if to_add:
-                self._add_workspace_files(session, product, to_add, message, obj.filename)
+                created = self._add_workspace_files(session, product, to_add, message, obj.filename)
+                if added_out is not None:
+                    added_out.extend(created)
             # Revert passes the restored logical tip so a leftover higher .N cannot
             # win locate_content and re-commit the wrong bytes as the "revert".
             if source_path is not None:
