@@ -2454,7 +2454,7 @@ def test_newer_local_cache_detects_same_save_content_replace_by_hash():
 def test_refresh_pending_clears_sticky_modified_locally():
     """Rematerialized matching tip must clear data-modified-locally, not re-seed it."""
     script = _app_js()
-    body = _between(script, "async function refreshPendingCheckinIds(", "function rowHasCheckinWork(")
+    body = _between(script, "async function refreshPendingCheckinIdsNow(", "function rowHasCheckinWork(")
     assert "do not seed the final pending set from" in body
     assert 'row.dataset.modifiedLocally = pendingCheckinIds.has(String(id)) ? "1" : "0"' in body
     # Final pending ids come from preview/agent/queue — not from existing DOM flags.

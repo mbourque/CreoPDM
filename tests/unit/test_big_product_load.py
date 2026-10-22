@@ -214,3 +214,19 @@ def test_the_workspace_poll_compares_with_its_own_last_estimate():
 def test_slow_requests_name_the_page_that_asked():
     app_py = (ROOT / "src" / "creopdm" / "app.py").read_text(encoding="utf-8")
     assert 'request.headers.get("referer"' in app_py and "from=%s" in app_py
+
+
+def test_a_page_load_reads_the_queue_and_the_list_once():
+    script = _app_js()
+    parts = script.split("async function loadCheckinQueueParts(", 1)[1].split("function prefetchCheckinQueueParts", 1)[0]
+    assert "ensureProductObjects(productId, { maxAgeMs: 5000 })" in parts  # shared list, not its own download
+    assert "/objects`" not in parts
+    assert "{ skipQueue: true }" in parts  # the queue was just read: do not read it a second time
+    known = script.split("async function loadKnownWorkspacePaths(", 1)[1].split("async function ensureKnownWorkspacePaths", 1)[0]
+    assert "skipQueue" in known
+
+
+def test_pending_id_refreshes_that_arrive_together_share_one_run():
+    script = _app_js()
+    wrapper = script.split("function refreshPendingCheckinIds(productId) {", 1)[1].split("async function refreshPendingCheckinIdsNow", 1)[0]
+    assert "pendingCheckinIdsRun" in wrapper and "< 2000" in wrapper  # a later call still reads fresh data

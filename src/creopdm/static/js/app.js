@@ -2986,7 +2986,28 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     reapplyActiveTableSorts();
   }
 
-  async function refreshPendingCheckinIds(productId) {
+  // The page load asks for this from several places within a moment; those share one run. A later
+  // call (after a check-in, say) still starts its own so it never reads older data.
+  let pendingCheckinIdsRun = null;
+
+  function refreshPendingCheckinIds(productId) {
+    if (!productId) return Promise.resolve();
+    if (
+      pendingCheckinIdsRun
+      && pendingCheckinIdsRun.id === productId
+      && Date.now() - pendingCheckinIdsRun.at < 2000
+    ) {
+      return pendingCheckinIdsRun.promise;
+    }
+    const run = { id: productId, at: Date.now(), promise: null };
+    run.promise = refreshPendingCheckinIdsNow(productId).finally(() => {
+      if (pendingCheckinIdsRun === run) pendingCheckinIdsRun = null;
+    });
+    pendingCheckinIdsRun = run;
+    return run.promise;
+  }
+
+  async function refreshPendingCheckinIdsNow(productId) {
     if (!productId) return;
     const seq = ++pendingCheckinFetch;
     try {
@@ -6235,7 +6256,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
-  async function loadKnownWorkspacePaths(productId, extraRels = []) {
+  async function loadKnownWorkspacePaths(productId, extraRels = [], { skipQueue = false } = {}) {
     const exact = new Set();
     const logical = new Set();
     const basenames = new Set();
@@ -6244,12 +6265,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       // The shared list (one fetch, reused) — not a second full download of the product.
       const [objects, queueResponse] = await Promise.all([
         ensureProductObjects(productId),
-        fetch(`/api/products/${encodeURIComponent(productId)}/checkin-queue`),
+        // A caller that just read the queue passes its new files in extraRels instead.
+        skipQueue ? Promise.resolve(null) : fetch(`/api/products/${encodeURIComponent(productId)}/checkin-queue`),
       ]);
       (Array.isArray(objects) ? objects : []).forEach((item) => {
         markKnownPath(item.relative_path || item.filename || "", exact, logical, basenames);
       });
-      if (queueResponse.ok) {
+      if (queueResponse && queueResponse.ok) {
         const queue = await queueResponse.json().catch(() => null);
         (queue?.new_files || []).forEach((item) => {
           markKnownPath(item.relative_path || "", exact, logical, basenames);
@@ -6520,12 +6542,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   const WORKSPACE_LIST_CACHE_MS = 60000;
   let productObjectsInFlight = null;
 
-  async function ensureProductObjects(productId, { force = false } = {}) {
+  async function ensureProductObjects(productId, { force = false, maxAgeMs = WORKSPACE_LIST_CACHE_MS } = {}) {
     if (
       !force &&
       cachedProductObjects.id === productId &&
       cachedProductObjects.at &&
-      Date.now() - cachedProductObjects.at < WORKSPACE_LIST_CACHE_MS
+      Date.now() - cachedProductObjects.at < maxAgeMs
     ) {
       return cachedProductObjects.rows;
     }
@@ -7696,25 +7718,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       vaultFolderOverride
     );
     const cacheFiles = Array.isArray(listed.files) ? listed.files : [];
-    const [queueResponse, objectsResponse] = await Promise.all([
+    // The list is shared with the other loaders (a few seconds old at most), not downloaded again.
+    const [queueResponse, objects] = await Promise.all([
       fetch(`/api/products/${productId}/checkin-queue`),
-      fetch(`/api/products/${encodeURIComponent(productId)}/objects`),
+      ensureProductObjects(productId, { maxAgeMs: 5000 }),
     ]);
     if (!queueResponse.ok) throw new Error("queue");
     const data = await queueResponse.json();
-    const objects = objectsResponse.ok
-      ? await objectsResponse.json().catch(() => [])
-      : [];
-    cachedProductObjects = {
-      id: productId,
-      at: Date.now(),
-      rows: Array.isArray(objects) ? objects : [],
-    };
     const saves = data.saves || [];
     const vaultNew = data.new_files || [];
     const known = await loadKnownWorkspacePaths(
       productId,
-      vaultNew.map((item) => item.relative_path || "")
+      vaultNew.map((item) => item.relative_path || ""),
+      { skipQueue: true }
     );
     const created = [...vaultNew, ...localOnlyCacheFiles(cacheFiles, known)];
     const vaultSaveIds = new Set(
