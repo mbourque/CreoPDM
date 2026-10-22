@@ -230,3 +230,13 @@ def test_pending_id_refreshes_that_arrive_together_share_one_run():
     script = _app_js()
     wrapper = script.split("function refreshPendingCheckinIds(productId) {", 1)[1].split("async function refreshPendingCheckinIdsNow", 1)[0]
     assert "pendingCheckinIdsRun" in wrapper and "< 2000" in wrapper  # a later call still reads fresh data
+
+
+def test_the_first_poll_of_a_page_load_does_not_clear_what_the_load_just_read():
+    script = _app_js()
+    poll = script.split("async function pollWorkspaceWatch() {", 1)[1].split("if (watchProductId) {", 1)[0]
+    moved = poll.split("if (countsMoved) {", 1)[1].split("const next = ", 1)[0]
+    assert "const firstPoll" in poll
+    clear = moved.split("if (!firstPoll) {", 1)[1].split("}", 1)[0]
+    assert "cachedProductObjects.at = 0" in clear and "knownWorkspacePaths.at = 0" in clear
+    assert "queueJustLoaded" in moved

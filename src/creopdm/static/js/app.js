@@ -8476,14 +8476,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       } else {
         const countsMoved =
           lastPollChangesCount !== newCount || lastPollModifiedCount !== modCount;
+        const firstPoll = lastPollChangesCount === null && lastPollModifiedCount === null;
         lastChangesPending = newCount;
         lastModifiedPending = modCount;
         // Poll estimate moved — confirm with the full queue before touching badges.
         if (countsMoved) {
-          knownWorkspacePaths.at = 0;
-          cachedProductObjects.at = 0;
-          invalidateCheckinQueueCache();
-          void prefetchCheckinQueueParts(watchProductId);
+          if (!firstPoll) {
+            knownWorkspacePaths.at = 0;
+            cachedProductObjects.at = 0;
+            invalidateCheckinQueueCache();
+          }
+          // The first poll of a page load has nothing to compare with: the lists it (and the page
+          // load) just read are current, so it neither clears them nor reads the queue again.
+          const queueJustLoaded =
+            firstPoll
+            && checkinQueueCache.productId === String(watchProductId)
+            && Date.now() - checkinQueueCache.at < 15000;
+          if (!queueJustLoaded) void prefetchCheckinQueueParts(watchProductId);
         }
       }
       lastPollChangesCount = newCount;
