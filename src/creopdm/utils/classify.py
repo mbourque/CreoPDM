@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fnmatch
 from collections.abc import Iterable
+from functools import lru_cache
 from pathlib import Path
 
 from creopdm.constants import (
@@ -46,8 +47,14 @@ def unique_extensions(values: Iterable[str] | None) -> list[str]:
     return found
 
 
-def extra_cad_set(values: Iterable[str] | None) -> frozenset[str]:
+@lru_cache(maxsize=64)
+def _extension_set(values: tuple[str, ...]) -> frozenset[str]:
     return frozenset(unique_extensions(values))
+
+
+def extra_cad_set(values: Iterable[str] | None) -> frozenset[str]:
+    # The same few lists are asked for once per file when a folder is counted; build each once.
+    return _extension_set(tuple(values) if values else ())
 
 
 def matches_cad_models(
@@ -332,30 +339,52 @@ def display_type_label(
         names = mapped_names if names is None else names
         extensions = mapped_exts if extensions is None else extensions
     if names or extensions:
+        wild_names, multipart, wild_exts = _prepared_type_labels(names, extensions)
         canonical = CreoFileManager.normalize_creo_filename(filename)
         basename = Path(canonical).name.lower()
         original = Path(str(filename).replace("\\", "/")).name.lower()
         custom = names.get(basename) or names.get(original)
         if custom:
             return custom
-        for token, label in names.items():
+        for token, label in wild_names:
             if _matches_type_label_pattern(basename, original, token):
                 return label
         # A multi-part extension (".sldasm.creo") matches the end of the whole file name, and the
         # most specific (longest) one wins over a plain one (".creo").
-        for token in sorted(extensions, key=len, reverse=True):
-            if token.startswith(".") and token.count(".") > 1 and (
-                basename.endswith(token) or original.endswith(token)
-            ):
+        for token in multipart:
+            if basename.endswith(token) or original.endswith(token):
                 return extensions[token]
         suffix = Path(canonical).suffix.lower()
         custom = extensions.get(suffix)
         if custom:
             return custom
-        for token, label in extensions.items():
+        for token, label in wild_exts:
             if _matches_type_label_pattern(basename, original, token):
                 return label
     return default_type_label(object_type)
+
+
+# The last label maps seen, split once into the parts a lookup loops over (a list of thousands of
+# files asks with the same two maps). Holding the maps keeps their identity valid.
+_prepared_labels: tuple[dict, dict, tuple] | None = None
+
+
+def _prepared_type_labels(names: dict[str, str], extensions: dict[str, str]) -> tuple:
+    global _prepared_labels
+    cached = _prepared_labels
+    if cached is not None and cached[0] is names and cached[1] is extensions:
+        return cached[2]
+    prepared = (
+        [(token, label) for token, label in names.items() if "*" in token or "?" in token],
+        [
+            token
+            for token in sorted(extensions, key=len, reverse=True)
+            if token.startswith(".") and token.count(".") > 1
+        ],
+        [(token, label) for token, label in extensions.items() if "*" in token or "?" in token],
+    )
+    _prepared_labels = (names, extensions, prepared)
+    return prepared
 
 
 _OBJECT_TYPE_ICONS = {

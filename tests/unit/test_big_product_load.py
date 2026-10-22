@@ -240,3 +240,39 @@ def test_the_first_poll_of_a_page_load_does_not_clear_what_the_load_just_read():
     clear = moved.split("if (!firstPoll) {", 1)[1].split("}", 1)[0]
     assert "cachedProductObjects.at = 0" in clear and "knownWorkspacePaths.at = 0" in clear
     assert "queueJustLoaded" in moved
+
+
+# ------------------------------------------------------------------ cheaper list rendering
+def test_type_label_lookup_gives_the_same_answers_with_prepared_maps():
+    from creopdm.utils.classify import display_type_label, type_label_maps
+
+    names, exts = type_label_maps(
+        [
+            {"extension": ".sldasm.creo", "label": "SolidWorks asm"},
+            {"extension": ".creo", "label": "Creo thing"},
+            {"extension": "README*", "label": "Read me"},
+            {"extension": ".bak?", "label": "Backup"},
+            {"extension": "build.gradle", "label": "Build"},
+        ]
+    )
+    for _ in range(2):  # second round reuses the prepared maps
+        assert display_type_label("frame.sldasm.creo", "OTHER", names=names, extensions=exts) == "SolidWorks asm"
+        assert display_type_label("part.creo", "OTHER", names=names, extensions=exts) == "Creo thing"
+        assert display_type_label("README.txt", "OTHER", names=names, extensions=exts) == "Read me"
+        assert display_type_label("x.bak1", "OTHER", names=names, extensions=exts) == "Backup"
+        assert display_type_label("Build.Gradle", "OTHER", names=names, extensions=exts) == "Build"
+        assert display_type_label("plain.xyz", "OTHER", names=names, extensions=exts) == display_type_label(
+            "plain.xyz", "OTHER"
+        )
+    other_names, other_exts = type_label_maps([{"extension": ".xyz", "label": "Xyz"}])
+    assert display_type_label("a.xyz", "OTHER", names=other_names, extensions=other_exts) == "Xyz"  # new maps, new answer
+
+
+def test_extension_sets_are_built_once_per_list():
+    from creopdm.utils.classify import extra_cad_set, matches_extension_list
+
+    first = extra_cad_set([".PRT", "asm"])
+    assert first == frozenset({".prt", ".asm"})
+    assert extra_cad_set([".PRT", "asm"]) is first
+    assert extra_cad_set(None) == frozenset() and extra_cad_set([]) == frozenset()
+    assert matches_extension_list("shaft.prt.3", [".prt"]) and not matches_extension_list("a.txt", [".prt"])
