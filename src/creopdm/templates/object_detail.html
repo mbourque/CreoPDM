@@ -196,9 +196,12 @@
       <table class="grid inventory-table"{% if version_view %} id="version-facts"{% endif %}>
         <thead><tr><th>Field</th><th>Value</th></tr></thead>
         <tbody>
-          {# Name and Type read exactly as in the Files list (file name with extension, same type label). #}
+          {# Name and Type read exactly as in the Files list (file name with extension, same type label).
+             A Creo model that has a Model type row below does not repeat itself with a Type row. #}
           <tr><td>Name</td><td>{{ object.filename or "—" }}</td></tr>
+          {% if not (identity.model_type or is_top_level_assembly) %}
           <tr><td>Type</td><td>{{ object.type_label or "—" }}</td></tr>
+          {% endif %}
           {% if show_common %}
           <tr><td>Common name</td><td>{{ id_common }}</td></tr>
           {% endif %}

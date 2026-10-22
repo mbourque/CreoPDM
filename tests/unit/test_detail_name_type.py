@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,6 +12,8 @@ from creopdm.app import build_context, create_app
 from creopdm.config import ConfigManager
 from tests.conftest import requires_git
 from tests.unit.test_baselines import _signed_in_admin
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture()
@@ -49,5 +52,8 @@ def test_details_name_and_type_match_the_files_list(auth_client, auth_ctx):
         assert _row(page, "Name") == item["filename"], item["filename"]
         assert _row(page, "Type") == item["type_label"], item["filename"]
         assert "<td>File name</td>" not in page
+    template = (ROOT / "src" / "creopdm" / "templates" / "object_detail.html").read_text(encoding="utf-8")
+    # a Creo model with a Model type row does not also get a Type row (the same word twice)
+    assert "{% if not (identity.model_type or is_top_level_assembly) %}" in template.split("<td>Type</td>", 1)[0][-200:]
     pdf = next(item for item in listed if item["filename"].endswith(".pdf"))
     assert pdf["type_label"] == "PDF Document"

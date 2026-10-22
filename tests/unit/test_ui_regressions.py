@@ -710,13 +710,14 @@ def test_dropped_folder_keeps_nested_relative_paths():
 
 def test_product_dialog_has_vault_folder_and_use_hash():
     html = APP_HTML.read_text(encoding="utf-8")
+    dialog = (APP_HTML.parent / "_product_dialog.html").read_text(encoding="utf-8")  # the shared New product dialog
     partial_path = ROOT / "src" / "creopdm" / "templates" / "partials" / "product_vault_fields.html"
     partial = partial_path.read_text(encoding="utf-8")
     admin_form = (ROOT / "src" / "creopdm" / "templates" / "admin_product_form.html").read_text(
         encoding="utf-8"
     )
     include = '{% include "partials/product_vault_fields.html" %}'
-    assert include in html
+    assert include in dialog
     assert include in admin_form
     assert "Vault/Workspace name" in partial
     assert 'id="product-use-hash"' in partial
