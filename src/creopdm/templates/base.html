@@ -6,19 +6,6 @@
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
   <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-thumb-preview-revise-66">
   <script>
-    /* In a browser that was Creo's embedded one the last time, say "Connecting to Creo…" at once instead of a
-       blank page while a big page is read; app.js removes it (or this timer does) when the link is up. */
-    (function () {
-      try {
-        var path = location.pathname || "/";
-        if (window.localStorage.getItem("creopdm.creoBrowser") === "1" && !/^\/(login|logout|setup|forgot-password|reset-password)/.test(path)) {
-          document.documentElement.classList.add("creo-booting");
-          window.setTimeout(function () { document.documentElement.classList.remove("creo-booting"); }, 15000);
-        }
-      } catch (e) { /* blocked storage: no early message */ }
-    })();
-  </script>
-  <script>
     /* Suppress PTC creojs.js noise outside Creo's browser (and when Creo injects its own copy). */
     (function () {
       var nativeAlert = window.alert;
@@ -923,7 +910,7 @@ function creoModelTypeLabel(type) {
   </script>
   <script src="/static/js/files_search_match.js?v={{ app_version }}-files-search2"></script>
   <script src="/static/js/files_context_menu.js?v={{ app_version }}-files-ctx-nonopen"></script>
-  <script src="/client/app.js?v={{ app_version }}-filter-ontabs19"></script>
+  <script src="/client/app.js?v={{ app_version }}-filter-ontabs20"></script>
   <script src="/static/js/thumbnail_preview.js?v={{ app_version }}-thumb-preview"></script>
 </body>
 </html>

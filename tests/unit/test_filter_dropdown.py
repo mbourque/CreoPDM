@@ -283,16 +283,6 @@ def test_a_reopened_browser_returns_to_the_last_folder_and_tab():
 
 
 
-def test_a_creo_browser_says_connecting_before_the_page_is_read():
-    base = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
-    head = base.split("</head>", 1)[0]
-    assert 'localStorage.getItem("creopdm.creoBrowser") === "1"' in head and '"creo-booting"' in head
-    assert "setTimeout" in head  # never stuck
-    css = CSS.read_text(encoding="utf-8")
-    assert "html.creo-booting body::after" in css and 'content: "Connecting to Creo…"' in css
-    app = _app_js()
-    assert "function rememberCreoBrowser(isCreo)" in app
-    assert app.count('document.documentElement.classList.remove("creo-booting")') >= 2
 
 
 def test_the_files_rows_live_in_one_partial_and_the_page_sends_every_row():
@@ -306,3 +296,11 @@ def test_the_files_rows_live_in_one_partial_and_the_page_sends_every_row():
     assert "files-rows" not in pages and "FILES_FIRST_PAGE" not in pages
     app = _app_js()
     assert "loadRemainingFileRows" not in app and "whenFileRowsReady" not in app
+
+
+def test_there_is_no_early_connecting_cover_that_could_hold_the_page():
+    """The early "Connecting to Creo…" cover (html.creo-booting) was removed: the page's own overlay stays."""
+    base = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
+    assert "creo-booting" not in base and "creopdm.creoBrowser" not in base
+    assert "creo-booting" not in CSS.read_text(encoding="utf-8")
+    assert "rememberCreoBrowser" not in _app_js() and "creo-booting" not in _app_js()

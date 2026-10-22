@@ -4927,17 +4927,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return /creo|ptc|parametric/i.test(ua);
   }
 
-  /** Remember (on this PC) whether this browser is Creo's embedded one, for the early "Connecting…" message. */
-  function rememberCreoBrowser(isCreo) {
-    try {
-      window.localStorage.setItem("creopdm.creoBrowser", isCreo ? "1" : "0");
-    } catch {
-      /* blocked storage */
-    }
-  }
-
   function showCreoConnectingOverlay() {
-    document.documentElement.classList.remove("creo-booting");
     const el = $("#creo-connecting-overlay");
     if (!el) return;
     el.hidden = false;
@@ -4945,7 +4935,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function hideCreoConnectingOverlay() {
-    document.documentElement.classList.remove("creo-booting");
     const el = $("#creo-connecting-overlay");
     if (el) el.hidden = true;
     document.body.classList.remove("creo-connecting");
@@ -4976,13 +4965,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     // Auth pages (post-Logout sign-in): never show the overlay — Creo.JS can
     // re-link in the background; blocking ~15s made Logout feel stuck/offline.
     if (soft || hostedCreoJS() || isAuthShellPage()) {
-      if (hostedCreoJS()) rememberCreoBrowser(true);
       hideCreoConnectingOverlay();
       return;
     }
     if (!looksLikeCreoEmbeddedBrowser()) {
-      // Not Creo's browser (or Creo.JS never showed up): no early message next time.
-      if (!isAuthShellPage()) rememberCreoBrowser(false);
       hideCreoConnectingOverlay();
       return;
     }
@@ -4995,7 +4981,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     window.__creopdmCreoConnectingPoll = trackedInterval(() => {
       tries += 1;
       if (hostedCreoJS()) {
-        rememberCreoBrowser(true);
         hideCreoConnectingOverlay();
         syncCreoSessionControlsFromBridge();
         return;
