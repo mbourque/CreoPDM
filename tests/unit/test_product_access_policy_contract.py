@@ -88,8 +88,8 @@ def test_templates_gate_toolbar_via_product_ui_only():
         "show_access_banner",
     ):
         assert f"product_ui.{flag}" in app, f"app.html missing product_ui.{flag}"
-    rows = (SRC / "templates" / "partials" / "file_rows.html").read_text(encoding="utf-8")
-    assert "product_ui.show_checkout and entry.object_ids" in rows  # the rows live in their own partial
+    rows = (SRC / "utils" / "file_rows_html.py").read_text(encoding="utf-8")
+    assert "show_checkout and object_ids" in rows  # the rows are built in utils/file_rows_html.py
     assert "product_ui.show_open" in detail
     assert "product_ui.show_revert" in detail
     assert "product_ui.show_remove_vault" in detail

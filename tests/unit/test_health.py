@@ -95,9 +95,9 @@ def test_app_js_is_not_cached(client):
 
 
 def _files_page_template() -> str:
-    """app.html plus the rows partial it shares with GET /products/{id}/files-rows."""
+    """app.html plus the Python row builder that fills its table."""
     page = open("src/creopdm/templates/app.html", encoding="utf-8").read()
-    rows = open("src/creopdm/templates/partials/file_rows.html", encoding="utf-8").read()
+    rows = open("src/creopdm/utils/file_rows_html.py", encoding="utf-8").read()
     return page + "\n" + rows
 
 
@@ -142,15 +142,15 @@ def test_home_page(client):
     assert "push169" not in text
     assert "export3" not in text
     assert "compact-busy" not in text
-    assert "/client/app.js?v=" in text and "filter-ontabs25" in text
+    assert "/client/app.js?v=" in text and "filter-ontabs26" in text
     assert 'id="creo-connecting-overlay"' in text
     assert "Connecting to Creo…" in text
     assert "/static/css/app.css?v=" in text and "thumb-preview" in text
-    rows_html = open("src/creopdm/templates/partials/file_rows.html", encoding="utf-8").read()  # the rows live in a partial shared with /files-rows
+    rows_html = open("src/creopdm/utils/file_rows_html.py", encoding="utf-8").read()
     assert 'class="folder-open"' in rows_html
     assert "<a class=\"folder-open\"" in rows_html
     assert "folder | urlencode" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "urlencode" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
-    assert "obj.type_icon" in open("src/creopdm/templates/partials/file_rows.html", encoding="utf-8").read()
+    assert "obj.type_icon" in open("src/creopdm/utils/file_rows_html.py", encoding="utf-8").read()
     assert "function typeIconHtml" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "function resolveTypeIcon" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "data-type-icons" in open("src/creopdm/templates/app.html", encoding="utf-8").read()

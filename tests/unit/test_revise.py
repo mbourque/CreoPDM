@@ -229,8 +229,8 @@ def test_revise_ui_is_wired_through_the_shared_menu_and_details():
     assert "/revise`" in app and "JSON.stringify({ reason, operation_id: operationId })" in app
     assert "Starting Iteration" in base and "New Lifecycle" in base
     files = (root / "templates" / "app.html").read_text(encoding="utf-8")
-    rows = (root / "templates" / "partials" / "file_rows.html").read_text(encoding="utf-8")
-    assert "product_ui.show_revise and obj.can_revise" in rows  # the rows live in their own partial
+    rows = (root / "utils" / "file_rows_html.py").read_text(encoding="utf-8")
+    assert "show_revise and obj.can_revise" in rows  # the rows are built in utils/file_rows_html.py
     assert 'data-show-revise="{{ ' in files and "product_ui.show_revise else" in files
     # Search / soft-refresh rows are built in JS and must carry the same flag.
     assert 'data-can-revise="${' in app and "dataset.showRevise" in app

@@ -8142,14 +8142,28 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   syncRevertVersionButton();
   syncDetailToolbar();
 
+  // The list tab whose filter is waiting while Baselines or Discussion is shown.
+  let filterHeldTab = "";
+
   document.querySelectorAll(".tabs .tab").forEach((tab) => {
     tab.addEventListener("click", () => {
       if (tab.disabled) return;
       const name = tab.dataset.tab;
-      // A filter belongs to the list it was chosen in: moving to another tab starts unfiltered. Done before
-      // the switch, while the rows it hid are still the visible list's rows (so they are shown again).
-      if (!tab.classList.contains("is-active") && metricButtons().some((btn) => metricMode(btn) !== "off")) {
-        resetMetricFilters();
+      // A filter belongs to the list it was chosen in: moving to another file list starts unfiltered. Done
+      // before the switch, while the rows it hid are still the visible list's rows (so they are shown again).
+      // Baselines and Discussion are not file lists: going there keeps the filter, and coming back to the tab
+      // it was chosen in finds it still on.
+      if (!tab.classList.contains("is-active")) {
+        const prevTab = document.querySelector(".tabs .tab.is-active")?.dataset.tab || "";
+        const keepsFilter = (tabName) => tabName === "baselines" || tabName === "discussion";
+        if (!metricButtons().some((btn) => metricMode(btn) !== "off")) {
+          filterHeldTab = "";
+        } else if (keepsFilter(name)) {
+          if (!keepsFilter(prevTab)) filterHeldTab = prevTab;
+        } else {
+          if (!(keepsFilter(prevTab) && name === filterHeldTab)) resetMetricFilters();
+          filterHeldTab = "";
+        }
       }
       document.querySelectorAll(".tabs .tab").forEach((item) => item.classList.toggle("is-active", item === tab));
       document.querySelectorAll(".tab-panel").forEach((panel) => {

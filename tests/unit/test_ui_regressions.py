@@ -41,7 +41,7 @@ class _Templates:
 
 APP_HTML = _Templates(
     ROOT / "src" / "creopdm" / "templates" / "app.html",
-    ROOT / "src" / "creopdm" / "templates" / "partials" / "file_rows.html",
+    ROOT / "src" / "creopdm" / "utils" / "file_rows_html.py",
 )
 ICONS = ROOT / "src" / "creopdm" / "static" / "icons"
 
@@ -456,7 +456,7 @@ def test_product_state_badge_in_files_header():
     assert '.state[data-state="LOCKED"]::before' in css
     assert '.checkout-state[data-state="locked"]::before' in css
     assert "current product state" in docs.lower()
-    assert "can_checkout %}available{% else %}locked" in html
+    assert 'checkout_kind = "available"' in html and 'checkout_kind = "locked"' in html
     # Lock banner states the fact only — no laundry list of blocked actions.
     banner = _between(html, 'id="product-access-banner"', "</p>")
     assert "This product is" in banner
@@ -1278,7 +1278,7 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert "roleCanCheckout" in script
     assert "roleCanCheckin" in script
     assert "/api/objects/batch/force-undo-checkout" in script
-    assert "product_ui.show_checkout and entry.object_ids" in html
+    assert "show_checkout and object_ids" in html
     assert 'id="checkin-menu"' in html
     assert 'id="checkin-product-btn"' in html
     assert 'id="checkin-btn"' in html
@@ -1914,7 +1914,7 @@ def test_history_revert_only_for_older_versions():
     assert "Overview and History" in html
     assert ">Details</button>" in html
     assert ">History</button>" not in html
-    assert 'data-detail="/products/{{ selected.uuid }}/objects/{{ obj.uuid }}"' in html
+    assert 'data-detail="/products/{_e(selected_uuid)}/objects/{uuid_e}"' in html
     assert 'data-detail="/products/{{ selected.uuid }}/objects/{{ obj.uuid }}#history"' not in html
     assert "Details page defaults to Overview" in script
     href_fn = _between(script, "function rowHistoryHref(", "document.querySelector(\"#object-table\")")
@@ -3100,10 +3100,13 @@ def test_sorting_reads_each_key_once_and_writes_the_rows_in_one_go():
 
 def test_file_rows_are_not_padded_with_template_whitespace():
     """Regression: ~1/3 of every Files row (a 10 MB page at 4,000 files) was indentation and line breaks."""
-    page = (ROOT / "src" / "creopdm" / "templates" / "partials" / "file_rows.html").read_text(encoding="utf-8").replace("\r\n", "\n")
-    row = page.split('<tr data-uuid="{{ obj.uuid }}"', 1)[1].split("</tr>", 1)[0]
-    assert "\n" not in row.split('class="object-row"', 1)[0]  # the attributes sit on one line
-    assert "\n  " not in row  # no indentation left anywhere in the row
+    from creopdm.utils.file_rows_html import render_file_rows
+    from tests.unit.test_file_rows_html import CASES
+
+    entries, ui, _where_used, _top_level = CASES["plain_file"]
+    html = str(render_file_rows(entries, selected_uuid="p", product_ui=ui))
+    row = html.split('<tr data-uuid="', 1)[1].split("</tr>", 1)[0]
+    assert "\n" not in row  # the whole row is one line: no template whitespace
     # the button's copy of the content hash is gone: the row carries it (thumbnail_preview falls back to the row)
     button = row.split('class="object-open"', 1)[1].split("</button>", 1)[0]
     assert "data-content-hash" not in button

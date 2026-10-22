@@ -138,7 +138,7 @@ def test_the_search_tooltip_has_the_bulk_and_parameter_examples_in_both_search_b
         text = html.read_text(encoding="utf-8")
         box = text.split('type="search"', 1)[1].split("autocomplete", 1)[0]
         assert "type=bulk" in box and "param.MATERIAL=steel*" in box, html.name
-    app = (ROOT / "src/creopdm/templates/partials/file_rows.html").read_text(encoding="utf-8")  # the rows partial
+    app = (ROOT / "src/creopdm/utils/file_rows_html.py").read_text(encoding="utf-8")  # the Python row builder
     for attr in ("data-subtype=", "data-model=", "data-lifecycle=", "data-rev=", "data-creo=", "data-number="):
         assert attr in app
     assert 'data-subtype="${escapeHtml(obj.model_role' in APP_JS.read_text(encoding="utf-8")
