@@ -54,6 +54,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 |--------|------------|--------------|
 | Click a product | Open that product’s Files list | Lose track of which product you picked |
 | Collapse / expand the sidebar | Hide or show the product list | Break the Files list |
+| Click **New** in the sidebar while on a file's **Details** page (or a baseline file's Details) | Open the same **New product** dialog as on Files (the sidebar is on those pages too, so the dialog is too) | Do nothing because the dialog only exists on the Files page |
 | Click **New** | Ask for a product name (and vault name options); then show the new product | Create a product with a blank name |
 | Open Files with **no** products (and you **can** create products) | Show the empty hero inviting you to create a product | |
 | Open Files with **no** products (and you **cannot** create products) | Show that no products are available; ask an administrator for access | Tell you to “Create a product…” when you have no `products.create` |

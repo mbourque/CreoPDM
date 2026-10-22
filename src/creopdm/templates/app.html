@@ -651,26 +651,7 @@
   </form>
 </dialog>
 
-<dialog id="product-dialog" class="dialog">
-  <form method="dialog" id="product-form">
-    <h2 id="product-dialog-title">New product</h2>
-    <label>Name
-      <input name="name" required maxlength="255" placeholder="Robot Arm">
-    </label>
-    <label>Number
-      <input name="number" maxlength="25" placeholder="PRJ-0027">
-    </label>
-    <label>Description
-      <textarea name="description" rows="3" maxlength="256" placeholder="Prototype robotic arm"></textarea>
-    </label>
-    {% include "partials/product_vault_fields.html" %}
-    <p class="error" id="product-error" hidden></p>
-    <div class="dialog-actions">
-      <button type="button" class="btn" value="cancel" id="product-cancel">Cancel</button>
-      <button type="submit" class="btn btn-primary" id="product-submit">Create</button>
-    </div>
-  </form>
-</dialog>
+{% include "_product_dialog.html" %}
 
 <dialog id="delete-product-dialog" class="dialog">
   <form method="dialog" id="delete-product-form">

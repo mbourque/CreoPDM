@@ -198,6 +198,8 @@ def test_the_product_sidebar_stays_on_the_details_page(auth_client, auth_ctx):
     assert f'href="/?product={product["uuid"]}"' in page.split('id="product-list"', 1)[1]
     assert "product-item is-active" in page  # the file's own product is the highlighted one
     assert 'class="detail"' in page
+    # the sidebar's New button opens this dialog; without it on the page the button did nothing
+    assert 'id="new-product-btn"' in page and 'id="product-dialog"' in page and 'id="product-form"' in page
 
 
 def test_the_details_discussion_tab_counts_only_its_own_target():
