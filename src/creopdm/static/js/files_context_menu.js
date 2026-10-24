@@ -53,6 +53,13 @@
       needsEmbedded: true,
     },
     {
+      action: "checkout-checkin",
+      label: "Check out and check in…",
+      title:
+        "Quickly check out this modified file (nobody has it checked out) and go straight to Check In. Needs the Checkout and Check In permissions.",
+      needsEmbedded: true,
+    },
+    {
       action: "discard-changes",
       label: "Discard changes…",
       title:
@@ -210,6 +217,18 @@
       someCheckinWork &&
       !busy;
 
+    // Quick Check out + Check in: only modified files nobody holds (row.isModifiedUnheld), and only
+    // where the role and the lifecycle allow both steps (showCheckout / showCheckin) and the file
+    // can be checked out. Several selected files must all qualify.
+    var canCheckoutCheckin =
+      Boolean(state.showCheckout) &&
+      Boolean(state.showCheckin) &&
+      rows.length > 0 &&
+      rows.every(function (row) {
+        return Boolean(row && row.isModifiedUnheld && row.canCheckout && !row.owned && !row.isNewFile);
+      }) &&
+      !busy;
+
     // Revise acts on exactly one file; the row flag already folds in role, product state,
     // Released lifecycle and "not checked out".
     var canRevise = Boolean(one && one.canRevise) && !busy;
@@ -255,6 +274,7 @@
       canUndo: canUndo,
       canAddSelected: canAddSelected,
       canCheckin: canCheckin,
+      canCheckoutCheckin: canCheckoutCheckin,
       canRevise: canRevise,
       canDiscardChanges: canDiscardChanges,
       canDownload: canDownload,
@@ -273,6 +293,7 @@
         caps.canUndo ||
         caps.canAddSelected ||
         caps.canCheckin ||
+        caps.canCheckoutCheckin ||
         caps.canRevise ||
         caps.canDiscardChanges ||
         caps.canDownload ||
@@ -317,6 +338,7 @@
       undo: caps.canUndo,
       "add-selected": caps.canAddSelected,
       checkin: caps.canCheckin,
+      "checkout-checkin": caps.canCheckoutCheckin,
       revise: caps.canRevise,
       "discard-changes": caps.canDiscardChanges,
       download: caps.canDownload,

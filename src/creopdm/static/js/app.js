@@ -4324,6 +4324,54 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return vaultSave || modifiedUnlocked;
   }
 
+  /** Modified (a newer local save or a changed vault copy) and nobody has it checked out. */
+  function isModifiedNotCheckedOut(row) {
+    if (!row || row.classList.contains("folder-row") || isNewFileQueueRow(row)) return false;
+    const uuid = String(row.dataset.uuid || "").trim();
+    if (!uuid) return false;
+    if (row.dataset.owned === "1" || row.dataset.checkedOut === "1") return false;
+    if (row.dataset.canCheckout !== "1") return false;
+    return (
+      row.dataset.modifiedLocally === "1"
+      || pendingCheckinIds.has(uuid)
+      || (row.classList.contains("queue-row") && row.classList.contains("is-pending"))
+    );
+  }
+
+  /**
+   * Right-click → Check out and check in…: check out the selected modified files nobody holds, then
+   * open the usual Check In dialog for them. The same gates as the two toolbar actions apply
+   * (role and product state), and a file that cannot be checked out is never offered.
+   */
+  async function checkoutThenCheckinSelected() {
+    const targets = selectedRows().filter((row) => isModifiedNotCheckedOut(row));
+    const ids = [...new Set(targets.flatMap(rowObjectIds).filter(Boolean))];
+    if (!ids.length) return false;
+    const productId = currentProductId();
+    const outGate = await assertProductAllows(productId, "checkout");
+    if (!outGate.ok) return false;
+    const inGate = await assertProductAllows(productId, "checkin");
+    if (!inGate.ok) return false;
+    showError($("#toolbar-error"), "");
+    const result = await withBusy("Checking out…", async () =>
+      postAction("/api/objects/batch/checkout", { object_ids: ids }, "POST", "")
+    );
+    if (!result) return false;
+    const warning = formatBatch(result);
+    if (warning) showError($("#toolbar-error"), warning);
+    const okIds = (Array.isArray(result.ok) ? result.ok : []).map((item) => item.uuid).filter(Boolean);
+    if (!okIds.length) return false;
+    applyCheckedOutOnRows(okIds);
+    // The modification stays on the file; mark it so Check In offers it, then open that dialog.
+    rememberPendingCheckinIds(okIds, { merge: true });
+    targets.forEach((row) => {
+      if (okIds.includes(String(row.dataset.uuid || ""))) row.dataset.modifiedLocally = "1";
+    });
+    syncToolbar();
+    checkinBtn?.click();
+    return true;
+  }
+
   function filesContextMenuCapabilities() {
     // Shared with Creo navigator embed — do not fork hide rules here.
     const selected = selectedRows();
@@ -4341,6 +4389,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       isLocalSave: isLocalSaveQueueRow(row),
       hasDetails: Boolean(historyBtn) && Boolean(rowHistoryHref(row)),
       hasCheckinWork: rowHasCheckinWork(row),
+      isModifiedUnheld: isModifiedNotCheckedOut(row),
       isFolder: row.classList.contains("folder-row"),
       canRevise: row.dataset.canRevise === "1",
       // Live row state (not a render-time flag): Undo Checkout repaints the row in place, so a
@@ -4506,6 +4555,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     if (action === "checkin") {
       checkinBtn?.click();
+      return;
+    }
+    if (action === "checkout-checkin") {
+      void checkoutThenCheckinSelected();
       return;
     }
     if (action === "revise") {
@@ -8997,6 +9050,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     if (action === "undo") {
       undoBtn?.click();
+      return;
+    }
+    if (action === "checkout-checkin") {
+      const uid = String(row.dataset.uuid || "").trim();
+      if (uid) {
+        // The navigator already proved Modified and that nobody holds the file.
+        rememberPendingCheckinIds([uid], { merge: true });
+        row.dataset.modifiedLocally = "1";
+      }
+      selectOnlyForNavigator(row);
+      await checkoutThenCheckinSelected();
       return;
     }
     if (action === "checkin") {

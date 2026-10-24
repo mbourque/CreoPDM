@@ -432,6 +432,11 @@
       isNewFile: false,
       hasDetails: Boolean(obj.uuid && productId),
       hasCheckinWork: tipHasCheckinWork(obj),
+      // Modified and nobody has it checked out: offers the quick Check out + Check in.
+      isModifiedUnheld: Boolean(
+        obj.uuid && !obj.owned_by_me && !obj.checkout_user && obj.can_checkout &&
+        (obj.modified_locally || pendingCheckinIds[String(obj.uuid)])
+      ),
       isFolder: false,
       // Role and product state (show_revise), Released and not checked out (obj.can_revise).
       canRevise: showRevise && Boolean(obj.can_revise),
