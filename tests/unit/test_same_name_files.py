@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from creopdm.utils.name_resolve import pick_nearest
+from creopdm.utils.name_resolve import pick_in_folder
 from tests.conftest import requires_git
 
 
@@ -51,26 +51,34 @@ def test_checking_out_a_single_same_named_file_by_its_own_endpoint(client):
     assert rows[a["uuid"]]["owned_by_me"] is False
 
 
-# ------------------------------------------------------------------ naming a file picks the nearest
+# ------------------------------------------------------------------ a name means the file in the same folder
 def _file(path):
     return SimpleNamespace(relative_path=path)
 
 
-def test_pick_nearest_prefers_the_same_folder_then_the_closest_one():
+def test_a_name_in_several_folders_means_the_file_in_the_referring_files_own_folder():
     here, there = _file("asm/plate.prt"), _file("lib/plate.prt")
-    assert pick_nearest([there, here], "asm/top.asm") is here
-    assert pick_nearest([there, here], "lib/other.asm") is there
+    assert pick_in_folder([there, here], "asm/top.asm") is here
+    assert pick_in_folder([there, here], "lib/other.asm") is there
     deep, shallow = _file("lib/a/b/plate.prt"), _file("lib/plate.prt")
-    assert pick_nearest([deep, shallow], "lib/a/x.asm") is deep  # shares "lib/a" with it, only "lib" with the other
-    assert pick_nearest([deep, shallow], "lib/a/b/x.asm") is deep
-    assert pick_nearest([deep, shallow], "lib/x.asm") is shallow  # same folder
+    assert pick_in_folder([deep, shallow], "lib/a/b/x.asm") is deep
+    assert pick_in_folder([deep, shallow], "lib/x.asm") is shallow
+    # folders are independent: a nearby folder is not "the same folder"
+    assert pick_in_folder([deep, shallow], "lib/a/x.asm") is None
+    assert pick_in_folder([here, there], "other/x.asm") is None
+    assert pick_in_folder([here, there], "top.asm") is None  # the root folder has none either
 
 
-def test_pick_nearest_does_not_guess_between_equally_near_files():
-    a, b = _file("a/plate.prt"), _file("b/plate.prt")
-    assert pick_nearest([a, b], "top.asm") is None
-    assert pick_nearest([a], "top.asm") is a  # a single file is that file
-    assert pick_nearest([], "top.asm") is None
+def test_a_name_that_exists_once_is_that_file_wherever_it_is():
+    lone = _file("library/plate.prt")
+    assert pick_in_folder([lone], "anywhere/top.asm") is lone
+    assert pick_in_folder([], "top.asm") is None
+
+
+def test_folder_case_does_not_matter_and_two_in_one_folder_are_not_guessed():
+    a, b = _file("Face/plate.prt"), _file("face/Plate.prt")
+    assert pick_in_folder([a, b], "FACE/top.asm") is None  # two candidates in that one folder
+    assert pick_in_folder([a, _file("other/plate.prt")], "FACE/top.asm") is a
 
 
 def test_collect_metadata_erases_a_model_whose_name_exists_in_another_folder():
@@ -81,3 +89,60 @@ def test_collect_metadata_erases_a_model_whose_name_exists_in_another_folder():
     )
     assert "sharedName: (nameCounts.get(sameNameKey(row.filename)) || 0) > 1," in source
     assert "deferErase: opts.deferErase !== false && !target.sharedName," in source
+
+
+# ------------------------------------------------------------------ end to end: Where Used per folder
+def _upload(client, product_uuid, files):
+    names = [(f"{folder}/{name}") for folder, name, _ in files]
+    response = client.post(
+        f"/api/products/{product_uuid}/objects/from-uploads",
+        files=[("files", (name, data, "application/octet-stream")) for _folder, name, data in files],
+        data={"relative_paths": names, "comment": "twins"},
+    )
+    assert response.status_code == 200, response.text
+    return {row["relative_path"]: row for row in client.get(f"/api/products/{product_uuid}/objects").json()}
+
+
+def _bom_metadata(parent_name, child_name):
+    return {
+        "identity": {"file_name": parent_name, "full_name": parent_name.upper(), "model_type": "MDL_ASSEMBLY"},
+        "parameters": [],
+        "bom": [
+            {
+                "filename": parent_name,
+                "quantity": 1,
+                "dependency_type": "ASSEMBLY_ROOT",
+                "children": [{"filename": child_name, "quantity": 1, "dependency_type": "ASSEMBLY_MEMBER", "children": []}],
+            }
+        ],
+    }
+
+
+@requires_git
+def test_where_used_only_lists_parents_from_the_same_folder_as_the_same_named_file(client):
+    product = client.post("/api/products", json={"name": "Faces"}).json()
+    rows = _upload(
+        client,
+        product["uuid"],
+        [
+            ("Face_Lateral", "face_mill.asm", b"lateral-mill"),
+            ("Face_Lateral", "lateral.asm", b"lateral-parent"),
+            ("Face_Entry-Exit", "face_mill.asm", b"entry-mill"),
+            ("Face_Entry-Exit", "entry_exit.asm", b"entry-parent"),
+        ],
+    )
+    lateral_mill = rows["Face_Lateral/face_mill.asm"]
+    entry_mill = rows["Face_Entry-Exit/face_mill.asm"]
+    for parent_path, parent_name in (("Face_Lateral/lateral.asm", "lateral.asm"), ("Face_Entry-Exit/entry_exit.asm", "entry_exit.asm")):
+        saved = client.post(
+            f"/api/objects/{rows[parent_path]['uuid']}/creo-metadata",
+            json=_bom_metadata(parent_name, "face_mill.asm"),
+        )
+        assert saved.status_code in (200, 201), saved.text
+
+    def parents_of(row):
+        body = client.get(f"/api/objects/{row['uuid']}/where-used").json()
+        return sorted(item["relative_path"] for item in body["items"])
+
+    assert parents_of(lateral_mill) == ["Face_Lateral/lateral.asm"]
+    assert parents_of(entry_mill) == ["Face_Entry-Exit/entry_exit.asm"]

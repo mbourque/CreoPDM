@@ -42,7 +42,7 @@ from creopdm.utils.creo_dependencies import (
 )
 from creopdm.utils.creo_model_class import normalize_creo_identity
 from creopdm.utils.bom_match import bom_lookup_keys, bom_where_used_keys
-from creopdm.utils.name_resolve import add_candidate, pick_nearest
+from creopdm.utils.name_resolve import add_candidate, pick_in_folder
 from creopdm.utils.classify import display_type_label
 from creopdm.utils.cad_name_matcher import CadNameMatcher
 
@@ -635,6 +635,23 @@ class MetadataService:
         edges = session.scalars(
             select(Dependency).where(Dependency.child_object_id == obj.id)
         ).all()
+        siblings = self._objects.list_objects(session, obj.product_id)
+        target_keys = set(bom_where_used_keys(obj.filename))
+        # Files that answer to the same name as this one (other folders). A parent that names the
+        # file by name only means the one in its own folder; stored links to a same-named file in
+        # another folder (older data) are not shown.
+        same_name = [
+            row
+            for row in siblings
+            if row.id == obj.id or (target_keys and set(bom_where_used_keys(row.filename)) & target_keys)
+        ]
+
+        def names_this_file(parent_row: EngineeringObject) -> bool:
+            if len(same_name) <= 1:
+                return True
+            chosen = pick_in_folder(same_name, parent_row.relative_path)
+            return chosen is not None and chosen.id == obj.id
+
         parent_ids = [edge.parent_object_id for edge in edges]
         parents = {
             row.id: row
@@ -646,7 +663,7 @@ class MetadataService:
         items_by_parent: dict[str, WhereUsedItem] = {}
         for edge in edges:
             parent = parents.get(edge.parent_object_id)
-            if parent is None:
+            if parent is None or not names_this_file(parent):
                 continue
             items_by_parent[parent.uuid] = WhereUsedItem(
                 object_id=parent.uuid,
@@ -659,21 +676,6 @@ class MetadataService:
                 type_label=display_type_label(parent.filename, parent.object_type),
             )
 
-        siblings = self._objects.list_objects(session, obj.product_id)
-        target_keys = set(bom_where_used_keys(obj.filename))
-        # Files that answer to the same name as this one (other folders). A parent that names the
-        # file by name only belongs to the one of them nearest to it.
-        same_name = [
-            row
-            for row in siblings
-            if row.id == obj.id or (target_keys and set(bom_where_used_keys(row.filename)) & target_keys)
-        ]
-
-        def names_this_file(parent_row: EngineeringObject) -> bool:
-            if len(same_name) <= 1:
-                return True
-            chosen = pick_nearest(same_name, parent_row.relative_path)
-            return chosen is not None and chosen.id == obj.id
         debug_bom_hits: list[str] = []
         debug_vault: list[dict[str, object]] = []
 
@@ -970,7 +972,7 @@ class MetadataService:
                 logical = CreoFileManager.normalize_creo_filename(name).lower()
                 if not logical:
                     continue
-                child = pick_nearest(by_key.get(logical) or [], parent.relative_path)
+                child = pick_in_folder(by_key.get(logical) or [], parent.relative_path)
                 if child is None and "." not in logical and len(logical) >= 4:
                     rows = stem_to_rows.get(logical) or []
                     if len(rows) == 1:
@@ -984,7 +986,7 @@ class MetadataService:
                             ).suffix.lower()
                             == ".asm"
                         ]
-                        child = pick_nearest(asms, parent.relative_path)
+                        child = pick_in_folder(asms, parent.relative_path)
                 if child is None or child.id == parent.id:
                     continue
                 child_ids.add(child.id)
@@ -1140,7 +1142,7 @@ class MetadataService:
                 continue
             child = None
             for key in bom_lookup_keys(filename):
-                child = pick_nearest(by_key.get(key) or [], parent.relative_path)
+                child = pick_in_folder(by_key.get(key) or [], parent.relative_path)
                 if child is not None:
                     break
             if child is None:

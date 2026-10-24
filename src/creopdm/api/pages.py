@@ -43,7 +43,7 @@ from creopdm.utils.creo_model_class import creo_subtype_display, model_type_disp
 from creopdm.utils.sketch_metadata import sketch_error, sketch_overview
 from creopdm.utils.file_rows_html import render_file_rows
 from creopdm.utils.files import format_byte_size
-from creopdm.utils.name_resolve import add_candidate, pick_nearest
+from creopdm.utils.name_resolve import add_candidate, pick_in_folder
 from creopdm.utils.folders import folder_crumbs, folder_of, folder_view_counts, normalize_folder_query
 from creopdm.utils.native_dialog import native_picker_available
 from creopdm.utils.timefmt import format_local, format_local_pretty
@@ -80,7 +80,7 @@ def _product_bom_index(ctx: AppContext, db: Session, product_id: int) -> dict[st
     """Lookup key -> [(object uuid, relative path)] for every file of the product (no object loading).
 
     Several files can answer to one name (same filename in different folders); the one nearest the
-    referencing file is chosen per link (``pick_nearest``), never simply the first.
+    referencing file is chosen per link (``pick_in_folder``), never simply the first.
     """
     from sqlalchemy import select
 
@@ -103,7 +103,7 @@ def _resolve_object(
 ) -> tuple[str, str] | None:
     """(uuid, relative path) of the file this name means for a reference made from ``parent_rel``."""
     for key in _bom_lookup_keys(filename):
-        found = pick_nearest(by_logical.get(key) or [], parent_rel, rel_of=lambda item: item[1])
+        found = pick_in_folder(by_logical.get(key) or [], parent_rel, rel_of=lambda item: item[1])
         if found is not None:
             return found
     return None

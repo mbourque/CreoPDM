@@ -1,11 +1,14 @@
 """Pick the right file when several files of a product share a name.
 
 Creo reports the parts of an assembly (and the parents of a part) by NAME only: ``plate.prt``, with no
-folder. When ``folderA/plate.prt`` and ``folderB/plate.prt`` both exist, a name alone cannot say which
-one is meant, and taking the first match links the wrong file (wrong BOM / Structure link, wrong Where
-Used parent). Creo itself finds a component next to the assembly first, so the file nearest the
-referencing file's folder wins; when two are equally near the reference is left unresolved rather
-than guessed. Files are always identified by their UUID afterwards.
+folder. A product can hold the same name in several folders (``Face_Lateral/face_mill.asm`` and
+``Face_Entry-Exit/face_mill.asm``): each folder is its own set of models, independent of the others.
+
+The rule: a name that exists once in the product is that file. A name that exists in several folders
+means the file in the SAME folder as the file that refers to it, and nothing else. It is never
+resolved to a same-named file in another folder, and never guessed: when the referring file's own
+folder has no such file (or the referrer's folder is unknown) the reference is left unresolved.
+Files are always identified by their UUID afterwards.
 """
 
 from __future__ import annotations
@@ -16,42 +19,28 @@ from typing import Any, TypeVar
 T = TypeVar("T")
 
 
-def _folder_parts(relative_path: str) -> list[str]:
+def folder_key(relative_path: str) -> str:
     text = str(relative_path or "").replace("\\", "/").strip("/")
-    parts = [part for part in text.split("/") if part]
-    return [part.lower() for part in parts[:-1]]
+    return text.rpartition("/")[0].lower()
 
 
-def pick_nearest(
+def pick_in_folder(
     candidates: Sequence[T],
     referencing_path: str,
     rel_of: Callable[[T], str] = lambda item: getattr(item, "relative_path", "") or "",
 ) -> T | None:
-    """The candidate in (or nearest to) the folder of ``referencing_path``; None if unclear.
+    """The one candidate a reference from ``referencing_path`` means; None if it cannot be told.
 
-    One candidate is that candidate. Several: the one in the same folder, else the one sharing the
-    longest folder prefix with the referencing file, else the shallowest difference in depth. Two
-    candidates that are equally near give None.
+    One candidate is that candidate. Several: the one in the referring file's own folder (exactly
+    one), else None.
     """
     if not candidates:
         return None
     if len(candidates) == 1:
         return candidates[0]
-    home = _folder_parts(referencing_path)
-
-    def score(item: T) -> tuple[int, int, int]:
-        folder = _folder_parts(rel_of(item))
-        common = 0
-        for mine, theirs in zip(home, folder):
-            if mine != theirs:
-                break
-            common += 1
-        return (1 if folder == home else 0, common, -abs(len(folder) - len(home)))
-
-    ranked = sorted(candidates, key=score, reverse=True)
-    if score(ranked[0]) == score(ranked[1]):
-        return None
-    return ranked[0]
+    home = folder_key(referencing_path)
+    same = [item for item in candidates if folder_key(rel_of(item)) == home]
+    return same[0] if len(same) == 1 else None
 
 
 def add_candidate(index: dict[str, list[Any]], key: str, item: Any, same: Callable[[Any, Any], bool]) -> None:

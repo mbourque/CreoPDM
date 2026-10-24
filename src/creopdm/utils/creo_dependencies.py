@@ -14,7 +14,7 @@ from creopdm.creo.file_manager import CreoFileManager
 from creopdm.utils.cad_name_matcher import CadNameMatcher, find_bounded_token
 from creopdm.utils.classify import is_creo_openable
 from creopdm.utils.folders import folder_of, objects_in_folder_view
-from creopdm.utils.name_resolve import pick_nearest
+from creopdm.utils.name_resolve import pick_in_folder
 
 # Assemblies/drawings need neighbors; plain parts usually do not.
 _NEEDS_DEPENDENCIES = frozenset({
@@ -375,7 +375,7 @@ def collect_open_dependency_walk(
         no_edge: set[int] = set()
         for group in by_name.values():
             if len(group) > 1:
-                chosen = pick_nearest(group, rel)
+                chosen = pick_in_folder(group, rel)
                 no_edge.update(id(item) for item in group if item is not chosen)
         for obj in immediate:
             obj_id = getattr(obj, "id", None)
