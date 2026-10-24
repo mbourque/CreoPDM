@@ -184,6 +184,8 @@
       needsHash.push({
         uuid: String(obj.uuid || "").trim(),
         canCheckin: canCheckin,
+        // Not checked out still counts as Modified; only a file held by someone else does not.
+        heldByOther: Boolean(obj.checkout_user && !obj.owned_by_me),
         newerSave: newerSave,
         vaultHash: vaultHash,
         rel: local.rel,
@@ -215,7 +217,7 @@
       if (!item.uuid) return;
       if (item.indexHash && item.indexHash !== item.vaultHash) {
         // .creopdm_cache_index.json + on-disk size match — file is real and differs.
-        pushUuid(item.uuid, item.canCheckin);
+        pushUuid(item.uuid, item.canCheckin || !item.heldByOther);
         return;
       }
       if (item.indexHash && item.indexHash === item.vaultHash && !item.newerSave) {
@@ -236,7 +238,7 @@
     needHashPaths.forEach(function (item) {
       var localHash = map[String(item.rel || "").toLowerCase()] || "";
       if (localHash && localHash !== item.vaultHash) {
-        pushUuid(item.uuid, item.canCheckin);
+        pushUuid(item.uuid, item.canCheckin || !item.heldByOther);
       }
     });
     return out;

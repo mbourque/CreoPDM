@@ -174,6 +174,7 @@ def present_workspace_index(ctx: AppContext, db: Session, objects: list) -> list
                 "relative_path": obj.relative_path,
                 "object_type": obj.object_type,
                 "owned_by_me": bool(view.owned_by_me),
+                "checkout_user": checkout.user_name if checkout else None,
                 "can_checkin": bool(can_checkin),
                 "can_checkout": bool(view.can_checkout),
                 "current_version": (

@@ -146,3 +146,37 @@ def test_where_used_only_lists_parents_from_the_same_folder_as_the_same_named_fi
 
     assert parents_of(lateral_mill) == ["Face_Lateral/lateral.asm"]
     assert parents_of(entry_mill) == ["Face_Entry-Exit/entry_exit.asm"]
+
+
+# ------------------------------------------------------------------ Modified shows without a checkout
+def test_modified_count_includes_files_that_are_not_checked_out_but_not_ones_held_by_others():
+    from creopdm.utils.folders import folder_view_counts
+
+    def row(**kw):
+        base = dict(relative_path="a.prt", filename="a.prt", extension=".prt", object_type="CREO_PART",
+                    modified_locally=True, owned_by_me=False, can_checkin=False, checkout_user=None)
+        base.update(kw)
+        return SimpleNamespace(**base)
+
+    rows = [
+        row(relative_path="free.prt", filename="free.prt"),  # not checked out, modified: counts
+        row(relative_path="mine.prt", filename="mine.prt", owned_by_me=True, checkout_user="me"),
+        row(relative_path="theirs.prt", filename="theirs.prt", checkout_user="sam"),  # held by someone else
+        row(relative_path="clean.prt", filename="clean.prt", modified_locally=False),
+    ]
+    assert folder_view_counts(rows, "")["modified"] == 2
+
+
+def test_modified_is_shown_for_unheld_files_in_the_page_navigator_and_pending_lists():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2] / "src" / "creopdm"
+    app = (root / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    assert 'row.dataset.checkedOut !== "1"' in app and "checked_out_by_other" in app
+    assert "modifiedLocally && (obj.owned_by_me || obj.can_checkin || !obj.checkout_user)" in app
+    rows = (root / "utils" / "file_rows_html.py").read_text(encoding="utf-8")
+    assert "obj.can_checkin or not obj.checkout_user" in rows
+    nav = (root / "static" / "js" / "embed_explorer.js").read_text(encoding="utf-8")
+    assert "obj.checkout_user && !obj.owned_by_me" in nav
+    pending = (root / "static" / "js" / "local_cache_pending.js").read_text(encoding="utf-8")
+    assert "item.canCheckin || !item.heldByOther" in pending

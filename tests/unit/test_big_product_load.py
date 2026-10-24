@@ -171,7 +171,7 @@ def test_the_details_route_uses_light_lookups():
     assert "ctx.objects.list_path_index(db, product.id)" in detail
     assert "if bom or structure:" in detail  # the name lookup only when there is something to link
     index_fn = pages.split("def _product_bom_index(", 1)[1].split("def _enrich_bom_tree", 1)[0]
-    assert "select(EngineeringObject.uuid, EngineeringObject.filename)" in index_fn
+    assert "EngineeringObject.uuid, EngineeringObject.filename, EngineeringObject.relative_path" in index_fn  # three columns, no object loading
     assert "list_objects" not in index_fn
 
 

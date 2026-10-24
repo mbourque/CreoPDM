@@ -111,7 +111,8 @@ def _file_row(
     else:
         sort_modified = modified_title = ""
         modified_text = "—"
-    state_modified = bool(obj.modified_locally and (obj.owned_by_me or obj.can_checkin))
+    # Modified shows for any file that is not held by someone else (checked out or not).
+    state_modified = bool(obj.modified_locally and (obj.owned_by_me or obj.can_checkin or not obj.checkout_user))
     if state_modified:
         sort_state = "0-MODIFIED"
         shown_state = "Modified"

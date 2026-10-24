@@ -1190,7 +1190,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     if (key === "modified") {
       const uuid = String(row.dataset.uuid || "").trim();
-      const owned = row.dataset.owned === "1" || row.dataset.canCheckin === "1";
+      // Modified counts for any file not held by someone else — checked out or not.
+      const owned = row.dataset.owned === "1" || row.dataset.canCheckin === "1" || row.dataset.checkedOut !== "1";
       const dirty = Boolean(
         rowAttr(row, "data-modified-locally") === "1"
           || row.dataset.modifiedLocally === "1"
@@ -2456,7 +2457,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
     const modifiedLocally = Boolean(obj.modified_locally);
     const showModified =
-      modifiedLocally && (obj.owned_by_me || obj.can_checkin);
+      modifiedLocally && (obj.owned_by_me || obj.can_checkin || !obj.checkout_user);
     const stateDisplay = showModified ? "MODIFIED" : state;
     const stateDisplayLabel = showModified ? "Modified" : stateLabel;
     const stateSort = stateSortToken(stateDisplay);
@@ -2964,7 +2965,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         stateEl.dataset.lifecycleState = base;
       }
       const uuid = row.dataset.uuid || "";
-      const owned = row.dataset.owned === "1" || row.dataset.canCheckin === "1";
+      // Modified is shown for any file not held by someone else — checked out or not.
+      const owned = row.dataset.owned === "1" || row.dataset.canCheckin === "1" || row.dataset.checkedOut !== "1";
       const dirty = Boolean(
         row.dataset.modifiedLocally === "1"
           || (uuid && pendingCheckinIds.has(String(uuid)))
@@ -3036,7 +3038,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (seq !== pendingCheckinFetch) return;
         const newerLocal = await resolveNewerLocalCacheSaves(cacheFiles, objects, productId);
         newerLocal.forEach((item) => {
-          if (item.uuid && item.can_checkin === "1") ids.push(item.uuid);
+          // Not checked out still counts as Modified; only a file held by someone else does not.
+          if (item.uuid && (item.can_checkin === "1" || item.checked_out_by_other !== "1")) ids.push(item.uuid);
         });
       } catch {
         /* agent offline — vault/preview ids still apply */
@@ -6488,6 +6491,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         local_cache: true,
         newer_save: newerSave,
         checked_out: obj.owned_by_me ? "1" : "0",
+        checked_out_by_other: obj.checkout_user && !obj.owned_by_me ? "1" : "0",
         can_checkin: obj.can_checkin ? "1" : "0",
         can_checkout: obj.can_checkout ? "1" : "0",
       };
@@ -7800,7 +7804,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     rememberPendingCheckinIds([
       ...saves.map((item) => item.uuid),
       ...newerLocal
-        .filter((item) => item.can_checkin === "1")
+        .filter((item) => item.can_checkin === "1" || item.checked_out_by_other !== "1")
         .map((item) => item.uuid),
     ]);
     if (focus === "modified") {

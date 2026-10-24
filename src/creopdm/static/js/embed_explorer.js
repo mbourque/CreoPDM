@@ -267,7 +267,9 @@
 
   function tipHasCheckinWork(obj) {
     // Match Files rowHasCheckinWork: eligible + (server Modified or pending set).
-    if (!obj || !obj.uuid || !tipCanCheckin(obj)) return false;
+    // Modified counts for any file not held by someone else, checked out or not.
+    if (!obj || !obj.uuid) return false;
+    if (!tipCanCheckin(obj) && obj.checkout_user && !obj.owned_by_me) return false;
     if (obj.modified_locally) return true;
     return Boolean(pendingCheckinIds[String(obj.uuid)]);
   }
