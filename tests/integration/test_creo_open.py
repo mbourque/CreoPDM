@@ -681,7 +681,7 @@ def test_open_dependencies_nested_tree_without_where_used(
         part = client.post(
             f"/api/products/{product['uuid']}/objects",
             files={"file": ("pin.prt", b"part-bytes", "application/octet-stream")},
-            data={"comment": "Part", "relative_path": "Parts/pin.prt"},
+            data={"comment": "Part", "relative_path": "CAD/pin.prt"},
         )
         sub = client.post(
             f"/api/products/{product['uuid']}/objects",
@@ -733,7 +733,7 @@ def test_open_dependencies_prefer_where_used_db(
         part = client.post(
             f"/api/products/{product['uuid']}/objects",
             files={"file": ("pin.prt", b"part-only", "application/octet-stream")},
-            data={"comment": "Part", "relative_path": "Parts/pin.prt"},
+            data={"comment": "Part", "relative_path": "CAD/pin.prt"},
         )
         sub = client.post(
             f"/api/products/{product['uuid']}/objects",
@@ -819,7 +819,7 @@ def test_open_dependencies_trust_large_where_used_tree(
                 },
                 data={
                     "comment": f"P{index}",
-                    "relative_path": f"Parts/p{index:03d}.prt",
+                    "relative_path": f"CAD/p{index:03d}.prt",
                 },
             )
             assert part.status_code == 201, part.text
@@ -876,12 +876,12 @@ def test_open_dependencies_sparse_where_used_falls_back_to_vault_scan(
         part = client.post(
             f"/api/products/{product['uuid']}/objects",
             files={"file": ("pin.prt", b"part-bytes", "application/octet-stream")},
-            data={"comment": "Part", "relative_path": "Parts/pin.prt"},
+            data={"comment": "Part", "relative_path": "CAD/pin.prt"},
         )
         extra = client.post(
             f"/api/products/{product['uuid']}/objects",
             files={"file": ("extra.prt", b"extra-bytes", "application/octet-stream")},
-            data={"comment": "Extra", "relative_path": "Parts/extra.prt"},
+            data={"comment": "Extra", "relative_path": "CAD/extra.prt"},
         )
         sub = client.post(
             f"/api/products/{product['uuid']}/objects",

@@ -208,3 +208,29 @@ def test_the_modified_tab_shows_folders_and_drops_a_local_tip_when_the_file_is_a
     parts = app.split("async function loadCheckinQueueParts(", 1)[1].split("function prefetchCheckinQueueParts", 1)[0]
     assert "vaultSaveKeys" in parts and "!vaultSaveKeys.has(" in parts and "!vaultSaveIds.has(" in parts
     assert "folderPrefix" in app and "relativePath: item.relative_path || \"\"," in app
+
+
+# ------------------------------------------------------------------ Open: dependencies stay in the model's folder
+def test_open_dependencies_only_come_from_the_models_own_folder(tmp_path):
+    from creopdm.utils.creo_dependencies import collect_open_dependency_walk
+
+    def obj(i, rel):
+        return SimpleNamespace(id=i, relative_path=rel, filename=rel.rsplit("/", 1)[-1], object_type="CREO_PART", extension=".prt")
+
+    model = tmp_path / "plate.asm"
+    model.write_bytes(b"\x00plate.prt\x00")
+    siblings = [obj(1, "A/plate.asm"), obj(2, "A/plate.prt"), obj(3, "B/plate.prt"), obj(4, "C/plate.prt")]
+    siblings[0].object_type = "CREO_ASSEMBLY"
+    siblings[0].extension = ".asm"
+    found, _edges = collect_open_dependency_walk(
+        primary_relative="A/plate.asm",
+        primary_filename="plate.asm",
+        object_type="CREO_ASSEMBLY",
+        siblings=siblings,
+        model_path=model,
+        model_extensions=[".prt", ".asm"],
+        all_cad_extensions=[".prt", ".asm"],
+        resolve_path=lambda o: None,
+        skip_object_id=1,
+    )
+    assert sorted(o.relative_path for o in found) == ["A/plate.prt"]

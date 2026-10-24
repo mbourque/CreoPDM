@@ -105,8 +105,7 @@ def test_open_dependency_walk_prefers_folder_scope_before_product():
     walk = text.split("while queue and len(out) < _MAX_OPEN_DEPENDENCIES_TOTAL:", 1)[1]
     walk = walk.split("return out, edges", 1)[0]
     assert 'scope="folder"' in walk
-    assert 'scope="product"' in walk
-    assert walk.index('scope="folder"') < walk.index('scope="product"')
+    assert 'scope="product"' not in walk  # a model's dependencies are its own folder only
     assert "_MAX_OPEN_DEPENDENCY_MATCHES" in text
     assert "include_stems=not strict" in text
     # 2500 open deps exhausted QueuePool and took the site down.
@@ -194,14 +193,14 @@ def test_collect_open_dependencies_walks_subassembly_tree(tmp_path: Path):
     paths = {
         "CAD/top.asm": top,
         "CAD/sub.asm": sub,
-        "Parts/pin.prt": tmp_path / "pin.prt.1",
+        "CAD/pin.prt": tmp_path / "pin.prt.1",
     }
-    paths["Parts/pin.prt"].write_bytes(b"part")
+    paths["CAD/pin.prt"].write_bytes(b"part")
     siblings = [
         _Obj("CAD/top.asm", "top.asm", object_type="CREO_ASSEMBLY", obj_id=1),
         _Obj("CAD/sub.asm", "sub.asm", object_type="CREO_ASSEMBLY", obj_id=2),
-        _Obj("Parts/pin.prt", "pin.prt", object_type="CREO_PART", obj_id=3),
-        _Obj("Parts/other.prt", "other.prt", object_type="CREO_PART", obj_id=4),
+        _Obj("CAD/pin.prt", "pin.prt", object_type="CREO_PART", obj_id=3),
+        _Obj("CAD/other.prt", "other.prt", object_type="CREO_PART", obj_id=4),
     ]
 
     def resolve(obj):

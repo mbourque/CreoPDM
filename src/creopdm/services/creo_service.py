@@ -31,6 +31,7 @@ from creopdm.utils.creo_dependencies import (
     collect_open_dependency_walk,
     needs_open_dependencies,
 )
+from creopdm.utils.name_resolve import folder_key
 from creopdm.utils.creo_header import creo_release_for, is_creo_native_model
 from creopdm.utils.launch import working_directory_for
 
@@ -351,6 +352,10 @@ class CreoService:
                     )
                     chosen = list(by_id.values())
                     source = f"{source}+product-fill"
+        # Dependencies are the model's own folder only: each folder is its own set of models, and a
+        # same-named file in another folder is a different file that must never come along.
+        home = folder_key(relative_path)
+        chosen = [obj for obj in chosen if folder_key(str(getattr(obj, "relative_path", "") or "")) == home]
         logger.info(
             "Open deps for %s via %s (%s files)",
             Path(filename).name,

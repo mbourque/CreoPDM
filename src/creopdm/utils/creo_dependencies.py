@@ -14,7 +14,7 @@ from creopdm.creo.file_manager import CreoFileManager
 from creopdm.utils.cad_name_matcher import CadNameMatcher, find_bounded_token
 from creopdm.utils.classify import is_creo_openable
 from creopdm.utils.folders import folder_of, objects_in_folder_view
-from creopdm.utils.name_resolve import pick_in_folder
+from creopdm.utils.name_resolve import folder_key, pick_in_folder
 
 # Assemblies/drawings need neighbors; plain parts usually do not.
 _NEEDS_DEPENDENCIES = frozenset({
@@ -334,8 +334,7 @@ def collect_open_dependency_walk(
             continue
         if not path.is_file():
             continue
-        # Folder first, then product — merge so cross-folder parts are not skipped
-        # when a small folder falls back to "all siblings" without byte hits.
+        # Only this model's own folder: files in other folders are never its dependencies.
         folder_hits = select_dependency_objects(
             primary_relative=rel,
             primary_filename=filename,
@@ -346,27 +345,10 @@ def collect_open_dependency_walk(
             all_cad_extensions=all_cad_extensions,
             scope="folder",
         )
-        product_hits = select_dependency_objects(
-            primary_relative=rel,
-            primary_filename=filename,
-            object_type=otype,
-            siblings=siblings,
-            model_path=path,
-            model_extensions=model_extensions,
-            all_cad_extensions=all_cad_extensions,
-            scope="product",
-        )
-        merged: dict[str, object] = {}
-        for obj in (*product_hits, *folder_hits):
-            obj_id = getattr(obj, "id", None)
-            obj_rel = str(getattr(obj, "relative_path", "") or "").replace("\\", "/")
-            key = f"id:{obj_id}" if obj_id is not None else obj_rel.lower()
-            merged.setdefault(key, obj)
-        immediate = list(merged.values())
+        home = folder_key(rel)
+        immediate = [obj for obj in folder_hits
+                     if folder_key(str(getattr(obj, "relative_path", "") or "")) == home]
         dep_type = _open_dependency_type(filename)
-        # Files that share a name (other folders) are all downloaded, but only the one nearest this
-        # model is recorded as its component: a Where Used link to the same-named file elsewhere
-        # would be wrong.
         by_name: dict[str, list] = {}
         for candidate in immediate:
             cand_rel = str(getattr(candidate, "relative_path", "") or "").replace("\\", "/")
