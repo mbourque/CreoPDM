@@ -83,3 +83,14 @@ def test_the_page_and_the_navigator_wire_the_quick_action():
     assert "isModifiedUnheld: Boolean(" in nav
     menu = (JS / "files_context_menu.js").read_text(encoding="utf-8")
     assert '"checkout-checkin": caps.canCheckoutCheckin,' in menu
+
+
+def test_the_quick_action_prepares_the_local_workspace_like_checkout_and_check_in_explains_a_failed_push():
+    app = (JS / "app.js").read_text(encoding="utf-8")
+    chain = app.split("async function checkoutThenCheckinSelected() {", 1)[1].split("function filesContextMenuCapabilities", 1)[0]
+    # same step as the Checkout button: files go to the local workspace, newer local saves are kept
+    assert "materializeCheckedOutToAgentCache(okIds" in chain and "preserveNewer: true" in chain
+    assert chain.index("materializeCheckedOutToAgentCache(okIds") < chain.index("checkinBtn?.click()")
+    checkin = (JS / "checkin.js").read_text(encoding="utf-8")
+    assert 'let pushProblem = "";' in checkin
+    assert "The local save could not be staged for check-in: ${pushProblem}" in checkin

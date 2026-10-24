@@ -4362,6 +4362,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const okIds = (Array.isArray(result.ok) ? result.ok : []).map((item) => item.uuid).filter(Boolean);
     if (!okIds.length) return false;
     applyCheckedOutOnRows(okIds);
+    // Same step as Checkout: put the checked-out files in the local workspace through the agent.
+    // A newer local save is kept (never overwritten), and the agent records the file as checked
+    // out here, which the Check In push relies on. An agent that is not running is not an error
+    // here: Check In then says so.
+    try {
+      const planItems = Array.isArray(result.plan_items) && result.plan_items.length ? result.plan_items : null;
+      await withBusy("Preparing local workspace…", async () =>
+        materializeCheckedOutToAgentCache(okIds, undefined, planItems ? { planItems } : { preserveNewer: true })
+      );
+    } catch {
+      /* Check In reports a local workspace that cannot be synced */
+    }
     // The modification stays on the file; mark it so Check In offers it, then open that dialog.
     rememberPendingCheckinIds(okIds, { merge: true });
     targets.forEach((row) => {

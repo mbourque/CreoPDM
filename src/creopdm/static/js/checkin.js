@@ -284,6 +284,9 @@ window.__creopdmModules.checkin = {
         }
       }
       let agentOffline = false;
+      // Why the local save could not be staged into the vault (shown in the dialog, which opens over
+      // the toolbar message and would otherwise just say "Nothing to check in").
+      let pushProblem = "";
       const preview = await withBusy(addOnly ? "Preparing…" : "Preparing check-in…", async () => {
         if (!addOnly && productId && pushItems.length) {
           try {
@@ -292,10 +295,12 @@ window.__creopdmModules.checkin = {
               agentOffline = true;
             } else if (pushed.failed?.length && !pushed.ok?.length) {
               const first = pushed.failed[0]?.message || "Could not sync local files to the vault.";
+              pushProblem = first;
               showError($("#toolbar-error"), first);
             }
           } catch (err) {
-            showError($("#toolbar-error"), err?.message || String(err));
+            pushProblem = err?.message || String(err);
+            showError($("#toolbar-error"), pushProblem);
           }
         }
         if (!addOnly && productId && productLocalNewPaths.length) {
@@ -499,9 +504,11 @@ window.__creopdmModules.checkin = {
           }
         } else if (!names.length && !newCount && !productUndoIds.length) {
           const item = document.createElement("li");
-          item.textContent = productScope
-            ? "– Nothing to check in. Local workspace files need creopdm-agent to sync into the vault first."
-            : "– Nothing to check in. Use Undo Checkout to release locks without a new version.";
+          item.textContent = pushProblem
+            ? `– The local save could not be staged for check-in: ${pushProblem}`
+            : productScope
+              ? "– Nothing to check in. Local workspace files need creopdm-agent to sync into the vault first."
+              : "– Nothing to check in. Use Undo Checkout to release locks without a new version.";
           list.appendChild(item);
           canSubmit = false;
         } else {
