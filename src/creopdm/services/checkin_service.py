@@ -536,7 +536,8 @@ class CheckinService:
 
     def preview_queue(self, session: Session, product) -> dict[str, str | bool | list]:
         siblings = self._objects.list_objects(session, product.id)
-        queue = self._workspaces.product_checkin_queue(product, siblings)
+        # A check-in decision: read the vault as it is now, not a status shared a moment ago.
+        queue = self._workspaces.product_checkin_queue(product, siblings, fresh=True)
         new_files = []
         for item in queue["new_files"]:
             new_files.append(

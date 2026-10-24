@@ -541,6 +541,7 @@ class WorkspaceService:
             changed = True
         if changed:
             self._try_set_mode(tip, False)
+            self._drop_status_cache()
             logger.info("Discarded unsaved vault changes for %s", obj.filename)
         return changed
 
@@ -572,6 +573,7 @@ class WorkspaceService:
             set_file_writable(destination)
         destination.write_bytes(data)
         set_file_writable(destination)
+        self._drop_status_cache()
         logger.info("Staged vault working copy %s (%s bytes)", destination, len(data))
         return destination
 
@@ -608,6 +610,7 @@ class WorkspaceService:
             set_file_writable(destination)
         destination.write_bytes(data)
         set_file_writable(destination)
+        self._drop_status_cache()
         logger.info("Staged new vault file %s (%s bytes)", destination, len(data))
         return destination
 
@@ -662,6 +665,11 @@ class WorkspaceService:
         status = self._git_status_now(product)
         cache[key] = (_time.monotonic(), status, generation)
         return status
+
+    def _drop_status_cache(self) -> None:
+        """Forget shared git statuses: files were just written into (or removed from) a vault folder
+        without a git command, so a status taken a moment ago no longer describes it."""
+        self.__dict__.setdefault("_status_cache", {}).clear()
 
     def _git_status_now(self, product: Product) -> GitStatus:
         empty = GitStatus(branch="main", dirty=False, staged=[], unstaged=[], untracked=[], raw="")
@@ -764,9 +772,15 @@ class WorkspaceService:
         self,
         product: Product,
         objects: list[EngineeringObject],
+        *,
+        fresh: bool = False,
     ) -> dict[str, list]:
-        """Files in the workspace that would be recorded on check-in."""
-        status = self._git_status(product, shared=True)
+        """Files in the workspace that would be recorded on check-in.
+
+        ``fresh=True`` reads the vault now (the Check In dialog right after local saves were staged
+        must not see a status from a few seconds ago); polls and lists may share a recent one.
+        """
+        status = self._git_status(product, shared=not fresh)
         extras, vault, dirty_paths, untracked_by_logical = self._status_lookups(product, status)
         saves: list[dict[str, str | int | bool]] = []
         for obj in objects:
@@ -785,6 +799,7 @@ class WorkspaceService:
                 {
                     **pending,
                     "uuid": obj.uuid,
+                    "relative_path": obj.relative_path,
                     "kind": "newer_save" if pending["newer_save"] else "modified",
                     "object_type": obj.object_type,
                     "extension": obj.extension,

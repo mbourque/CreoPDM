@@ -7822,6 +7822,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const vaultSaveIds = new Set(
       saves.map((item) => String(item.uuid || "")).filter(Boolean)
     );
+    // Also by folder + logical name, in case the two lists reached the same file by different ids.
+    const vaultSaveKeys = new Set(
+      saves
+        .map((item) => logicalRelativePath(String(item.relative_path || "")).toLowerCase())
+        .filter(Boolean)
+    );
     const newerLocal = (
       await resolveNewerLocalCacheSaves(
         cacheFiles,
@@ -7829,7 +7835,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         productId,
         listed.vaultFolder || vaultFolderOverride
       )
-    ).filter((item) => !vaultSaveIds.has(String(item.uuid || "")));
+    ).filter(
+      (item) =>
+        !vaultSaveIds.has(String(item.uuid || ""))
+        && !vaultSaveKeys.has(logicalRelativePath(String(item.relative_path || "")).toLowerCase())
+    );
     const parts = {
       saves,
       created,
@@ -7951,8 +7961,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (meta.relativePath) link.dataset.relativePath = meta.relativePath;
         wrap.appendChild(link);
         cell.appendChild(wrap);
+        // The folder is part of the file's identity: same-named files in other folders stay distinct.
+        const folderOf = String(meta.relativePath || "").replace(/\\/g, "/");
+        const folderPrefix = folderOf.includes("/") ? `${folderOf.slice(0, folderOf.lastIndexOf("/"))}/` : "";
         const noteText = meta.recordedFilename
-          ? `from ${meta.recordedFilename}`
+          ? `from ${folderPrefix}${meta.recordedFilename}`
           : meta.relativePath && meta.relativePath !== filename
             ? meta.relativePath
             : "";
@@ -8005,6 +8018,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           filename: item.filename,
           uuid: item.uuid,
           objectType: item.object_type,
+          relativePath: item.relative_path || "",
           checkedOut: "1",
           recordedFilename: item.newer_save ? item.recorded_filename : "",
         }

@@ -180,3 +180,31 @@ def test_modified_is_shown_for_unheld_files_in_the_page_navigator_and_pending_li
     assert "obj.checkout_user && !obj.owned_by_me" in nav
     pending = (root / "static" / "js" / "local_cache_pending.js").read_text(encoding="utf-8")
     assert "item.canCheckin || !item.heldByOther" in pending
+
+
+# ------------------------------------------------------------------ Modified tab: one row per file
+@requires_git
+def test_the_check_in_queue_names_the_folder_of_each_pending_save(client):
+    product, a, b = _add_two(client)
+    path = None
+    # edit the vault copy of the first file so it is a pending save
+    import creopdm.api.deps as deps  # noqa: F401  (ensures the app is imported)
+
+    assert client.post(f"/api/objects/{a['uuid']}/checkout").status_code == 200
+    saved = client.put(
+        f"/api/objects/{a['uuid']}/workspace-content",
+        files={"file": ("plate.prt", b"folder-a-bytes-EDITED", "application/octet-stream")},
+    )
+    assert saved.status_code == 200, saved.text
+    queue = client.get(f"/api/products/{product['uuid']}/checkin-queue").json()
+    assert [item["relative_path"] for item in queue["saves"]] == ["folderA/plate.prt"]
+    assert [item["uuid"] for item in queue["saves"]] == [a["uuid"]]
+
+
+def test_the_modified_tab_shows_folders_and_drops_a_local_tip_when_the_file_is_already_listed():
+    from pathlib import Path
+
+    app = (Path(__file__).resolve().parents[2] / "src" / "creopdm" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    parts = app.split("async function loadCheckinQueueParts(", 1)[1].split("function prefetchCheckinQueueParts", 1)[0]
+    assert "vaultSaveKeys" in parts and "!vaultSaveKeys.has(" in parts and "!vaultSaveIds.has(" in parts
+    assert "folderPrefix" in app and "relativePath: item.relative_path || \"\"," in app

@@ -332,3 +332,34 @@ def test_the_page_reads_the_compact_list_unless_it_asks_for_fresh_full_rows():
     for name in ("metadata.js", "checkin.js", "modifications.js"):
         source = (JS / name).read_text(encoding="utf-8")
         assert "ensureProductObjects(productId, { force: true })" in source, name
+
+
+# ------------------------------------------------------------------ the Check In preview reads the live vault
+@requires_git
+def test_check_in_preview_sees_a_save_staged_a_moment_ago_even_with_the_shared_status_on(client, monkeypatch):
+    from creopdm.services.workspace_service import WorkspaceService
+
+    monkeypatch.setattr(WorkspaceService, "STATUS_SHARE_SEC", 60.0)  # the server default is 2 s; make it long
+    product = client.post("/api/products", json={"name": "Stale"}).json()
+    shaft = _add(client, product["uuid"], "shaft.prt")
+    assert client.post(f"/api/objects/{shaft['uuid']}/checkout").status_code == 200
+    # a poll / list fills the shared status while nothing is pending
+    assert client.get(f"/api/products/{product['uuid']}/checkin-queue").json()["saves"] == []
+    staged = client.put(
+        f"/api/objects/{shaft['uuid']}/workspace-content",
+        files={"file": ("shaft.prt", b"shaft.prt-EDITED", "application/octet-stream")},
+    )
+    assert staged.status_code == 200, staged.text
+    preview = client.get(f"/api/products/{product['uuid']}/checkin-preview").json()
+    assert preview["object_ids"] == [shaft["uuid"]], preview  # not "0 vault files"
+    # lists share a recent status but writes into the vault ended the sharing too
+    assert [row["uuid"] for row in client.get(f"/api/products/{product['uuid']}/checkin-queue").json()["saves"]] == [shaft["uuid"]]
+
+
+def test_vault_writes_and_the_check_in_decision_do_not_use_a_shared_status():
+    workspace = (ROOT / "src" / "creopdm" / "services" / "workspace_service.py").read_text(encoding="utf-8")
+    assert "def _drop_status_cache(self)" in workspace
+    assert workspace.count("self._drop_status_cache()") >= 3  # staged upload, new file, discard
+    assert "status = self._git_status(product, shared=not fresh)" in workspace
+    checkin = (ROOT / "src" / "creopdm" / "services" / "checkin_service.py").read_text(encoding="utf-8")
+    assert "product_checkin_queue(product, siblings, fresh=True)" in checkin
