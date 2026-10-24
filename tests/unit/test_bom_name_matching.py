@@ -72,7 +72,7 @@ def test_format_bom_qty_whole_numbers_not_floats():
 
 
 def test_enrich_bom_links_instance_to_generic_uuid():
-    by_logical = {"split-rivet.prt": "uuid-generic", "top-back.prt": "uuid-top"}
+    by_logical = {"split-rivet.prt": [("uuid-generic", "split-rivet.prt")], "top-back.prt": [("uuid-top", "top-back.prt")]}
     tree = [
         {
             "filename": "TOP-BACK.prt",
@@ -94,7 +94,7 @@ def test_enrich_bom_links_instance_to_generic_uuid():
 
 def test_enrich_structure_rows_links_tip_names():
     """Structure Component column must resolve product tips like BOM."""
-    by_logical = {"shaft.prt": "uuid-shaft", "600640041454.prt": "uuid-harness"}
+    by_logical = {"shaft.prt": [("uuid-shaft", "shaft.prt")], "600640041454.prt": [("uuid-harness", "600640041454.prt")]}
     rows = _enrich_structure_rows(
         [
             {"name": "shaft.prt", "type": "PART", "level": 1},
@@ -106,3 +106,26 @@ def test_enrich_structure_rows_links_tip_names():
     assert rows[0]["object_id"] == "uuid-shaft"
     assert rows[1]["object_id"] == "uuid-harness"
     assert "object_id" not in rows[2]
+
+
+def test_bom_link_picks_the_same_named_file_nearest_the_assembly():
+    by_logical = {
+        "plate.prt": [("uuid-lib", "lib/plate.prt"), ("uuid-asm", "asm/plate.prt")],
+    }
+    tree = [{"filename": "plate.prt", "children": []}]
+    assert _enrich_bom_tree(tree, by_logical, "asm/top.asm")[0]["object_id"] == "uuid-asm"
+    assert _enrich_bom_tree(tree, by_logical, "lib/other.asm")[0]["object_id"] == "uuid-lib"
+    # equally near: no link rather than a wrong one
+    assert "object_id" not in _enrich_bom_tree(tree, by_logical, "top.asm")[0]
+    rows = _enrich_structure_rows([{"name": "plate.prt"}], by_logical, "asm/top.asm")
+    assert rows[0]["object_id"] == "uuid-asm"
+
+
+def test_a_sub_assembly_looks_for_its_components_next_to_itself():
+    by_logical = {
+        "sub.asm": [("uuid-sub", "lib/sub.asm")],
+        "bolt.prt": [("uuid-bolt-lib", "lib/bolt.prt"), ("uuid-bolt-asm", "asm/bolt.prt")],
+    }
+    tree = [{"filename": "sub.asm", "children": [{"filename": "bolt.prt", "children": []}]}]
+    child = _enrich_bom_tree(tree, by_logical, "asm/top.asm")[0]["children"][0]
+    assert child["object_id"] == "uuid-bolt-lib"  # next to lib/sub.asm, not next to asm/top.asm

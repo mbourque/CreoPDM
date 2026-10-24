@@ -14,6 +14,7 @@ from creopdm.creo.file_manager import CreoFileManager
 from creopdm.utils.cad_name_matcher import CadNameMatcher, find_bounded_token
 from creopdm.utils.classify import is_creo_openable
 from creopdm.utils.folders import folder_of, objects_in_folder_view
+from creopdm.utils.name_resolve import pick_nearest
 
 # Assemblies/drawings need neighbors; plain parts usually do not.
 _NEEDS_DEPENDENCIES = frozenset({
@@ -363,6 +364,19 @@ def collect_open_dependency_walk(
             merged.setdefault(key, obj)
         immediate = list(merged.values())
         dep_type = _open_dependency_type(filename)
+        # Files that share a name (other folders) are all downloaded, but only the one nearest this
+        # model is recorded as its component: a Where Used link to the same-named file elsewhere
+        # would be wrong.
+        by_name: dict[str, list] = {}
+        for candidate in immediate:
+            cand_rel = str(getattr(candidate, "relative_path", "") or "").replace("\\", "/")
+            cand_name = str(getattr(candidate, "filename", "") or Path(cand_rel).name)
+            by_name.setdefault(CreoFileManager.normalize_creo_filename(cand_name).lower(), []).append(candidate)
+        no_edge: set[int] = set()
+        for group in by_name.values():
+            if len(group) > 1:
+                chosen = pick_nearest(group, rel)
+                no_edge.update(id(item) for item in group if item is not chosen)
         for obj in immediate:
             obj_id = getattr(obj, "id", None)
             obj_rel = str(getattr(obj, "relative_path", "") or "").replace("\\", "/")
@@ -371,6 +385,7 @@ def collect_open_dependency_walk(
                 parent_id is not None
                 and obj_id is not None
                 and int(obj_id) != int(parent_id)
+                and id(obj) not in no_edge
             ):
                 child_name = str(getattr(obj, "filename", "") or Path(obj_rel).name)
                 # Stem hits may still download with Open; only persist Where Used

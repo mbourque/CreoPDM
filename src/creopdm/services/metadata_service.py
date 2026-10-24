@@ -42,6 +42,7 @@ from creopdm.utils.creo_dependencies import (
 )
 from creopdm.utils.creo_model_class import normalize_creo_identity
 from creopdm.utils.bom_match import bom_lookup_keys, bom_where_used_keys
+from creopdm.utils.name_resolve import add_candidate, pick_nearest
 from creopdm.utils.classify import display_type_label
 from creopdm.utils.cad_name_matcher import CadNameMatcher
 
@@ -660,6 +661,19 @@ class MetadataService:
 
         siblings = self._objects.list_objects(session, obj.product_id)
         target_keys = set(bom_where_used_keys(obj.filename))
+        # Files that answer to the same name as this one (other folders). A parent that names the
+        # file by name only belongs to the one of them nearest to it.
+        same_name = [
+            row
+            for row in siblings
+            if row.id == obj.id or (target_keys and set(bom_where_used_keys(row.filename)) & target_keys)
+        ]
+
+        def names_this_file(parent_row: EngineeringObject) -> bool:
+            if len(same_name) <= 1:
+                return True
+            chosen = pick_nearest(same_name, parent_row.relative_path)
+            return chosen is not None and chosen.id == obj.id
         debug_bom_hits: list[str] = []
         debug_vault: list[dict[str, object]] = []
 
@@ -668,6 +682,8 @@ class MetadataService:
         if target_keys:
             for other in siblings:
                 if other.id == obj.id or other.uuid in items_by_parent:
+                    continue
+                if not names_this_file(other):
                     continue
                 version = self._resolve_version(session, other, None)
                 if version is None:
@@ -708,6 +724,7 @@ class MetadataService:
             if other.id != obj.id
             and other.uuid not in items_by_parent
             and needs_open_dependencies(other.object_type, other.filename)
+            and names_this_file(other)
         ]
         vault_scan_skipped = False
         if vault_scan and len(asm_candidates) > _VAULT_SCAN_ASM_CAP:
@@ -900,7 +917,9 @@ class MetadataService:
         per-file refresh after a check-in.
         """
         # Map logical name.ext → object; unique stems → object (Creo often omits .prt).
-        by_key: dict[str, EngineeringObject] = {}
+        # Several files can share a name (different folders): all are kept and the one nearest the
+        # parent is chosen per parent below.
+        by_key: dict[str, list[EngineeringObject]] = {}
         stem_to_rows: dict[str, list[EngineeringObject]] = {}
         candidate_names: list[str] = []
         for row in objects:
@@ -908,7 +927,7 @@ class MetadataService:
             logical = CreoFileManager.normalize_creo_filename(row.filename).lower()
             if not logical or "." not in logical:
                 continue
-            by_key.setdefault(logical, row)
+            add_candidate(by_key, logical, row, lambda a, b: a.id == b.id)
             stem = Path(logical).stem.lower()
             if len(stem) >= 4:
                 stem_to_rows.setdefault(stem, []).append(row)
@@ -951,7 +970,7 @@ class MetadataService:
                 logical = CreoFileManager.normalize_creo_filename(name).lower()
                 if not logical:
                     continue
-                child = by_key.get(logical)
+                child = pick_nearest(by_key.get(logical) or [], parent.relative_path)
                 if child is None and "." not in logical and len(logical) >= 4:
                     rows = stem_to_rows.get(logical) or []
                     if len(rows) == 1:
@@ -965,8 +984,7 @@ class MetadataService:
                             ).suffix.lower()
                             == ".asm"
                         ]
-                        if len(asms) == 1:
-                            child = asms[0]
+                        child = pick_nearest(asms, parent.relative_path)
                 if child is None or child.id == parent.id:
                     continue
                 child_ids.add(child.id)
@@ -1108,12 +1126,13 @@ class MetadataService:
             return
 
         siblings = self._objects.list_objects(session, parent.product_id)
-        by_key: dict[str, EngineeringObject] = {}
+        # Every file that answers to a name; the one next to the parent is picked below (UUID/id from there on).
+        by_key: dict[str, list[EngineeringObject]] = {}
         for row in siblings:
             if row.id == parent.id:
                 continue
             for key in bom_lookup_keys(row.filename):
-                by_key.setdefault(key, row)
+                add_candidate(by_key, key, row, lambda a, b: a.id == b.id)
 
         by_child: dict[tuple[int, str], float] = {}
         for filename, dep_type, quantity in refs:
@@ -1121,7 +1140,7 @@ class MetadataService:
                 continue
             child = None
             for key in bom_lookup_keys(filename):
-                child = by_key.get(key)
+                child = pick_nearest(by_key.get(key) or [], parent.relative_path)
                 if child is not None:
                     break
             if child is None:

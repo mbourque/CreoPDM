@@ -521,7 +521,8 @@ window.__creopdmModules.metadata = {
           return { ok: true, reason: "left local modifications" };
         }
         let snapshot = await gatherCreoMetadataForFilename(target.filename, filePath, {
-          deferErase: opts.deferErase !== false,
+          // A name shared with a file in another folder is erased from the session right away.
+          deferErase: opts.deferErase !== false && !target.sharedName,
           // Default on — Details Features need tree names (RIGHT, DEFAULT_CS, …).
           featureNames: opts.featureNames !== false,
           pendingErase: opts.pendingErase,
@@ -966,8 +967,18 @@ window.__creopdmModules.metadata = {
       const sourceRows = rebuild
         ? candidates
         : candidates.filter((row) => !row.creo_metadata_captured);
+      // Creo keeps one model per NAME in a session. A name that exists in more than one folder of the
+      // product must not be left loaded after its read, or the next same-named file would be answered
+      // with that model and its features saved on the wrong file.
+      const sameNameKey = (name) => String(name || "").trim().toLowerCase().replace(/\.\d+$/, "");
+      const nameCounts = new Map();
+      (Array.isArray(rows) ? rows : []).forEach((row) => {
+        const key = sameNameKey(row?.filename);
+        if (key) nameCounts.set(key, (nameCounts.get(key) || 0) + 1);
+      });
       const targets = sortMetadataCollectTargets(
         sourceRows.map((row) => ({
+          sharedName: (nameCounts.get(sameNameKey(row.filename)) || 0) > 1,
           uuid: String(row.uuid || "").trim(),
           filename: String(row.filename || "").trim(),
           path: "",

@@ -43,6 +43,7 @@ from creopdm.utils.creo_model_class import creo_subtype_display, model_type_disp
 from creopdm.utils.sketch_metadata import sketch_error, sketch_overview
 from creopdm.utils.file_rows_html import render_file_rows
 from creopdm.utils.files import format_byte_size
+from creopdm.utils.name_resolve import add_candidate, pick_nearest
 from creopdm.utils.folders import folder_crumbs, folder_of, folder_view_counts, normalize_folder_query
 from creopdm.utils.native_dialog import native_picker_available
 from creopdm.utils.timefmt import format_local, format_local_pretty
@@ -75,49 +76,61 @@ def _bom_generic_label(filename: str) -> str | None:
     return bom_generic_label(filename)
 
 
-def _product_bom_index(ctx: AppContext, db: Session, product_id: int) -> dict[str, str]:
-    """Lookup key -> object uuid for every file of the product (two columns, no object loading)."""
+def _product_bom_index(ctx: AppContext, db: Session, product_id: int) -> dict[str, list[tuple[str, str]]]:
+    """Lookup key -> [(object uuid, relative path)] for every file of the product (no object loading).
+
+    Several files can answer to one name (same filename in different folders); the one nearest the
+    referencing file is chosen per link (``pick_nearest``), never simply the first.
+    """
     from sqlalchemy import select
 
     from creopdm.models.object import EngineeringObject
 
-    index: dict[str, str] = {}
+    index: dict[str, list[tuple[str, str]]] = {}
     rows = db.execute(
-        select(EngineeringObject.uuid, EngineeringObject.filename).where(
-            EngineeringObject.product_id == product_id
-        )
+        select(
+            EngineeringObject.uuid, EngineeringObject.filename, EngineeringObject.relative_path
+        ).where(EngineeringObject.product_id == product_id)
     ).all()
-    for uuid, filename in rows:
+    for uuid, filename, relative_path in rows:
         for key in _bom_lookup_keys(str(filename)):
-            index.setdefault(key, str(uuid))
+            add_candidate(index, key, (str(uuid), str(relative_path or filename)), lambda a, b: a[0] == b[0])
     return index
 
 
-def _enrich_bom_tree(nodes: list, by_logical: dict[str, str]) -> list[dict]:
+def _resolve_object(
+    by_logical: dict[str, list[tuple[str, str]]], filename: str, parent_rel: str
+) -> tuple[str, str] | None:
+    """(uuid, relative path) of the file this name means for a reference made from ``parent_rel``."""
+    for key in _bom_lookup_keys(filename):
+        found = pick_nearest(by_logical.get(key) or [], parent_rel, rel_of=lambda item: item[1])
+        if found is not None:
+            return found
+    return None
+
+
+def _enrich_bom_tree(nodes: list, by_logical: dict[str, list[tuple[str, str]]], parent_rel: str = "") -> list[dict]:
     enriched: list[dict] = []
     for node in nodes or []:
         if not isinstance(node, dict):
             continue
         item = dict(node)
         filename = str(item.get("filename") or "")
-        object_id = ""
-        for key in _bom_lookup_keys(filename):
-            object_id = by_logical.get(key) or ""
-            if object_id:
-                break
-        if object_id:
-            item["object_id"] = object_id
+        found = _resolve_object(by_logical, filename, parent_rel)
+        if found is not None:
+            item["object_id"] = found[0]
             generic = _bom_generic_label(filename)
             if generic:
                 item["open_as"] = generic
         children = item.get("children")
         if isinstance(children, list):
-            item["children"] = _enrich_bom_tree(children, by_logical)
+            # A sub-assembly's own components are looked for next to that sub-assembly.
+            item["children"] = _enrich_bom_tree(children, by_logical, found[1] if found else parent_rel)
         enriched.append(item)
     return enriched
 
 
-def _enrich_structure_rows(rows: list, by_logical: dict[str, str]) -> list[dict]:
+def _enrich_structure_rows(rows: list, by_logical: dict[str, list[tuple[str, str]]], parent_rel: str = "") -> list[dict]:
     """Attach product object_id so Structure tip names open like BOM links."""
     enriched: list[dict] = []
     for row in rows or []:
@@ -131,13 +144,9 @@ def _enrich_structure_rows(rows: list, by_logical: dict[str, str]) -> list[dict]
             or item.get("fileName")
             or ""
         ).strip()
-        object_id = ""
-        for key in _bom_lookup_keys(filename):
-            object_id = by_logical.get(key) or ""
-            if object_id:
-                break
-        if object_id:
-            item["object_id"] = object_id
+        found = _resolve_object(by_logical, filename, parent_rel)
+        if found is not None:
+            item["object_id"] = found[0]
             generic = _bom_generic_label(filename)
             if generic:
                 item["open_as"] = generic
@@ -835,8 +844,8 @@ def _object_detail_page(
     # The name lookup is only needed to link BOM / Structure rows; a plain part has neither.
     if bom or structure:
         product_index = _product_bom_index(ctx, db, product.id)
-        bom = _enrich_bom_tree(bom, product_index)
-        structure = _enrich_structure_rows(structure, product_index)
+        bom = _enrich_bom_tree(bom, product_index, obj.relative_path or "")
+        structure = _enrich_structure_rows(structure, product_index, obj.relative_path or "")
     show_mass_tab = bool(
         mass
         and (
