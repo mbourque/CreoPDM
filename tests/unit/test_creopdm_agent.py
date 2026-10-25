@@ -2666,3 +2666,18 @@ def test_agent_open_folder_creates_the_products_empty_folders(tmp_path, monkeypa
         base = root / "proj1"
         assert (base / "models" / "empty").is_dir() and (base / "docs").is_dir() and (base / "a" / "b").is_dir()
         assert not (root / "escape").exists() and not (base / ".git").exists()
+
+
+def test_agent_ensure_folders_creates_only_missing_folders_without_opening_explorer(tmp_path, monkeypatch):
+    root = tmp_path / "cache"
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+    opened: list[object] = []
+    monkeypatch.setattr("creopdm.utils.launch.open_windows_folder", lambda path: opened.append(path))
+    with TestClient(app) as client:
+        body = {"product_id": "proj1", "folders": ["models", "models/empty", "../escape"]}
+        first = client.post("/ensure-folders", json=body)
+        assert first.status_code == 200 and first.json()["created"] == 2, first.text
+        assert (root / "proj1" / "models" / "empty").is_dir() and not (root / "escape").exists()
+        assert client.post("/ensure-folders", json=body).json()["created"] == 0
+        assert opened == []

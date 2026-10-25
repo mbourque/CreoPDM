@@ -233,10 +233,21 @@ class WorkspaceService:
             return []
         skip = {".git", ".creopdm", "__pycache__"}
         found: list[str] = []
-        for dirpath, dirnames, _filenames in os.walk(vault):
-            dirnames[:] = [name for name in dirnames if name.lower() not in skip and not name.startswith(".")]
-            for name in dirnames:
-                found.append((Path(dirpath) / name).relative_to(vault).as_posix())
+        pending = [vault]
+        while pending:
+            current = pending.pop()
+            try:
+                entries = list(os.scandir(current))
+            except OSError:
+                continue
+            for entry in entries:
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+                if entry.name.lower() in skip or entry.name.startswith("."):
+                    continue
+                path = Path(entry.path)
+                found.append(path.relative_to(vault).as_posix())
+                pending.append(path)
         return sorted(found, key=str.lower)
 
     def list_immediate_vault_folders(

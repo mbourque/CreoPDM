@@ -5770,6 +5770,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   // pill (both live outside main.shell). Never re-probe agent or reconnect.
   startCreoConnectingOverlayGuard();
   if (soft) {
+    void ensureLocalProductFolders();
     syncCreoSessionControlsFromBridge();
     // Soft boot into Details/Admin can land before the bridge is readable again.
     void creoJSReady.then(() => {
@@ -5793,6 +5794,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         // Files list only — Open workspace visibility depends on agent online.
         const agent = await probeCreoAgent();
         await refreshCreoStatusPill(agent);
+        void ensureLocalProductFolders();
         syncToolbar();
         let seconds = 0;
         if (agent && Object.prototype.hasOwnProperty.call(agent, "status_poll_interval_seconds")) {
@@ -6040,6 +6042,39 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function agentIsOnline() {
     return window.__creopdmAgentOnline === true;
+  }
+
+  /** Mirror the product's folders (empty ones too) in the local workspace, only when they changed. */
+  async function ensureLocalProductFolders() {
+    const productId = currentProductId();
+    if (!isListPage || !productId || !agentIsOnline()) return;
+    try {
+      const listed = await fetch(`/api/products/${encodeURIComponent(productId)}/vault-folders`);
+      if (!listed.ok) return;
+      const folders = await listed.json();
+      if (!Array.isArray(folders) || !folders.length) return;
+      const key = `creopdm.localFolders.${productId}`;
+      const signature = folders.join("|");
+      try {
+        if (sessionStorage.getItem(key) === signature) return;
+      } catch {
+        /* storage blocked: just do the (cheap) work */
+      }
+      const response = await fetch(`${agentBase()}/ensure-folders`, {
+        method: "POST",
+        headers: agentAuthHeaders({ "Content-Type": "application/json" }),
+        signal: abortSignalAfter(15000),
+        body: JSON.stringify({ product_id: productId, vault_folder: currentVaultFolder(), folders }),
+      });
+      if (!response.ok) return;
+      try {
+        sessionStorage.setItem(key, signature);
+      } catch {
+        /* ignore */
+      }
+    } catch {
+      /* best effort: Open workspace creates them too */
+    }
   }
 
   async function pushLocalWorkspaceToVault(productId, items) {
