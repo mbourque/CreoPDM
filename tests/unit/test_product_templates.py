@@ -136,7 +136,7 @@ def test_the_product_folders_including_empty_ones_are_listed_for_the_local_works
 
 
 @requires_git
-def test_check_in_ask_ai_does_not_need_a_baseline_snapshot_and_a_template_copy_keeps_the_tip_snapshot(client):
+def test_a_template_copy_keeps_the_tip_snapshot_and_ask_ai_never_invents_changes_without_a_baseline(client):
     from creopdm.models.ai_snapshot import ObjectVersionSnapshot
     from creopdm.models.object import EngineeringObject
     from sqlalchemy import select
@@ -161,7 +161,7 @@ def test_check_in_ask_ai_does_not_need_a_baseline_snapshot_and_a_template_copy_k
     )
     listed = client.get(f"/api/objects/{copied['uuid']}/ai-snapshots").json()
     assert any(item["has_snapshot"] for item in listed["items"])
-    # A file whose tip has no snapshot is no longer refused with "has no snapshot yet".
+    # A file whose tip has no snapshot is refused with a clear reason (nothing to compare), not summarized.
     bare = next(
         row for row in client.get(f"/api/products/{made['uuid']}/objects").json()
         if row["relative_path"] == "docs/readme.txt"
@@ -170,4 +170,4 @@ def test_check_in_ask_ai_does_not_need_a_baseline_snapshot_and_a_template_copy_k
         f"/api/objects/{bare['uuid']}/ai-snapshot/compare-pending",
         json={"newer_snapshot": {"identity": {"file_name": "readme.txt"}}, "newer_display_revision": "A.2"},
     )
-    assert "has no snapshot yet" not in response.text
+    assert response.status_code == 400 and "cannot tell what you changed" in response.text

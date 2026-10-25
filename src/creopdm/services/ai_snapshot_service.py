@@ -421,7 +421,6 @@ class AiSnapshotService:
         *,
         older_version_id: str | None = None,
         newer_display_revision: str = "pending",
-        allow_missing_baseline: bool = False,
     ) -> tuple[AiSnapshotResponse, dict[str, Any], str]:
         if not isinstance(newer_snapshot, dict) or not newer_snapshot:
             raise ValidationAppError("Newer snapshot JSON is required.")
@@ -430,14 +429,14 @@ class AiSnapshotService:
         if not older.version_id:
             raise ValidationAppError("This file has no version to compare against.")
         if not older.has_snapshot or not isinstance(older.snapshot, dict):
-            if not allow_missing_baseline:
-                raise ValidationAppError(
-                    f"Revision {older.display_revision or older.version_id} has no snapshot yet. "
-                    "Collect metadata while that version is tip, then try again.",
-                    details={"version_id": older.version_id},
-                )
-            # Nothing to compare against (never collected): describe the model as it is now.
-            older = older.model_copy(update={"snapshot": {}})
+            # Without an earlier snapshot there is nothing to compare: never invent "what changed" by
+            # describing the whole model as new.
+            raise ValidationAppError(
+                f"Revision {older.display_revision or older.version_id} has no snapshot to compare with, so Ask AI "
+                "cannot tell what you changed. Write the comment yourself, or Undo Checkout, Collect metadata on "
+                "the clean file, check it out again and redo the change.",
+                details={"version_id": older.version_id},
+            )
         newer_label = (newer_display_revision or "").strip() or "pending"
         return older, newer_snapshot, newer_label
 
@@ -625,7 +624,6 @@ class AiSnapshotService:
             newer_snapshot,
             older_version_id=older_version_id,
             newer_display_revision=newer_display_revision,
-            allow_missing_baseline=True,
         )
         # Same Ask AI path as compare_with_ollama → _chat_compare →
         # prepare_snapshot_for_compare + build_snapshot_compare_user_prompt.

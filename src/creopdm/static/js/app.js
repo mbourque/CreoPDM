@@ -4556,6 +4556,49 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             `).`
           : `${sync.ok} file(s) downloaded to the local workspace.`;
       showOk(note);
+      await offerCollectMetadataAfterDownload(ids);
+    }
+  }
+
+  /** After a bulk download inside Creo: offer to collect the Creo metadata (and AI snapshots) of those models. */
+  async function offerCollectMetadataAfterDownload(ids) {
+    if (!canGatherCreoMetadata() || !userCanUpdateMetadata()) return;
+    const productId = currentProductId();
+    const wanted = new Set((ids || []).map(String));
+    let targets = [];
+    try {
+      const rows = await ensureProductObjects(productId, { maxAgeMs: 0 });
+      targets = (rows || [])
+        .filter((row) => wanted.has(String(row.uuid)) && isCreoMetadataCandidate(row.filename || ""))
+        .map((row) => ({
+          uuid: row.uuid,
+          filename: row.filename,
+          path: "",
+          relative_path: row.relative_path || "",
+          version_id: row.current_version?.uuid || "",
+          current_version: row.current_version || null,
+          creo_release: row.creo_release || row.current_version?.creo_release || "",
+        }));
+    } catch {
+      return;
+    }
+    if (!targets.length) return;
+    const plural = targets.length === 1 ? "model" : "models";
+    if (
+      !window.confirm(
+        `Collect Creo metadata for the ${targets.length} downloaded Creo ${plural} now?
+
+` +
+          "Each model is opened in Creo to read its features, dimensions and parameters (this also creates " +
+          "the Modifications snapshot). It can take a while for large products."
+      )
+    ) {
+      return;
+    }
+    try {
+      await pushCreoMetadataForItems(targets);
+    } catch (err) {
+      showError($("#toolbar-error"), err?.message || String(err));
     }
   }
 
@@ -5977,6 +6020,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function userCanCheckin() {
     return dataFlag(document.body, "can-checkin");
+  }
+
+  function userCanUpdateMetadata() {
+    return dataFlag(document.body, "can-update-metadata");
   }
 
   function rowCheckoutKind(row) {

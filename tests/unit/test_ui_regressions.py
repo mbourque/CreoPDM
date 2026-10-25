@@ -3122,3 +3122,12 @@ def test_download_all_to_my_workspace_is_in_the_open_menu_and_reuses_the_bulk_do
     assert "async function downloadAllToWorkspace()" in app
     assert 'await downloadIdsToWorkspace(ids, "Download all to workspace");' in app
     assert "setToolbarActionVisible(downloadAllBtn, canDownloadAll);" in app
+
+
+def test_bulk_download_offers_to_collect_creo_metadata_in_creo():
+    from pathlib import Path
+
+    app = (Path(__file__).resolve().parents[2] / "src" / "creopdm" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    assert "async function offerCollectMetadataAfterDownload(ids)" in app
+    assert "await offerCollectMetadataAfterDownload(ids);" in app
+    assert "if (!canGatherCreoMetadata() || !userCanUpdateMetadata()) return;" in app
