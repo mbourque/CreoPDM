@@ -234,3 +234,21 @@ def test_open_dependencies_only_come_from_the_models_own_folder(tmp_path):
         skip_object_id=1,
     )
     assert sorted(o.relative_path for o in found) == ["A/plate.prt"]
+
+
+# ------------------------------------------------------------------ a newer-Creo save is never checked in
+def test_a_model_saved_in_a_newer_creo_than_the_session_is_refused_by_the_server():
+    import pytest
+
+    from creopdm.exceptions import ValidationAppError
+    from creopdm.services.checkin_service import _refuse_newer_release
+    from creopdm.utils.creo_header import release_newer_than_session
+
+    assert release_newer_than_session("2027.2.0.0", "13.4.1.0")
+    assert release_newer_than_session("13.4.0.0", "13.3.0.0")
+    assert not release_newer_than_session("13.4.1.0", "13.4.1.0")
+    assert not release_newer_than_session("", "13.4") and not release_newer_than_session("14", "")
+    with pytest.raises(ValidationAppError):
+        _refuse_newer_release("plate.prt", "2027.2.0.0", "13.4.1.0")
+    _refuse_newer_release("plate.prt", "13.4.1.0", "13.4.1.0")
+    _refuse_newer_release("plate.prt", "2027.2.0.0", None)

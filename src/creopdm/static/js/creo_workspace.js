@@ -203,6 +203,13 @@ window.__creopdmModules.creo_workspace = {
       );
     }
 
+    /** The running Creo session's release ("" when Creo or the Toolkit cannot be reached). */
+    async function creoSessionRelease() {
+      await ensureToolkitAgentHealthy();
+      return _creoSessionRelease;
+    }
+    mod.creoSessionRelease = creoSessionRelease;
+
     async function ensureToolkitAgentHealthy(options) {
       // force: Collect all / Rebuild must not trust a cached "ok" (the agent may have stopped).
       if (options && options.force) _toolkitHealthOkUntil = 0;

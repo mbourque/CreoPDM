@@ -596,6 +596,8 @@ class RevisePreviewResponse(BaseModel):
 class CheckinRequest(BaseModel):
     comment: str = Field(min_length=1)
     add_relative_paths: list[str] = Field(default_factory=list)
+    # The Creo release of the user's running session; a model saved in a newer Creo is refused.
+    creo_session_release: str = ""
 
     @field_validator("comment")
     @classmethod
@@ -610,6 +612,7 @@ class QueueCheckinRequest(BaseModel):
     comment: str = Field(min_length=1)
     object_ids: list[str] = Field(default_factory=list)
     add_relative_paths: list[str] = Field(default_factory=list)
+    creo_session_release: str = ""
 
     @field_validator("comment")
     @classmethod

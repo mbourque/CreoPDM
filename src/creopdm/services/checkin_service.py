@@ -35,12 +35,22 @@ from creopdm.services.lock_manager import ProductLockManager
 from creopdm.services.object_service import ObjectService
 from creopdm.services.workspace_service import WorkspaceService
 from creopdm.storage.base import VersionStore
-from creopdm.utils.creo_header import creo_release_for
+from creopdm.utils.creo_header import creo_release_for, release_newer_than_session
 from creopdm.utils.files import copy_file, set_file_readonly, set_file_writable
 from creopdm.utils.hashing import calculate_sha256
 from creopdm.utils.identity import CurrentUserProvider
 
 logger = get_logger("checkin")
+
+
+def _refuse_newer_release(filename: str, file_release: str | None, session_release: str | None) -> None:
+    """A model saved in a newer Creo than the user's session is never checked in from it."""
+    if release_newer_than_session(file_release, session_release):
+        raise ValidationAppError(
+            f"{filename} was saved in Creo {file_release}, but this Creo session is {session_release}. "
+            "A model saved in a newer Creo cannot be checked in from an older one.",
+            details={"creo_release": file_release, "session_release": session_release},
+        )
 
 
 class CheckinService:
@@ -115,7 +125,9 @@ class CheckinService:
             # Never fail a check-in over the index: the full rebuild still repairs it.
             logger.warning("Where Used refresh skipped for %s", obj.filename, exc_info=True)
 
-    def preview(self, session: Session, object_uuid: str) -> dict[str, str | bool | list]:
+    def preview(
+        self, session: Session, object_uuid: str, session_release: str | None = None
+    ) -> dict[str, str | bool | list]:
         obj = self._objects.get_object(session, object_uuid)
         product = obj.product
         user = self._users.get_current_user()
@@ -123,7 +135,9 @@ class CheckinService:
         view = self._checkouts.describe(obj, checkout, user)
         workspace_name = obj.filename
         try:
-            workspace_name = self._workspaces.locate_content(product, obj).name
+            workspace_file = self._workspaces.locate_content(product, obj)
+            workspace_name = workspace_file.name
+            _refuse_newer_release(workspace_name, creo_release_for(workspace_file, workspace_name), session_release)
         except PathValidationError:
             pass
         modified = self._workspaces.is_modified(product, obj)
@@ -166,6 +180,7 @@ class CheckinService:
         allow_unchanged: bool = False,
         source_path: Path | None = None,
         added_out: list[EngineeringObject] | None = None,
+        session_release: str | None = None,
     ) -> EngineeringObject:
         """``added_out`` (optional) receives the new objects created from ``add_relative_paths``."""
         message = (comment or "").strip()
@@ -195,7 +210,9 @@ class CheckinService:
                         f"{obj.filename} is {obj.lifecycle_state.replace('_', ' ').title()} and cannot be checked in."
                     )
             if to_add:
-                created = self._add_workspace_files(session, product, to_add, message, obj.filename)
+                created = self._add_workspace_files(
+                    session, product, to_add, message, obj.filename, session_release=session_release
+                )
                 if added_out is not None:
                     added_out.extend(obj_added for _relative, obj_added in created)
             # Revert passes the restored logical tip so a leftover higher .N cannot
@@ -212,6 +229,7 @@ class CheckinService:
             content_hash = calculate_sha256(workspace_file)
             file_size = workspace_file.stat().st_size
             creo_release = creo_release_for(workspace_file, workspace_file.name)
+            _refuse_newer_release(workspace_file.name, creo_release, session_release)
             old_relative = obj.relative_path.replace("\\", "/")
             new_relative = self._workspaces.sibling_relative(obj, workspace_file)
             clash = self._objects.existing_logical(session, product.id, new_relative, exclude_id=obj.id)
@@ -534,7 +552,9 @@ class CheckinService:
         self._carry_metadata(session, target, restored.current_version)
         return restored
 
-    def preview_queue(self, session: Session, product) -> dict[str, str | bool | list]:
+    def preview_queue(
+        self, session: Session, product, session_release: str | None = None
+    ) -> dict[str, str | bool | list]:
         siblings = self._objects.list_objects(session, product.id)
         # A check-in decision: read the vault as it is now, not a status shared a moment ago.
         queue = self._workspaces.product_checkin_queue(product, siblings, fresh=True)
@@ -550,6 +570,21 @@ class CheckinService:
                 }
             )
         pending = queue["saves"]
+        if session_release:
+            by_uuid = {str(row.uuid): row for row in siblings}
+            for item in pending:
+                row = by_uuid.get(str(item["uuid"]))
+                if row is None:
+                    continue
+                try:
+                    located = self._workspaces.locate_content(product, row)
+                except PathValidationError:
+                    continue
+                _refuse_newer_release(located.name, creo_release_for(located, located.name), session_release)
+            for item in new_files:
+                source = Path(str(item["path"]))
+                if source.is_file():
+                    _refuse_newer_release(source.name, creo_release_for(source, source.name), session_release)
         names = [str(item["filename"]) for item in pending] + [str(item["filename"]) for item in new_files]
         label = names[0] if len(names) == 1 else f"{len(names)} vault files"
         return {
@@ -575,6 +610,7 @@ class CheckinService:
         comment: str,
         object_ids: list[str] | None = None,
         add_relative_paths: list[str] | None = None,
+        session_release: str | None = None,
     ) -> dict[str, list]:
         message = (comment or "").strip()
         if not message:
@@ -590,7 +626,7 @@ class CheckinService:
                 # Savepoint: a failure after check-in mutates the row must not
                 # stay in this session for the request-end commit.
                 with session.begin_nested():
-                    obj = self.checkin(session, object_uuid, message, None)
+                    obj = self.checkin(session, object_uuid, message, None, session_release=session_release)
                     ok.append({"uuid": obj.uuid, "filename": obj.filename, "status": "checked_in"})
             except Exception as exc:
                 if not isinstance(exc, CreoPDMError):
@@ -604,7 +640,9 @@ class CheckinService:
         if to_add:
             try:
                 with session.begin_nested():
-                    created = self._add_workspace_files(session, product, to_add, message, "workspace")
+                    created = self._add_workspace_files(
+                        session, product, to_add, message, "workspace", session_release=session_release
+                    )
                     by_path = {relative.replace("\\", "/").lower(): o for relative, o in created}
                     for relative in to_add:
                         # The uuid lets the page collect Creo metadata for what was just added.
@@ -707,6 +745,8 @@ class CheckinService:
         relative_paths: list[str],
         comment: str,
         source_label: str = "workspace",
+        *,
+        session_release: str | None = None,
     ) -> list[tuple[str, EngineeringObject]]:
         """Add new vault files as objects; returns (requested path, created object) pairs.
 
@@ -733,6 +773,7 @@ class CheckinService:
                     f"{item['filename']} is no longer in the vault.",
                     details={"path": str(source)},
                 )
+            _refuse_newer_release(source.name, creo_release_for(source, source.name), session_release)
             jobs.append((source, source.name, relative))
         if not jobs:
             return []

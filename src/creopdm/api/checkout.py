@@ -547,10 +547,11 @@ def heartbeat(
 @router.get("/api/objects/{object_id}/checkin-preview", response_model=CheckinPreviewResponse)
 def checkin_preview(
     object_id: str,
+    creo_session_release: str = "",
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> CheckinPreviewResponse:
-    return CheckinPreviewResponse.model_validate(ctx.checkins.preview(db, object_id))
+    return CheckinPreviewResponse.model_validate(ctx.checkins.preview(db, object_id, creo_session_release or None))
 
 
 @router.post("/api/objects/{object_id}/checkin", response_model=ObjectResponse)
@@ -565,7 +566,10 @@ def checkin_object(
     obj = ctx.objects.get_object(db, object_id)
     require_product_access(request, ctx, obj.product)
     added: list = []
-    obj = ctx.checkins.checkin(db, object_id, payload.comment, payload.add_relative_paths, added_out=added)
+    obj = ctx.checkins.checkin(
+        db, object_id, payload.comment, payload.add_relative_paths, added_out=added,
+        session_release=payload.creo_session_release or None,
+    )
     added_files = [
         {
             "uuid": item.uuid,

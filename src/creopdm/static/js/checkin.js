@@ -287,6 +287,7 @@ window.__creopdmModules.checkin = {
       // Why the local save could not be staged into the vault (shown in the dialog, which opens over
       // the toolbar message and would otherwise just say "Nothing to check in").
       let pushProblem = "";
+      let releaseUnknown = false;
       const preview = await withBusy(addOnly ? "Preparing…" : "Preparing check-in…", async () => {
         if (!addOnly && productId && pushItems.length) {
           try {
@@ -316,12 +317,27 @@ window.__creopdmModules.checkin = {
             showError($("#toolbar-error"), err?.message || String(err));
           }
         }
+        // The server refuses a model saved in a newer Creo than this session before any dialog opens
+        // (the same message as Open); inside Creo with the release unknown, nothing proceeds.
+        const sessionRelease = await shell.creoSessionReleaseForCheckin();
+        if (shell.canGatherCreoMetadata() && !sessionRelease) {
+          releaseUnknown = true;
+          return null;
+        }
+        const query = sessionRelease ? `?creo_session_release=${encodeURIComponent(sessionRelease)}` : "";
         return fetch(
           useQueue
-            ? `/api/products/${productId}/checkin-preview`
-            : `/api/objects/${objectId}/checkin-preview`
+            ? `/api/products/${productId}/checkin-preview${query}`
+            : `/api/objects/${objectId}/checkin-preview${query}`
         );
       });
+      if (releaseUnknown) {
+        showError(
+          $("#toolbar-error"),
+          "Could not read the Creo version of this session, so the files cannot be checked against it. Make sure Creo and the Toolkit are running, then try again."
+        );
+        return;
+      }
       if (!preview.ok) {
         showError($("#toolbar-error"), await readError(preview));
         return;
@@ -543,23 +559,6 @@ window.__creopdmModules.checkin = {
           const item = document.createElement("li");
           item.textContent = "– No changes. Use Undo Checkout to release the lock without a new version.";
           list.appendChild(item);
-        }
-      }
-      // A local save made in a newer Creo than this session: Creo metadata cannot be collected for
-      // it after the check-in. Say so now, before Check In is pressed (the check-in itself still works).
-      if (!addOnly && productId && pushItems.length) {
-        try {
-          const directory = await shell.agentWorkdir(productId, shell.currentVaultFolder());
-          for (const pushed of pushItems) {
-            const full = shell.joinLocalWorkspacePath(directory, pushed.relative_path || "");
-            const tooNew = await shell.newerLocalFileMessage(full, pushed.filename);
-            if (!tooNew) continue;
-            const item = document.createElement("li");
-            item.textContent = `⚠ ${tooNew} Check in still works, but Creo metadata will not be collected.`;
-            list.appendChild(item);
-          }
-        } catch {
-          /* the warning is advisory */
         }
       }
       if (submitBtn) {
@@ -858,6 +857,17 @@ window.__creopdmModules.checkin = {
       }
       let result;
       const busyLabel = checkinDialog?.dataset.addOnly === "1" ? "Adding…" : "Checking in…";
+      // The server refuses a model saved in a newer Creo than this session, so it must be told the
+      // session's release. Inside Creo with that release unknown, nothing is checked in (it could not be
+      // told apart from a newer save).
+      const creoSessionRelease = await shell.creoSessionReleaseForCheckin();
+      if (shell.canGatherCreoMetadata() && !creoSessionRelease) {
+        showError(
+          $("#checkin-error"),
+          "Could not read the Creo version of this session, so the check-in cannot be checked against the files' Creo version. Make sure Creo and the Toolkit are running, then try again."
+        );
+        return;
+      }
       if (checkinDialog?.dataset.addOnly !== "1") {
         let pushItems = [];
         try {
@@ -922,6 +932,7 @@ window.__creopdmModules.checkin = {
             comment,
             object_ids: objectIds,
             add_relative_paths: added,
+            creo_session_release: creoSessionRelease,
           }, "POST", busyLabel);
           if (!result) return;
         } else {
@@ -963,6 +974,7 @@ window.__creopdmModules.checkin = {
         result = await postAction(`/api/objects/${id}/checkin`, {
           comment,
           add_relative_paths: added,
+          creo_session_release: creoSessionRelease,
         }, "POST", busyLabel);
       }
       if (!result) return;

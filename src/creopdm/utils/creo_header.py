@@ -114,3 +114,22 @@ def _header_cut(data: bytes | bytearray) -> bytes | None:
 
 def _decode(data: bytes) -> str:
     return data.decode("ascii", errors="ignore")
+
+
+def release_newer_than_session(file_release: str | None, session_release: str | None) -> bool:
+    """True when a model's release is later than the Creo session's (major, or minor of the same major).
+
+    Same rule as the page (``newerThanSession`` in creo_workspace.js); unknown on either side is False.
+    """
+    def parse(text: str | None) -> list[int] | None:
+        match = re.search(r"(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?", str(text or ""))
+        if not match:
+            return None
+        return [int(part) if part is not None else 0 for part in match.groups()]
+
+    file, session = parse(file_release), parse(session_release)
+    if file is None or session is None:
+        return False
+    if file[0] != session[0]:
+        return file[0] > session[0]
+    return file[1] > session[1]

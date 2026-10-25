@@ -509,12 +509,13 @@ def objects_stamp(
 def product_checkin_preview(
     product_id: str,
     request: Request,
+    creo_session_release: str = "",
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> CheckinPreviewResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     product = load_accessible_product(request, ctx, db, product_id)
-    return CheckinPreviewResponse.model_validate(ctx.checkins.preview_queue(db, product))
+    return CheckinPreviewResponse.model_validate(ctx.checkins.preview_queue(db, product, creo_session_release or None))
 
 
 @router.get("/api/products/{product_id}/checkin-queue")
@@ -573,6 +574,7 @@ def product_checkin_queue(
         payload.comment,
         object_ids,
         add_paths,
+        session_release=payload.creo_session_release or None,
     )
     ok = list(result.get("ok") or [])
     if ok:

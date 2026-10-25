@@ -5217,6 +5217,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return (await withCreoWorkspace()).newerReleaseMessage(filename, fileRelease);
   }
 
+  /** The running Creo session's release, sent with a check-in ("" outside Creo or when unknown). */
+  async function creoSessionReleaseForCheckin() {
+    if (!canGatherCreoMetadata()) return "";
+    return String((await (await withCreoWorkspace()).creoSessionRelease()) || "").trim();
+  }
+
   /** "" when the local workspace file can open in this Creo; otherwise the newer-release warning. */
   async function newerLocalFileMessage(fullPath, filename) {
     if (!fullPath || !canGatherCreoMetadata()) return "";
@@ -8817,6 +8823,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     openBaselineVersion,
     newerReleaseMessage,
     newerLocalFileMessage,
+    creoSessionReleaseForCheckin,
     agentBase,
     agentAuthHeaders,
     agentPdmAuth,
