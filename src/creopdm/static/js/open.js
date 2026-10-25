@@ -225,6 +225,22 @@ window.__creopdmModules.open = {
       if (!openGate.ok) return;
       const objectId = openTargetObjectId(target);
       const filename = openTargetFilename(target, row);
+      // Also before the chooser: a model saved in a newer Creo cannot open here, so do not offer to
+      // check it out and open it.
+      let tooNew = "";
+      if (target && typeof target === "object" && target.localCache && target.relativePath) {
+        if (await probeCreoAgent()) {
+          const directory = await agentWorkdir(target.productId || currentProductId(), currentVaultFolder());
+          const fullPath = joinLocalWorkspacePath(directory, target.relativePath);
+          if (fullPath) tooNew = await newerLocalMessage(fullPath, filename);
+        }
+      } else {
+        tooNew = await newerReleaseMessage(filename, row?.dataset?.creo || "");
+      }
+      if (tooNew) {
+        showError($("#toolbar-error"), tooNew);
+        return null;
+      }
       const kind = rowCheckoutKind(row);
       // Only skip the chooser when the Checkout column says it is already mine.
       // Do not trust data-owned alone — a stale "1" was opening Available files
@@ -274,6 +290,23 @@ window.__creopdmModules.open = {
       return response.json();
     }
 
+    /** "" when the local workspace file can open in this Creo; otherwise the newer-release warning. */
+    async function newerLocalMessage(fullPath, filename) {
+      try {
+        const released = await fetch(`${agentBase()}/file-release`, {
+          method: "POST",
+          headers: agentAuthHeaders({ "Content-Type": "application/json" }),
+          signal: abortSignalAfter(10000),
+          body: JSON.stringify({ path: fullPath }),
+        });
+        if (!released.ok) return "";
+        const info = await released.json();
+        return await newerReleaseMessage(filename, info && info.creo_release);
+      } catch {
+        return "";
+      }
+    }
+
     async function openLocalCacheRelative(productId, relativePath, options) {
       // New file (local) / Modified newer local — open agent workspace tip.
       // Creo.JS needs the logical tip name (shaft.prt); disk may still be shaft.prt.1.
@@ -293,21 +326,8 @@ window.__creopdmModules.open = {
       const diskName = PathBasename(relativePath) || "file";
       const logicalName = logicalUploadName(diskName) || diskName;
       // A local save made in a newer Creo than this session cannot be opened: say so first.
-      try {
-        const released = await fetch(`${agentBase()}/file-release`, {
-          method: "POST",
-          headers: agentAuthHeaders({ "Content-Type": "application/json" }),
-          signal: abortSignalAfter(10000),
-          body: JSON.stringify({ path: fullPath }),
-        });
-        if (released.ok) {
-          const info = await released.json();
-          const tooNew = await newerReleaseMessage(logicalName, info && info.creo_release);
-          if (tooNew) throw new Error(tooNew);
-        }
-      } catch (err) {
-        if (err && /saved in Creo/.test(String(err.message || ""))) throw err;
-      }
+      const tooNewLocal = await newerLocalMessage(fullPath, logicalName);
+      if (tooNewLocal) throw new Error(tooNewLocal);
       const embeddedMode = creoOpenMode() === "embedded";
       // Same brief Creo.JS wait as vault Open — do not fall through to Windows
       // association from the embedded browser while the bridge is still linking.
