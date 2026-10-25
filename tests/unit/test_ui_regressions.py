@@ -3110,3 +3110,15 @@ def test_file_rows_are_not_padded_with_template_whitespace():
     # the button's copy of the content hash is gone: the row carries it (thumbnail_preview falls back to the row)
     button = row.split('class="object-open"', 1)[1].split("</button>", 1)[0]
     assert "data-content-hash" not in button
+
+
+def test_download_all_to_my_workspace_is_in_the_open_menu_and_reuses_the_bulk_download():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2] / "src" / "creopdm"
+    page = (root / "templates" / "app.html").read_text(encoding="utf-8")
+    assert 'id="download-all-btn"' in page and "Download all to my workspace" in page
+    app = (root / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    assert "async function downloadAllToWorkspace()" in app
+    assert 'await downloadIdsToWorkspace(ids, "Download all to workspace");' in app
+    assert "setToolbarActionVisible(downloadAllBtn, canDownloadAll);" in app

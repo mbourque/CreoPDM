@@ -411,6 +411,9 @@
         <button type="button" class="toolbar-menu-item" role="menuitem" id="open-workspace-btn"
                 {% if selected %}data-product="{{ selected.uuid }}" data-vault-folder="{{ selected.vault_folder or selected.uuid }}" data-folder="{{ current_folder }}"{% else %}disabled{% endif %}
                 title="Open this product’s local workspace on this PC. Requires creopdm-agent.">Open workspace</button>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="download-all-btn"
+                {% if selected %}data-product="{{ selected.uuid }}"{% else %}disabled{% endif %}
+                title="Download every file of this product into the local workspace on this PC. Requires creopdm-agent.">Download all to my workspace</button>
       </div>
     </div>
     {% endif %}

@@ -2672,6 +2672,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   const openWorkspaceBtn = $("#open-workspace-btn");
+  const downloadAllBtn = $("#download-all-btn");
   const setCreoDirBtn = $("#set-creo-dir-btn");
   const purgeBtn = $("#purge-workspace-btn");
   const purgeVersionsBtn = $("#purge-versions-btn");
@@ -3133,9 +3134,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     // (server vault fallback is useless for remote Linux hosts / unsupported paths).
     const canOpenWorkspace =
       Boolean(openWorkspaceBtn?.dataset.product) && agentIsOnline();
+    const canDownloadAll = canOpenWorkspace && canViewObjects() && productAllowsContent();
     const canOpenMenu = canOpenFile || canOpenWorkspace;
     setToolbarActionVisible(openBtn, canOpenFile);
     setToolbarActionVisible(openWorkspaceBtn, canOpenWorkspace);
+    setToolbarActionVisible(downloadAllBtn, canDownloadAll);
     setToolbarActionVisible(openMenuBtn, canOpenMenu);
     if (!canOpenMenu) closeOpenMenu();
     const one = selected.length === 1 ? selected[0] : null;
@@ -4493,7 +4496,30 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       showError($("#toolbar-error"), "Select one or more files to download.");
       return;
     }
-    if (!confirmLargeBulk("Download selected to workspace", ids.length)) return;
+    await downloadIdsToWorkspace(ids, "Download selected to workspace");
+  }
+
+  async function downloadAllToWorkspace() {
+    closeAllToolbarMenus();
+    const productId = downloadAllBtn?.dataset.product || currentProductId();
+    if (!productId || !canViewObjects() || !productAllowsContent()) return;
+    let ids = [];
+    try {
+      const rows = await ensureProductObjects(productId, { maxAgeMs: 0 });
+      ids = [...new Set((rows || []).map((row) => String(row.uuid || "")).filter(Boolean))];
+    } catch (err) {
+      showError($("#toolbar-error"), err?.message || String(err));
+      return;
+    }
+    if (!ids.length) {
+      showError($("#toolbar-error"), "This product has no files to download.");
+      return;
+    }
+    await downloadIdsToWorkspace(ids, "Download all to workspace");
+  }
+
+  async function downloadIdsToWorkspace(ids, label) {
+    if (!confirmLargeBulk(label, ids.length)) return;
     showError($("#toolbar-error"), "");
     const sync = await withBusy("Downloading to local workspace…", async () => {
       try {
@@ -6020,30 +6046,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return m.beginAddSelected?.();
   }
 
-  async function probeCreoAgent() {
-    try {
-      const response = await fetch(`${agentBase()}/health`, {
-        method: "GET",
-        signal: abortSignalAfter(5000),
-      });
-      if (!response.ok) {
-        window.__creopdmAgentOnline = false;
-        return null;
-      }
-      const body = await response.json().catch(() => null);
-      const ok = body && body.ok ? body : null;
-      window.__creopdmAgentOnline = Boolean(ok);
-      return ok;
-    } catch {
-      window.__creopdmAgentOnline = false;
-      return null;
-    }
-  }
-
-  function agentIsOnline() {
-    return window.__creopdmAgentOnline === true;
-  }
-
   /** Mirror the product's folders (empty ones too) in the local workspace, only when they changed. */
   async function ensureLocalProductFolders() {
     const productId = currentProductId();
@@ -6075,6 +6077,30 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     } catch {
       /* best effort: Open workspace creates them too */
     }
+  }
+
+  async function probeCreoAgent() {
+    try {
+      const response = await fetch(`${agentBase()}/health`, {
+        method: "GET",
+        signal: abortSignalAfter(5000),
+      });
+      if (!response.ok) {
+        window.__creopdmAgentOnline = false;
+        return null;
+      }
+      const body = await response.json().catch(() => null);
+      const ok = body && body.ok ? body : null;
+      window.__creopdmAgentOnline = Boolean(ok);
+      return ok;
+    } catch {
+      window.__creopdmAgentOnline = false;
+      return null;
+    }
+  }
+
+  function agentIsOnline() {
+    return window.__creopdmAgentOnline === true;
   }
 
   async function pushLocalWorkspaceToVault(productId, items) {
@@ -6973,6 +6999,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   exportSelectedBtn?.addEventListener("click", async () => {
     closeExportMenu();
     await beginExport("selected");
+  });
+
+  downloadAllBtn?.addEventListener("click", () => {
+    void downloadAllToWorkspace();
   });
 
   openWorkspaceBtn?.addEventListener("click", async () => {
