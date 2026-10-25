@@ -1150,6 +1150,7 @@ def import_from_disk(
             comment,
             batch_total=batch_total,
             import_batch_id=import_batch_id,
+            new_only=True,
         ):
             if outcome.error is not None:
                 failed.append(
@@ -1334,6 +1335,7 @@ async def import_from_uploads(
                 note,
                 batch_total=batch_total,
                 import_batch_id=import_batch_id,
+                new_only=True,
             ):
                 if outcome.error is not None:
                     failed.append(
@@ -1457,7 +1459,7 @@ def _zip_extract_and_import(
         if product is None:
             raise ValidationAppError("Product not found.")
         for outcome in ctx.objects.import_files(
-            session, product, jobs, note, on_progress=_on_import_progress
+            session, product, jobs, note, on_progress=_on_import_progress, new_only=True
         ):
             if outcome.error is not None:
                 failed.append(

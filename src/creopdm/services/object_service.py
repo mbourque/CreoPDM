@@ -477,6 +477,7 @@ class ObjectService:
         batch_total: int | None = None,
         on_progress: Callable[[str, int, int], None] | None = None,
         import_batch_id: str | None = None,
+        new_only: bool = False,
     ) -> list[ImportJobResult]:
         """Copy accepted files, then one Git add and one commit.
 
@@ -488,6 +489,9 @@ class ObjectService:
         is not mistaken for the batch size.
 
         ``import_batch_id`` ties upload chunks of one Add into a single Audit row.
+
+        ``new_only`` (the Add commands): a file whose name already exists in its folder is ignored and
+        reported, never stored as a later save of the existing file.
 
         ``on_progress(phase, done, total)`` is optional (zip import busy overlay).
         """
@@ -526,6 +530,7 @@ class ObjectService:
                 checkouts,
                 user.user_name,
                 pending_logical,
+                new_only=new_only,
             )
             filename = (original_name or source_path.name) if source_path else ""
             if error is not None:
@@ -690,6 +695,8 @@ class ObjectService:
         checkouts: dict[int, Checkout],
         user_name: str,
         pending_logical: dict[str, str],
+        *,
+        new_only: bool = False,
     ) -> tuple[_ImportPlan | None, CreoPDMError | None]:
         try:
             if not source_path.is_file():
@@ -733,6 +740,12 @@ class ObjectService:
             existing = index.get(logical)
             kind = "new"
             old_relative: str | None = None
+            if existing is not None and new_only:
+                raise DuplicateObjectError(
+                    f"{stored_name} is already in this product as {existing.filename} and was ignored: "
+                    "Add is only for files that are not in the product yet.",
+                    details={"relative_path": existing.relative_path, "existing": existing.filename},
+                )
             if existing is not None:
                 # Compare Creo save numbers from the source leaf; vault tips are logical
                 # (recorded_n is 0). Same bytes → duplicate. Higher .N or any new bytes

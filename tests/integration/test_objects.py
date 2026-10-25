@@ -1203,7 +1203,7 @@ def test_numbered_creo_file_is_same_object(client, repo_parent):
 
 
 @requires_git
-def test_from_disk_later_numbered_save_updates_workspace(client, repo_parent, tmp_path, data_dir):
+def test_add_ignores_and_reports_a_later_numbered_save_of_an_existing_file(client, repo_parent, tmp_path, data_dir):
     product, _location = _create_product(client, repo_parent)
     first = tmp_path / "bridgeport_mill.prt.4"
     first.write_bytes(b"save-4")
@@ -1221,19 +1221,17 @@ def test_from_disk_later_numbered_save_updates_workspace(client, repo_parent, tm
         json={"paths": [str(later)], "comment": "Later mill save"},
     )
     assert updated.status_code == 200, updated.text
-    assert updated.json()["failed"] == []
-    assert updated.json()["ok"][0]["filename"] == "bridgeport_mill.prt"
+    # Add is only for files that are not in the product yet: the same name is ignored and reported.
+    assert updated.json()["ok"] == []
+    assert "ignored" in updated.json()["failed"][0]["message"]
     listing = client.get(f"/api/products/{product['uuid']}/objects").json()
-    assert len(listing) == 1
-    assert listing[0]["filename"] == "bridgeport_mill.prt"
-    assert listing[0]["display_revision"] == "A.2"
+    assert len(listing) == 1 and listing[0]["display_revision"] == "A.1"
     workspace = data_dir / "vaults" / product["uuid"]
-    assert (workspace / "bridgeport_mill.prt").is_file()
-    assert (workspace / "bridgeport_mill.prt").read_bytes() == b"save-6"
+    assert (workspace / "bridgeport_mill.prt").read_bytes() == b"save-4"
 
 
 @requires_git
-def test_from_disk_later_save_while_checked_out_stays_working_copy(client, repo_parent, tmp_path, data_dir):
+def test_add_ignores_a_same_named_file_even_while_the_existing_one_is_checked_out(client, repo_parent, tmp_path, data_dir):
     product, _location = _create_product(client, repo_parent)
     first = tmp_path / "bridgeport_mill.prt.4"
     first.write_bytes(b"save-4")
@@ -1251,19 +1249,9 @@ def test_from_disk_later_save_while_checked_out_stays_working_copy(client, repo_
         json={"paths": [str(later)], "comment": "Later mill save"},
     )
     assert updated.status_code == 200, updated.text
-    assert updated.json()["failed"] == []
-    listing = client.get(f"/api/products/{product['uuid']}/objects").json()[0]
-    assert listing["filename"] == "bridgeport_mill.prt"
-    assert listing["owned_by_me"] is True
+    assert updated.json()["ok"] == [] and "ignored" in updated.json()["failed"][0]["message"]
     workspace = data_dir / "vaults" / product["uuid"]
-    assert (workspace / "bridgeport_mill.prt").read_bytes() == b"save-6"
-    checked = client.post(
-        f"/api/objects/{obj['uuid']}/checkin",
-        json={"comment": "Record later mill save"},
-    )
-    assert checked.status_code == 200, checked.text
-    assert checked.json()["filename"] == "bridgeport_mill.prt"
-    assert checked.json()["owned_by_me"] is False
+    assert (workspace / "bridgeport_mill.prt").read_bytes() == b"save-4"
 
 
 @requires_git
@@ -1510,7 +1498,7 @@ def test_batch_add_from_disk_one_commit(client, repo_parent, data_dir):
 
 
 @requires_git
-def test_batch_add_later_save_same_commit(client, repo_parent, tmp_path, data_dir):
+def test_batch_add_ignores_the_existing_name_and_adds_the_rest(client, repo_parent, tmp_path, data_dir):
     product, _location = _create_product(client, repo_parent)
     first = tmp_path / "bridgeport_mill.prt.4"
     first.write_bytes(b"save-4")
@@ -1528,19 +1516,11 @@ def test_batch_add_later_save_same_commit(client, repo_parent, tmp_path, data_di
         json={"paths": [str(later), str(notes)], "comment": "Batch later"},
     )
     assert batch.status_code == 200, batch.text
-    assert batch.json()["failed"] == []
+    assert [item["filename"] for item in batch.json()["ok"]] == ["notes.txt"]
+    assert [item["filename"] for item in batch.json()["failed"]] == ["bridgeport_mill.prt.6"]
     listing = {item["filename"]: item for item in client.get(f"/api/products/{product['uuid']}/objects").json()}
-    assert listing["bridgeport_mill.prt"]["display_revision"] == "A.2"
-    assert listing["bridgeport_mill.prt"]["uuid"] == added.json()["ok"][0]["uuid"]
+    assert listing["bridgeport_mill.prt"]["display_revision"] == "A.1"
     assert "notes.txt" in listing
-    assert later.is_file()
-    assert notes.is_file()
-    from creopdm.services.git_service import GitService
-
-    vault = data_dir / "vaults" / product["uuid"]
-    messages = [entry.message for entry in GitService().get_history(vault)]
-    assert messages.count("Batch later") == 1
-    assert messages[0] == "Batch later"
 
 
 _CREO_UGC_HEADER = (
