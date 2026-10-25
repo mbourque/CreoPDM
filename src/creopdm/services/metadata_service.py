@@ -643,7 +643,12 @@ class MetadataService:
         same_name = [
             row
             for row in siblings
-            if row.id == obj.id or (target_keys and set(bom_where_used_keys(row.filename)) & target_keys)
+            if row.id == obj.id
+            or (
+                target_keys
+                and row.extension == obj.extension  # a drawing is not a same-named copy of its part
+                and set(bom_where_used_keys(row.filename)) & target_keys
+            )
         ]
 
         def names_this_file(parent_row: EngineeringObject) -> bool:
