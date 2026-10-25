@@ -36,6 +36,7 @@ from creopdm.product_state import (
 )
 from creopdm.utils.vault_folder import normalize_uuid_folder, validate_vault_folder
 from creopdm.logging_setup import get_logger
+from creopdm.models.ai_snapshot import ObjectVersionSnapshot
 from creopdm.models.checkout import Checkout
 from creopdm.models.dependency import Dependency
 from creopdm.models.object import EngineeringObject
@@ -417,7 +418,7 @@ class ProductService:
     def _copy_current_metadata(self, session: Session, source: Product, dest: Product) -> None:
         """Copy the source tip's collected metadata and Where Used onto the new A.1 rows.
 
-        Does not copy older versions, checkouts, AI snapshots, or watches.
+        Does not copy older versions, checkouts, or watches. The tip's AI snapshot is copied.
         """
         purgeable = self._workspaces._config.purgeable_cad_extensions()
         source_objects = session.scalars(
@@ -466,6 +467,24 @@ class ProductService:
                 setattr(dest_version, field, getattr(src_version, field))
             if src_version.creo_release:
                 dest_version.creo_release = src_version.creo_release
+            # The source tip's AI snapshot is the baseline Check In's Ask AI compares against; without it a
+            # copied product's A.1 would "have no snapshot yet".
+            snap = session.scalar(
+                select(ObjectVersionSnapshot).where(ObjectVersionSnapshot.version_id == src_version.id)
+            )
+            if snap is not None:
+                session.add(
+                    ObjectVersionSnapshot(
+                        uuid=str(uuid.uuid4()),
+                        object_id=dest_obj.id,
+                        version_id=dest_version.id,
+                        schema_version=snap.schema_version,
+                        content_hash=dest_version.content_hash or snap.content_hash,
+                        capture_status=snap.capture_status,
+                        capture_errors=snap.capture_errors,
+                        snapshot_json=snap.snapshot_json,
+                    )
+                )
             params = session.scalars(
                 select(Parameter).where(
                     Parameter.object_id == src.id,

@@ -347,7 +347,8 @@ def test_admin_copy_product_is_a_fresh_add(auth_client, auth_ctx):
             .select_from(ObjectVersionSnapshot)
             .where(ObjectVersionSnapshot.version_id.in_(version_ids))
         )
-        assert snap_count == 0
+        # The source tip's AI snapshot is the baseline for Check In Ask AI, so it comes along (one source file had one).
+        assert snap_count == 1
         checkout_count = db.scalar(
             select(func.count())
             .select_from(Checkout)
