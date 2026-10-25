@@ -292,6 +292,22 @@ window.__creopdmModules.open = {
       }
       const diskName = PathBasename(relativePath) || "file";
       const logicalName = logicalUploadName(diskName) || diskName;
+      // A local save made in a newer Creo than this session cannot be opened: say so first.
+      try {
+        const released = await fetch(`${agentBase()}/file-release`, {
+          method: "POST",
+          headers: agentAuthHeaders({ "Content-Type": "application/json" }),
+          signal: abortSignalAfter(10000),
+          body: JSON.stringify({ path: fullPath }),
+        });
+        if (released.ok) {
+          const info = await released.json();
+          const tooNew = await newerReleaseMessage(logicalName, info && info.creo_release);
+          if (tooNew) throw new Error(tooNew);
+        }
+      } catch (err) {
+        if (err && /saved in Creo/.test(String(err.message || ""))) throw err;
+      }
       const embeddedMode = creoOpenMode() === "embedded";
       // Same brief Creo.JS wait as vault Open — do not fall through to Windows
       // association from the embedded browser while the bridge is still linking.

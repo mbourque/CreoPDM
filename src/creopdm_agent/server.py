@@ -3306,6 +3306,20 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         key = _product_cache_key(payload.product_id, payload.vault_folder)
         return _baseline_call(bw.remove, root, key, payload.folder)
 
+    @app.post("/file-release")
+    def file_release(payload: OpenLocalRequest) -> dict[str, object]:
+        """The Creo release a local workspace model was saved in ("" when not a native model)."""
+        from creopdm.utils.creo_header import creo_release_for
+
+        try:
+            target = Path(payload.path).resolve()
+            target.relative_to(root.resolve())
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=403, detail="Path is outside the local workspace.") from exc
+        if not target.is_file():
+            raise HTTPException(status_code=404, detail=f"File not found: {target}")
+        return {"creo_release": creo_release_for(target) or ""}
+
     @app.post("/open", response_model=OpenLocalResponse)
     def open_local(payload: OpenLocalRequest) -> OpenLocalResponse:
         """Open a cache file with Creo Parametric or the Windows association."""
