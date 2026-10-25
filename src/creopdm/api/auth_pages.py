@@ -2467,6 +2467,7 @@ def admin_template_create(
 def admin_template_delete(
     template_uuid: str,
     request: Request,
+    confirm_password: str = Form(""),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
@@ -2474,6 +2475,9 @@ def admin_template_delete(
     if _is_blocked(manager):
         return manager
     try:
+        from creopdm.utils.danger_confirm import require_danger_password
+
+        require_danger_password(ctx, db, confirm_password, auth_user=manager)
         template = ctx.products.load_product_for_delete(db, template_uuid)
         if not template.is_template:
             raise ValidationAppError("That is not a template.")

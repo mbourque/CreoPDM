@@ -45,10 +45,7 @@
           <td>
             {% if can_edit_templates and can_view_products %}<a class="btn" href="/?product={{ p.uuid }}">Edit files</a>{% endif %}
             {% if can_delete_templates %}
-            <form method="post" action="/admin/templates/{{ p.uuid }}/delete" style="display:inline"
-                  onsubmit="return confirm('Delete the template {{ p.name|e }} and all its files? Products already made from it are not affected.');">
-              <button type="submit" class="btn btn-danger">Delete</button>
-            </form>
+            <button type="button" class="btn btn-danger" data-template-delete="{{ p.uuid }}" data-name="{{ p.name }}">Delete</button>
             {% endif %}
           </td>
         </tr>
@@ -60,4 +57,36 @@
     </div>
   </section>
 </article>
+
+{% if can_delete_templates %}
+<dialog id="delete-template-dialog" class="dialog">
+  <form method="post" id="delete-template-form" action="">
+    <h2>Delete this template</h2>
+    <p>This deletes the template <strong id="delete-template-name"></strong>, its files and its vault. Products already made from it are not affected.</p>
+    <label>Enter your password to confirm
+      <input name="confirm_password" type="password" required maxlength="256" autocomplete="current-password">
+    </label>
+    <div class="dialog-actions">
+      <button type="button" class="btn" id="delete-template-cancel">Cancel</button>
+      <button type="submit" class="btn btn-danger">Delete template</button>
+    </div>
+  </form>
+</dialog>
+<script>
+(function () {
+  var dialog = document.getElementById("delete-template-dialog");
+  if (!dialog) return;
+  var form = document.getElementById("delete-template-form");
+  document.addEventListener("click", function (event) {
+    var button = event.target.closest("[data-template-delete]");
+    if (!button) return;
+    form.action = "/admin/templates/" + encodeURIComponent(button.getAttribute("data-template-delete")) + "/delete";
+    document.getElementById("delete-template-name").textContent = button.getAttribute("data-name") || "";
+    form.reset();
+    dialog.showModal();
+  });
+  document.getElementById("delete-template-cancel").addEventListener("click", function () { dialog.close(); });
+})();
+</script>
+{% endif %}
 {% endblock %}

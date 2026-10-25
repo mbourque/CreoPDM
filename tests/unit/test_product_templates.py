@@ -95,8 +95,15 @@ def test_template_permissions_gate_creating_and_deleting_templates(auth_client, 
     hub = auth_client.get("/admin/products")
     assert 'href="/admin/templates"' in hub.text
     uuid = next(p["uuid"] for p in auth_client.get("/api/products").json() if p["name"] == "Admin Template")
-    deleted = auth_client.post(f"/admin/templates/{uuid}/delete", follow_redirects=False)
-    assert deleted.status_code == 303
+    # Deleting needs the user's password, like Delete product.
+    refused = auth_client.post(f"/admin/templates/{uuid}/delete", data={"confirm_password": "wrong"}, follow_redirects=False)
+    assert refused.status_code == 303 and "error=" in refused.headers["location"]
+    assert "Admin Template" in auth_client.get("/admin/templates").text
+    assert 'id="delete-template-dialog"' in auth_client.get("/admin/templates").text
+    deleted = auth_client.post(
+        f"/admin/templates/{uuid}/delete", data={"confirm_password": "AdminPass1"}, follow_redirects=False
+    )
+    assert deleted.status_code == 303 and "error=" not in deleted.headers["location"]
     assert "Admin Template" not in auth_client.get("/admin/templates").text
 
 
