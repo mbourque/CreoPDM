@@ -36,14 +36,14 @@
         {% for p in templates_rows %}
         <tr>
           <td>
-            {% if can_view_templates or can_edit_templates %}<a href="/?product={{ p.uuid }}">{{ p.name }}</a>{% else %}{{ p.name }}{% endif %}
+            {% if can_view_products and (can_view_templates or can_edit_templates) %}<a href="/?product={{ p.uuid }}">{{ p.name }}</a>{% else %}{{ p.name }}{% endif %}
             <span class="badge template-badge">Template</span>
           </td>
           <td class="col-created">{% if p.created_at %}<span title="{{ local_time_pretty(p.created_at) }}">{{ local_time(p.created_at) }}</span>{% else %}—{% endif %}</td>
           <td class="col-number">{{ p.number or "—" }}</td>
           <td>{{ p.description or "—" }}</td>
           <td>
-            {% if can_edit_templates %}<a class="btn" href="/?product={{ p.uuid }}">Edit files</a>{% endif %}
+            {% if can_edit_templates and can_view_products %}<a class="btn" href="/?product={{ p.uuid }}">Edit files</a>{% endif %}
             {% if can_delete_templates %}
             <form method="post" action="/admin/templates/{{ p.uuid }}/delete" style="display:inline"
                   onsubmit="return confirm('Delete the template {{ p.name|e }} and all its files? Products already made from it are not affected.');">

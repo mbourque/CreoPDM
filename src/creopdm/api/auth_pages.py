@@ -2439,8 +2439,12 @@ def admin_template_create(
             is_template=True,
         )
         db.commit()
-        # Fill it like any product: open it from the product list (templates.view / edit).
-        return RedirectResponse(f"/?product={template.uuid}", status_code=303)
+        # Fill it like any product from the product list — but only send them there if they may open it.
+        if bool(getattr(request.state, "can_view_products", False)) and bool(
+            getattr(request.state, "can_view_templates", False)
+        ):
+            return RedirectResponse(f"/?product={template.uuid}", status_code=303)
+        return RedirectResponse("/admin/templates", status_code=303)
     except CreoPDMError as exc:
         db.rollback()
         return templates.TemplateResponse(
