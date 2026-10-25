@@ -38,6 +38,10 @@ from creopdm.auth_constants import (
     PERMISSION_ROLES_MANAGE,
     PERMISSION_SETTINGS_AI,
     PERMISSION_SETTINGS_MANAGE,
+    PERMISSION_TEMPLATES_CREATE,
+    PERMISSION_TEMPLATES_DELETE,
+    PERMISSION_TEMPLATES_EDIT,
+    PERMISSION_TEMPLATES_VIEW,
     PERMISSION_USERS_MANAGE,
     PERMISSION_USERS_PASSWORD,
     PERMISSION_UTILITIES_AUDIT,
@@ -100,6 +104,10 @@ class CapabilityFlags:
     can_copy_to_vault: bool
     can_export_product: bool
     can_export_objects: bool
+    can_view_templates: bool
+    can_create_templates: bool
+    can_edit_templates: bool
+    can_delete_templates: bool
 
 
 def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
@@ -147,6 +155,10 @@ def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
         can_copy_to_vault=PERMISSION_OBJECTS_COPY_TO_VAULT in keys,
         can_export_product=PERMISSION_PRODUCTS_EXPORT in keys,
         can_export_objects=PERMISSION_OBJECTS_EXPORT in keys,
+        can_view_templates=PERMISSION_TEMPLATES_VIEW in keys,
+        can_create_templates=PERMISSION_TEMPLATES_CREATE in keys,
+        can_edit_templates=PERMISSION_TEMPLATES_EDIT in keys,
+        can_delete_templates=PERMISSION_TEMPLATES_DELETE in keys,
     )
 
 
@@ -206,6 +218,10 @@ def apply_caps(request: Request, caps: CapabilityFlags) -> None:
     request.state.can_copy_to_vault = caps.can_copy_to_vault
     request.state.can_export_product = caps.can_export_product
     request.state.can_export_objects = caps.can_export_objects
+    request.state.can_view_templates = caps.can_view_templates
+    request.state.can_create_templates = caps.can_create_templates
+    request.state.can_edit_templates = caps.can_edit_templates
+    request.state.can_delete_templates = caps.can_delete_templates
 
 
 def caps_dict(request: Request) -> dict:
@@ -264,6 +280,10 @@ def caps_dict(request: Request) -> dict:
         "can_copy_to_vault": bool(getattr(request.state, "can_copy_to_vault", False)),
         "can_export_product": bool(getattr(request.state, "can_export_product", False)),
         "can_export_objects": bool(getattr(request.state, "can_export_objects", False)),
+        "can_view_templates": bool(getattr(request.state, "can_view_templates", False)),
+        "can_create_templates": bool(getattr(request.state, "can_create_templates", False)),
+        "can_edit_templates": bool(getattr(request.state, "can_edit_templates", False)),
+        "can_delete_templates": bool(getattr(request.state, "can_delete_templates", False)),
     }
     flags["can_open_administration"] = (
         flags["can_manage_users"]
@@ -278,6 +298,8 @@ def caps_dict(request: Request) -> dict:
         or flags["can_manage_email"]
         or flags["can_access_utilities"]
         or flags["can_admin_baselines"]
+        or flags["can_create_templates"]
+        or flags["can_delete_templates"]
     )
     return flags
 
@@ -296,6 +318,8 @@ def can_open_administration(caps: CapabilityFlags) -> bool:
         or caps.can_manage_email
         or caps.can_access_utilities
         or caps.can_admin_baselines
+        or caps.can_create_templates
+        or caps.can_delete_templates
     )
 
 

@@ -15,7 +15,10 @@
   </nav>
   <h1>Products</h1>
   <p class="muted">Every product on this CreoPDM server (including Archived). Click a name to edit its name, number, and description, or add a new product.{% if can_delete_product and can_utilities_delete_product %} To delete a product and its vault, use <a href="/admin/products/delete">Manage products → Delete products</a>.{% endif %}</p>
-  <p><a class="btn btn-primary" href="/admin/products/new">Add product</a></p>
+  <p>
+    <a class="btn btn-primary" href="/admin/products/new">Add product</a>
+    {% if can_create_templates %}<a class="btn" href="/admin/templates/new">Create template</a>{% endif %}
+  </p>
 
   <section class="settings-card admin-products-table">
     <div class="table-scroll">

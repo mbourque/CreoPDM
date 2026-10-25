@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Templates — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page admin-page">
+  <nav class="crumb">
+    {% if can_view_products %}
+    <a href="/">Products</a>
+    <span>/</span>
+    {% endif %}
+    <a href="/admin">Administration</a>
+    <span>/</span>
+    <a href="/admin/products">Manage products</a>
+    <span>/</span>
+    <span>Templates</span>
+  </nav>
+  <h1>Templates</h1>
+  <p class="muted">A template is a premade product (folders, sub folders and files) that new products can start from. Templates are not shown with the regular products.</p>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if can_create_templates %}
+  <p><a class="btn btn-primary" href="/admin/templates/new">Create template</a></p>
+  {% endif %}
+
+  <section class="settings-card admin-products-table">
+    <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th class="col-created">Created</th>
+          <th class="col-number">Number</th>
+          <th>Description</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in templates_rows %}
+        <tr>
+          <td>
+            {% if can_view_templates or can_edit_templates %}<a href="/?product={{ p.uuid }}">{{ p.name }}</a>{% else %}{{ p.name }}{% endif %}
+            <span class="badge template-badge">Template</span>
+          </td>
+          <td class="col-created">{% if p.created_at %}<span title="{{ local_time_pretty(p.created_at) }}">{{ local_time(p.created_at) }}</span>{% else %}—{% endif %}</td>
+          <td class="col-number">{{ p.number or "—" }}</td>
+          <td>{{ p.description or "—" }}</td>
+          <td>
+            {% if can_edit_templates %}<a class="btn" href="/?product={{ p.uuid }}">Edit files</a>{% endif %}
+            {% if can_delete_templates %}
+            <form method="post" action="/admin/templates/{{ p.uuid }}/delete" style="display:inline"
+                  onsubmit="return confirm('Delete the template {{ p.name|e }} and all its files? Products already made from it are not affected.');">
+              <button type="submit" class="btn btn-danger">Delete</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="muted">No templates yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </section>
+</article>
+{% endblock %}

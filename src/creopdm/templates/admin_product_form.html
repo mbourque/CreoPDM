@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{% if mode == 'new' %}Add product{% elif mode == 'copy' %}Copy product{% else %}Edit product{% endif %} — {{ app_name }}{% endblock %}
+{% block title %}{% if template_mode %}Create template{% elif mode == 'new' %}Add product{% elif mode == 'copy' %}Copy product{% else %}Edit product{% endif %} — {{ app_name }}{% endblock %}
 {% block content %}
 <article class="detail settings-page admin-page">
   <nav class="crumb">
@@ -14,12 +14,12 @@
     {% if mode == 'copy' %}
     <a href="/admin/products/copy">Copy Products</a>
     {% else %}
-    <a href="/admin/products/edit">Products</a>
+    {% if template_mode %}<a href="/admin/templates">Templates</a>{% else %}<a href="/admin/products/edit">Products</a>{% endif %}
     {% endif %}
     <span>/</span>
-    <span>{% if mode == 'new' %}Add product{% elif mode == 'copy' %}Copy {{ form.source_name or form.name }}{% else %}{{ form.name }}{% endif %}</span>
+    <span>{% if template_mode %}Create template{% elif mode == 'new' %}Add product{% elif mode == 'copy' %}Copy {{ form.source_name or form.name }}{% else %}{{ form.name }}{% endif %}</span>
   </nav>
-  <h1>{% if mode == 'new' %}Add product{% elif mode == 'copy' %}Copy product{% else %}Edit product{% endif %}</h1>
+  <h1>{% if template_mode %}Create template{% elif mode == 'new' %}Add product{% elif mode == 'copy' %}Copy product{% else %}Edit product{% endif %}</h1>
 
   {% if mode == 'copy' %}
   <form method="post" action="/admin/products/{{ form.uuid }}/copy" class="settings-form settings-form-wide">
@@ -50,7 +50,7 @@
     </section>
   </form>
   {% elif mode == 'new' %}
-  <form method="post" action="/admin/products/new" class="settings-form settings-form-wide">
+  <form method="post" action="{% if template_mode %}/admin/templates/new{% else %}/admin/products/new{% endif %}" class="settings-form settings-form-wide">
     <section class="settings-card">
       {% if error %}<p class="error">{{ error }}</p>{% endif %}
       <label>Name
@@ -65,6 +65,7 @@
       {% with vault_folder=form.vault_folder, use_hash=form.use_hash %}
       {% include "partials/product_vault_fields.html" %}
       {% endwith %}
+      {% if not template_mode %}
       <label>Lifecycle state
         <select name="state">
           {% for key in product_states %}
@@ -74,9 +75,12 @@
         </select>
       </label>
       <p class="muted small">Default is <strong>In Work</strong>.{% if can_manage_lifecycle_states %} Permissions per state are configured under <a href="/admin/lifecycle">Manage products → Lifecycle states</a>.{% else %} Permissions per state are configured under Manage products → Lifecycle states.{% endif %}</p>
+      {% else %}
+      <p class="muted small">The template opens as an empty product: add its folders, sub folders and files there. New products can then start from it.</p>
+      {% endif %}
       <div class="form-actions">
-        <button type="submit" class="btn btn-primary">Create product</button>
-        <a class="btn" href="/admin/products/edit">Back to Products</a>
+        <button type="submit" class="btn btn-primary">{% if template_mode %}Create template{% else %}Create product{% endif %}</button>
+        <a class="btn" href="{% if template_mode %}/admin/templates{% else %}/admin/products/edit{% endif %}">Back to {% if template_mode %}Templates{% else %}Products{% endif %}</a>
       </div>
     </section>
   </form>

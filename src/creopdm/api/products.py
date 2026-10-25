@@ -19,11 +19,13 @@ from creopdm.api.deps import (
     get_db,
     load_accessible_product,
     load_accessible_product_for_delete,
+    require_product_delete,
     require_any_permission,
     require_permission,
 )
 from creopdm.api.serializers import product_to_response
 from creopdm.auth_constants import (
+    PERMISSION_TEMPLATES_EDIT,
     PERMISSION_OBJECTS_ADD,
     PERMISSION_OBJECTS_CHECKIN,
     PERMISSION_OBJECTS_EXPORT,
@@ -99,13 +101,30 @@ def create_product(
     ctx: AppContext = Depends(get_context),
 ) -> ProductResponse:
     require_permission(request, ctx, PERMISSION_PRODUCTS_CREATE)
-    product = ctx.products.create_product(
-        db,
-        name=payload.name,
-        number=payload.number,
-        description=payload.description,
-        vault_folder=payload.vault_folder,
-    )
+    template_id = (payload.template_id or "").strip()
+    if template_id:
+        # Anyone who can create products may start from a template; templates.view is not needed.
+        template = ctx.products.load_product_for_delete(db, template_id)
+        if not template.is_template or not template.active:
+            raise ValidationAppError("That template is not available.", details={"template_id": template_id})
+        product = ctx.products.copy_product(
+            db,
+            ctx.objects,
+            template_id,
+            payload.name,
+            payload.number,
+            payload.description,
+            None,
+            payload.vault_folder,
+        )
+    else:
+        product = ctx.products.create_product(
+            db,
+            name=payload.name,
+            number=payload.number,
+            description=payload.description,
+            vault_folder=payload.vault_folder,
+        )
     user = getattr(request.state, "auth_user", None)
     if user is not None and ctx.auth_enabled:
         ctx.user_accounts.grant_product_access(db, user, product)
@@ -216,7 +235,11 @@ def update_product(
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> ProductResponse:
-    require_permission(request, ctx, PERMISSION_PRODUCTS_EDIT)
+    existing = ctx.products.load_product_for_delete(db, product_id)
+    if existing.is_template:
+        require_permission(request, ctx, PERMISSION_TEMPLATES_EDIT)
+    else:
+        require_permission(request, ctx, PERMISSION_PRODUCTS_EDIT)
     product = load_accessible_product(request, ctx, db, product_id)
     from creopdm.product_state import ensure_product_allows
 
@@ -248,8 +271,7 @@ def delete_product(
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> None:
-    require_permission(request, ctx, PERMISSION_PRODUCTS_DELETE)
-    load_accessible_product_for_delete(request, ctx, db, product_id)
+    require_product_delete(request, ctx, db, product_id)
     ctx.products.delete_product(db, product_id)
 
 
@@ -265,8 +287,7 @@ def forget_product(
 
     from creopdm.exceptions import ProductHasBaselinesError
 
-    require_permission(request, ctx, PERMISSION_PRODUCTS_DELETE)
-    product = load_accessible_product_for_delete(request, ctx, db, product_id)
+    product = require_product_delete(request, ctx, db, product_id)
     # Baselines are permanent records of exact versions: a product that has them cannot be
     # deleted from here (the Files page). An administrator can, from Administration, after a
     # warning that lists what will be erased.

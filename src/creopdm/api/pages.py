@@ -243,9 +243,29 @@ def render(request: Request, name: str, context: dict) -> HTMLResponse:
             purgeable = list(ctx.config.purgeable_cad_extensions() or [])
         except Exception:
             purgeable = []
+    template_choices: list[dict[str, str]] = []
+    if ctx is not None and caps.get("can_create_product"):
+        # Anyone who can create a product may start it from a template (templates.view is not needed).
+        try:
+            from sqlalchemy import select as _select
+
+            from creopdm.models.product import Product as _Product
+
+            with ctx.session_factory() as _db:
+                template_choices = [
+                    {"uuid": row.uuid, "name": row.name}
+                    for row in _db.execute(
+                        _select(_Product.uuid, _Product.name)
+                        .where(_Product.is_template.is_(True), _Product.active.is_(True))
+                        .order_by(_Product.name.asc())
+                    )
+                ]
+        except Exception:
+            template_choices = []
     payload = {
         "request": request,
         **_PAGE_DEFAULTS,
+        "template_choices": template_choices,
         "auth_user": auth_user,
         "agent_token": getattr(request.state, "agent_token", "") or "",
         **caps,

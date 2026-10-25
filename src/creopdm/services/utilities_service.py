@@ -1791,7 +1791,9 @@ def collect_utilities_status(ctx: AppContext, db: Session) -> UtilitiesStatusRes
             if overall == "ok":
                 overall = "degraded"
 
-    product_count = int(db.scalar(select(func.count()).select_from(Product)) or 0)
+    product_count = int(
+        db.scalar(select(func.count()).select_from(Product).where(Product.is_template.is_(False))) or 0
+    )
     user_count = int(db.scalar(select(func.count()).select_from(User)) or 0)
     active_checkout_count = int(
         db.scalar(

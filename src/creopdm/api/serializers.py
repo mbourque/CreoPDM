@@ -42,6 +42,7 @@ def product_to_response(product: Product) -> ProductResponse:
         updated_at=as_utc(product.updated_at),
         active=product.active,
         remote_mode=remote_mode.value,
+        is_template=bool(getattr(product, "is_template", False)),
         state=state,
         allows_mutation=product_allows_mutation(product),
         allows_content=product_allows_content_access(product),

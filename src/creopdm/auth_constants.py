@@ -63,6 +63,10 @@ PERMISSION_OBJECTS_METADATA = "objects.metadata"
 PERMISSION_OBJECTS_COPY_TO_VAULT = "objects.copy_to_vault"
 PERMISSION_PRODUCTS_EXPORT = "products.export"
 PERMISSION_OBJECTS_EXPORT = "objects.export"
+PERMISSION_TEMPLATES_VIEW = "templates.view"
+PERMISSION_TEMPLATES_CREATE = "templates.create"
+PERMISSION_TEMPLATES_EDIT = "templates.edit"
+PERMISSION_TEMPLATES_DELETE = "templates.delete"
 
 STARTER_ROLE_DESCRIPTIONS: dict[str, str] = {
     StarterRole.ADMINISTRATOR.value: "Full system administration access.",
@@ -125,6 +129,10 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_OBJECTS_COPY_TO_VAULT, "Copy selected files into the vault (Copy to Vault)"),
     (PERMISSION_PRODUCTS_EXPORT, "Export an entire product as a zip download"),
     (PERMISSION_OBJECTS_EXPORT, "Export selected files or folders as a zip download"),
+    (PERMISSION_TEMPLATES_VIEW, "See product templates in the product list"),
+    (PERMISSION_TEMPLATES_CREATE, "Create product templates"),
+    (PERMISSION_TEMPLATES_EDIT, "Change the files, folders and properties of a product template"),
+    (PERMISSION_TEMPLATES_DELETE, "Delete product templates"),
 )
 
 # CreoPDM Administration caps. At least one ACTIVE user must keep all of them.
@@ -233,6 +241,15 @@ PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             PERMISSION_COMMENTS_ADMIN,
         ),
     ),
+    (
+        "Templates",
+        (
+            PERMISSION_TEMPLATES_VIEW,
+            PERMISSION_TEMPLATES_CREATE,
+            PERMISSION_TEMPLATES_EDIT,
+            PERMISSION_TEMPLATES_DELETE,
+        ),
+    ),
 )
 
 _AUTHORING = (
@@ -263,6 +280,8 @@ STARTER_ROLE_PERMISSION_KEYS: dict[str, tuple[str, ...]] = {
         *_AUTHORING,
         PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT,
         PERMISSION_OBJECTS_COPY_TO_VAULT,
+        PERMISSION_TEMPLATES_VIEW,
+        PERMISSION_TEMPLATES_EDIT,
     ),
     StarterRole.ENGINEER.value: _AUTHORING,
     StarterRole.VIEWER.value: (

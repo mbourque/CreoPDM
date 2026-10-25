@@ -36,6 +36,8 @@ class Product(Base):
         onupdate=func.now(),
     )
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # A premade product new products can start from; hidden from the regular product lists.
+    is_template: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     objects: Mapped[list["EngineeringObject"]] = relationship(back_populates="product")  # noqa: F821
     activities: Mapped[list["Activity"]] = relationship(back_populates="product")  # noqa: F821

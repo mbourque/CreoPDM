@@ -7,6 +7,11 @@ from collections.abc import Generator
 from fastapi import Request
 from sqlalchemy.orm import Session
 
+from creopdm.auth_constants import (
+    PERMISSION_TEMPLATES_DELETE,
+    PERMISSION_TEMPLATES_EDIT,
+    PERMISSION_TEMPLATES_VIEW,
+)
 from creopdm.context import AppContext
 from creopdm.exceptions import PermissionDeniedError, ValidationAppError
 from creopdm.models.object import EngineeringObject
@@ -51,8 +56,18 @@ def require_any_permission(request: Request, ctx: AppContext, *keys: str) -> Non
 
 
 def require_product_access(request: Request, ctx: AppContext, product: Product) -> None:
-    """Deny when the signed-in user is restricted away from this product."""
+    """Deny when the signed-in user is restricted away from this product.
+
+    A template is not a membership product: reading it needs templates.view (or edit), anything that
+    changes it needs templates.edit.
+    """
     if not ctx.auth_enabled:
+        return
+    if getattr(product, "is_template", False):
+        if request.method in {"GET", "HEAD", "OPTIONS"}:
+            require_any_permission(request, ctx, PERMISSION_TEMPLATES_VIEW, PERMISSION_TEMPLATES_EDIT)
+        else:
+            require_permission(request, ctx, PERMISSION_TEMPLATES_EDIT)
         return
     user = getattr(request.state, "auth_user", None)
     if user is None:
@@ -88,12 +103,33 @@ def load_accessible_objects(
 def accessible_products(request: Request, ctx: AppContext, db: Session) -> list[Product]:
     """Products the current user may browse (all when auth off or All products)."""
     products = ctx.products.list_products(db)
+    if ctx.auth_enabled:
+        user = getattr(request.state, "auth_user", None)
+        if user is not None:
+            products = ctx.user_accounts.filter_accessible_products(user, products)
+    if _can_view_templates(request, ctx):
+        # Templates are listed (marked as templates) for anyone with templates.view, membership aside.
+        products = sorted([*products, *ctx.products.list_products(db, only_templates=True)], key=lambda p: p.name.lower())
+    return products
+
+
+def _can_view_templates(request: Request, ctx: AppContext) -> bool:
     if not ctx.auth_enabled:
-        return products
-    user = getattr(request.state, "auth_user", None)
-    if user is None:
-        return products
-    return ctx.user_accounts.filter_accessible_products(user, products)
+        return True
+    return bool(getattr(request.state, "can_view_templates", False))
+
+
+def require_product_delete(request: Request, ctx: AppContext, db: Session, product_id: str) -> Product:
+    """Load a product for delete: products.delete, or templates.delete for a template."""
+    from creopdm.auth_constants import PERMISSION_PRODUCTS_DELETE
+
+    product = ctx.products.load_product_for_delete(db, product_id)
+    if getattr(product, "is_template", False):
+        require_permission(request, ctx, PERMISSION_TEMPLATES_DELETE)
+    else:
+        require_permission(request, ctx, PERMISSION_PRODUCTS_DELETE)
+        require_product_access(request, ctx, product)
+    return product
 
 
 def load_accessible_product(

@@ -136,6 +136,8 @@ class ProductCreateRequest(BaseModel):
     description: str | None = Field(default=None, max_length=256)
     # Vault folder under vaults/. Blank → server uses the product UUID.
     vault_folder: str | None = Field(default=None, max_length=200)
+    # Start from this template (its uuid); blank / absent = an empty product.
+    template_id: str | None = Field(default=None, max_length=64)
 
 
 class ProductUpdateRequest(BaseModel):
@@ -177,6 +179,7 @@ class ProductResponse(BaseModel):
     updated_at: datetime | None
     active: bool
     remote_mode: str
+    is_template: bool = False
     state: str = "IN_WORK"
     allows_mutation: bool = True
     allows_content: bool = True

@@ -91,8 +91,15 @@ class ProductService:
         include_inactive: bool = False,
         *,
         include_archived: bool = False,
+        include_templates: bool = False,
+        only_templates: bool = False,
     ) -> list[Product]:
+        """Regular products. Templates are listed only when asked for (they are not products to work in)."""
         stmt = select(Product).order_by(Product.name.asc())
+        if only_templates:
+            stmt = stmt.where(Product.is_template.is_(True))
+        elif not include_templates:
+            stmt = stmt.where(Product.is_template.is_(False))
         if not include_inactive:
             stmt = stmt.where(Product.active.is_(True))
         if not include_archived:
@@ -177,6 +184,7 @@ class ProductService:
         state: str | None = None,
         copied_from: Product | None = None,
         copied_file_count: int | None = None,
+        is_template: bool = False,
     ) -> Product:
         if not name.strip():
             raise PathValidationError("A product name is required.")
@@ -225,15 +233,18 @@ class ProductService:
             created_at=now,
             updated_at=now,
             active=True,
+            is_template=is_template,
         )
         session.add(product)
         session.flush()
         details: dict[str, str | int] = {"name": product.name, "vault_folder": folder}
-        action = ActivityAction.PRODUCT_CREATED
+        action = ActivityAction.TEMPLATE_CREATED if is_template else ActivityAction.PRODUCT_CREATED
         if copied_from is not None:
             action = ActivityAction.PRODUCT_COPIED
             details["source_name"] = copied_from.name
             details["source_uuid"] = copied_from.uuid
+            if copied_from.is_template:
+                details["template"] = copied_from.name
             if copied_file_count is not None:
                 details["file_count"] = copied_file_count
         self._activities.record(
@@ -324,19 +335,28 @@ class ProductService:
                 copied_from=source,
                 copied_file_count=len(jobs),
             )
-            if not jobs:
+            empty_folders = self._empty_vault_folders(source_vault, jobs)
+            if not jobs and not empty_folders:
                 return created
             try:
-                outcomes = objects.import_files(session, created, jobs, message)
-                failed = [item for item in outcomes if item.error is not None]
-                if failed:
-                    first = failed[0].error
-                    detail = first.message if first is not None else "A file could not be copied."
-                    raise ValidationAppError(
-                        f"Could not copy {failed[0].filename}: {detail}",
-                        details={"filename": failed[0].filename},
+                if jobs:
+                    outcomes = objects.import_files(session, created, jobs, message)
+                    failed = [item for item in outcomes if item.error is not None]
+                    if failed:
+                        first = failed[0].error
+                        detail = first.message if first is not None else "A file could not be copied."
+                        raise ValidationAppError(
+                            f"Could not copy {failed[0].filename}: {detail}",
+                            details={"filename": failed[0].filename},
+                        )
+                    self._copy_current_metadata(session, source, created)
+                # Folders with no files in them (kept in Git by a .gitkeep) are part of the structure too.
+                user = self._users.get_current_user()
+                for folder in empty_folders:
+                    parent, _sep, leaf = folder.rpartition("/")
+                    self._workspaces.create_folder(
+                        created, name=leaf, parent_folder=parent, user=user, comment=f"Create folder {folder}"
                     )
-                self._copy_current_metadata(session, source, created)
                 session.commit()
             except Exception:
                 session.rollback()
@@ -349,6 +369,28 @@ class ProductService:
             len(jobs),
         )
         return created
+
+    def _empty_vault_folders(self, vault: Path, jobs: list[tuple[Path, str, str]]) -> list[str]:
+        """Deepest folders of the vault that hold no file (only a .gitkeep, or nothing), as vault paths."""
+        if not vault.is_dir():
+            return []
+        used: set[str] = set()
+        for _path, _name, relative in jobs:
+            parts = relative.split("/")[:-1]
+            for index in range(1, len(parts) + 1):
+                used.add("/".join(parts[:index]))
+        skip_dirs = {".git", PRODUCT_MARKER_DIR}
+        found: list[str] = []
+        for dirpath, dirnames, _filenames in os.walk(vault):
+            dirnames[:] = [name for name in dirnames if name not in skip_dirs]
+            for name in list(dirnames):
+                relative = (Path(dirpath) / name).relative_to(vault).as_posix()
+                if relative in used or any(part.startswith(".") for part in relative.split("/")):
+                    continue
+                found.append(relative)
+        # Keep only the deepest empty folders: creating one makes its parents.
+        deepest = [item for item in found if not any(other.startswith(item + "/") for other in found)]
+        return sorted(deepest)
 
     def _vault_content_jobs(self, vault: Path) -> list[tuple[Path, str, str]]:
         """Current vault files an Add would store. Skips Git, the product marker, and ignored names."""
@@ -821,7 +863,7 @@ class ProductService:
         # Append-only audit: record delete, then detach FKs — never wipe history.
         self._activities.record(
             session,
-            ActivityAction.PRODUCT_DELETED,
+            ActivityAction.TEMPLATE_DELETED if product.is_template else ActivityAction.PRODUCT_DELETED,
             user,
             product_id=product.id,
             details={
@@ -833,7 +875,7 @@ class ProductService:
             },
             product_uuid=product.uuid,
             product_name=product.name,
-            comment=f"Deleted product {product.name}",
+            comment=f"Deleted {'template' if product.is_template else 'product'} {product.name}",
         )
         self._activities.detach_product_activities(session, product.id)
 

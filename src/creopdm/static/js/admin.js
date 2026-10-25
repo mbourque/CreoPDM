@@ -142,12 +142,16 @@ window.__creopdmModules.admin = {
         productForm.elements.number.value = btn?.dataset.number || "";
         productForm.elements.description.value = btn?.dataset.description || "";
         if (vaultFields) vaultFields.hidden = true;
+        const templateRow = $("#product-template-row");
+        if (templateRow) templateRow.hidden = true;
         if (submit) submit.textContent = "Save";
       } else {
         productForm.reset();
         if (title) title.textContent = "New product";
         if (submit) submit.textContent = "Create";
         if (vaultFields) vaultFields.hidden = false;
+        const templateRow = $("#product-template-row");
+        if (templateRow) templateRow.hidden = false;
         productVaultCustom = "";
         productVaultCustomTouched = false;
         productVaultHash = "";
@@ -353,6 +357,8 @@ window.__creopdmModules.admin = {
         description: String(data.get("description") || "").trim() || null,
       };
       if (!renaming) {
+        const templateId = String(data.get("template_id") || "").trim();
+        if (templateId) body.template_id = templateId;
         const useHash = Boolean($("#product-use-hash")?.checked);
         let vaultFolder = String(data.get("vault_folder") || "").trim();
         if (useHash) {
@@ -376,7 +382,7 @@ window.__creopdmModules.admin = {
       }
       const productId = $("#rename-product-btn")?.dataset.product;
       const url = renaming ? `/api/products/${productId}` : "/api/products";
-      const response = await withBusy(renaming ? "Saving product…" : "Creating product…", () =>
+      const response = await withBusy(renaming ? "Saving product…" : (body.template_id ? "Creating product from template…" : "Creating product…"), () =>
         fetch(url, {
           method: renaming ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },

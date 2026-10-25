@@ -21,6 +21,12 @@
       <p>See every product on this server, add a new one, or edit a product’s name, number, and description.</p>
     </section>
     {% endif %}
+    {% if can_view_templates or can_create_templates or can_edit_templates or can_delete_templates %}
+    <section class="admin-tile">
+      <h2><a href="/admin/templates">Templates</a></h2>
+      <p>Premade products (folders, sub folders and files) that new products can start from.</p>
+    </section>
+    {% endif %}
     {% if can_assign_products %}
     <section class="admin-tile">
       <h2><a href="/admin/membership">Product Membership</a></h2>

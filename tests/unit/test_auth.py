@@ -3208,6 +3208,10 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         PERMISSION_COMMENTS_VIEW,
         PERMISSION_BASELINES_VIEW,
         PERMISSION_EMAIL_MANAGE,
+        PERMISSION_TEMPLATES_CREATE,
+        PERMISSION_TEMPLATES_DELETE,
+        PERMISSION_TEMPLATES_EDIT,
+        PERMISSION_TEMPLATES_VIEW,
         PERMISSION_OBJECTS_ADD,
         PERMISSION_OBJECTS_CHECKIN,
         PERMISSION_OBJECTS_CHECKOUT,
@@ -3310,6 +3314,17 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
     )
     assert disposable.status_code == 201, disposable.text
     disposable_id = disposable.json()["uuid"]
+
+    def _new_template() -> str:
+        name = f"Template-{uuid4().hex[:8]}"
+        made = auth_client.post(
+            "/admin/templates/new", data={"name": name, "vault_folder": ""}, follow_redirects=False
+        )
+        assert made.status_code == 303, made.text
+        return next(p["uuid"] for p in auth_client.get("/api/products").json() if p["name"] == name)
+
+    template_id = _new_template()
+    template_delete_id = _new_template()
 
     with auth_ctx.session_factory() as db:
         eng_row = db.scalar(select(User).where(User.username == "eng"))
@@ -3448,6 +3463,11 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                 "/admin/utilities/logs", follow_redirects=False
             ),
             PERMISSION_PRODUCTS_VIEW: auth_client.get(f"/api/products/{product_id}"),
+            PERMISSION_TEMPLATES_VIEW: auth_client.get("/admin/templates", follow_redirects=False),
+            PERMISSION_TEMPLATES_CREATE: auth_client.get("/admin/templates/new", follow_redirects=False),
+            PERMISSION_TEMPLATES_EDIT: auth_client.patch(
+                f"/api/products/{template_id}", json={"name": "Template edit probe"}
+            ),
             PERMISSION_OBJECTS_VIEW: auth_client.get(f"/api/objects/{object_id}"),
             PERMISSION_PRODUCTS_CREATE: auth_client.post(
                 "/api/products",
@@ -3636,6 +3656,14 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                 f"/api/products/{product_id}"
             )
 
+        if PERMISSION_TEMPLATES_DELETE in allowed:
+            probes[PERMISSION_TEMPLATES_DELETE] = auth_client.delete(f"/api/products/{template_delete_id}")
+            _login(auth_client, "admin", "AdminPass1")
+            template_delete_id = _new_template()
+            _login(auth_client, username, password)
+        else:
+            probes[PERMISSION_TEMPLATES_DELETE] = auth_client.delete(f"/api/products/{template_delete_id}")
+
         assert set(probes) == set(all_perm_keys), (
             f"{role_name}: probe set must cover every built-in permission"
         )
@@ -3677,7 +3705,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         if PERMISSION_PRODUCTS_VIEW in allowed:
             only = auth_client.get("/api/products")
             assert only.status_code == 200, only.text
-            assert {p["uuid"] for p in only.json()} == {product_id}, (
+            assert {p["uuid"] for p in only.json() if not p["is_template"]} == {product_id}, (
                 f"{role_name}/{username}: restricted membership must show only Role Matrix"
             )
             assert auth_client.get(f"/api/products/{product_id}").status_code == 200
@@ -3699,7 +3727,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         if PERMISSION_PRODUCTS_VIEW in allowed:
             empty = auth_client.get("/api/products")
             assert empty.status_code == 200
-            assert empty.json() == [], (
+            assert [p for p in empty.json() if not p["is_template"]] == [], (
                 f"{role_name}/{username}: no selected products → empty list"
             )
             assert auth_client.get(f"/api/products/{product_id}").status_code == 403

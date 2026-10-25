@@ -201,6 +201,7 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .product-item.is-active { background: #2c3d51; border-left-color: var(--accent); }
 .product-name { font-weight: 600; }
 .product-number { font-size: 0.75rem; color: #8ea0b2; }
+.template-badge { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em; border: 1px solid #8ea0b2; color: #8ea0b2; border-radius: 4px; padding: 0 4px; margin-left: 6px; }
 .empty, .empty-row td { color: var(--muted); padding: 1rem; }
 
 .content {

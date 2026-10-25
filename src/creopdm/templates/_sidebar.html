@@ -27,6 +27,7 @@
            href="/?product={{ product.uuid }}"
            {% set tip = [product.number, product.description]|select|join(" — ") %}{% if tip %}title="{{ tip }}"{% endif %}>
           <span class="product-name">{{ product.name }}</span>
+          {% if product.is_template %}<span class="template-badge" title="A template: new products can start from it">Template</span>{% endif %}
           {% if product.number %}<span class="product-number">{{ product.number }}</span>{% endif %}
         </a>
       </li>

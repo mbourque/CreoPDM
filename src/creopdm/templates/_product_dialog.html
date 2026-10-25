@@ -11,6 +11,16 @@
     <label>Description
       <textarea name="description" rows="3" maxlength="256" placeholder="Prototype robotic arm"></textarea>
     </label>
+    {% if template_choices %}
+    <label id="product-template-row">Start from template
+      <select name="template_id" id="product-template">
+        <option value="">None</option>
+        {% for choice in template_choices %}
+        <option value="{{ choice.uuid }}">{{ choice.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endif %}
     {% include "partials/product_vault_fields.html" %}
     <p class="error" id="product-error" hidden></p>
     <div class="dialog-actions">

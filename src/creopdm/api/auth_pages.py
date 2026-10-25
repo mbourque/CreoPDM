@@ -15,6 +15,10 @@ from sqlalchemy.orm import Session
 from creopdm.api.deps import get_context, get_db
 from creopdm.api.serializers import product_to_response
 from creopdm.auth_constants import (
+    PERMISSION_TEMPLATES_CREATE,
+    PERMISSION_TEMPLATES_DELETE,
+    PERMISSION_TEMPLATES_EDIT,
+    PERMISSION_TEMPLATES_VIEW,
     ADMINISTRATION_PERMISSION_KEYS,
     BUILTIN_PERMISSIONS,
     PERMISSION_GROUPS,
@@ -1980,6 +1984,10 @@ def _require_manage_products_hub(
         or ctx.user_accounts.can_utilities_compact_product(user)
         or ctx.user_accounts.can_utilities_rebuild_product(user)
         or ctx.user_accounts.can_admin_baselines(user)
+        or any(
+            ctx.user_accounts.has_permission(user, key)
+            for key in (PERMISSION_TEMPLATES_CREATE, PERMISSION_TEMPLATES_DELETE)
+        )
     ):
         return HTMLResponse(
             "<h1>403 Forbidden</h1><p>Product management access required.</p>",
@@ -2306,6 +2314,143 @@ def admin_product_create(
             },
             status_code=400,
         )
+
+
+def _require_template_permission(
+    request: Request, ctx: AppContext, db: Session, *keys: str
+) -> User | HTMLResponse | RedirectResponse:
+    """Signed in with at least one of the given templates.* permissions."""
+    user_uuid = request.session.get(SESSION_USER_KEY)
+    user = ctx.user_accounts.get_by_uuid(db, str(user_uuid)) if user_uuid else None
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if not any(ctx.user_accounts.has_permission(user, key) for key in keys):
+        return HTMLResponse(
+            "<h1>403 Forbidden</h1><p>Template access required.</p>",
+            status_code=403,
+        )
+    return user
+
+
+@router.get("/admin/templates", response_class=HTMLResponse)
+def admin_templates_list(
+    request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
+):
+    manager = _require_template_permission(
+        request,
+        ctx,
+        db,
+        PERMISSION_TEMPLATES_VIEW,
+        PERMISSION_TEMPLATES_CREATE,
+        PERMISSION_TEMPLATES_EDIT,
+        PERMISSION_TEMPLATES_DELETE,
+    )
+    if _is_blocked(manager):
+        return manager
+    rows = [
+        product_to_response(p)
+        for p in ctx.products.list_products(db, include_inactive=True, include_archived=True, only_templates=True)
+    ]
+    return templates.TemplateResponse(
+        request,
+        "admin_templates.html",
+        {**_base_ctx(request, ctx, current_user=manager), "templates_rows": rows, "error": request.query_params.get("error")},
+    )
+
+
+@router.get("/admin/templates/new", response_class=HTMLResponse)
+def admin_template_new(request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)):
+    manager = _require_template_permission(request, ctx, db, PERMISSION_TEMPLATES_CREATE)
+    if _is_blocked(manager):
+        return manager
+    return templates.TemplateResponse(
+        request,
+        "admin_product_form.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "error": None,
+            "mode": "new",
+            "template_mode": True,
+            "form": _product_form(),
+            "delete_error": None,
+            **_lifecycle_form_ctx(),
+        },
+    )
+
+
+@router.post("/admin/templates/new", response_class=HTMLResponse)
+def admin_template_create(
+    request: Request,
+    name: str = Form(...),
+    number: str = Form(""),
+    description: str = Form(""),
+    vault_folder: str = Form(""),
+    use_hash: str = Form(""),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_template_permission(request, ctx, db, PERMISSION_TEMPLATES_CREATE)
+    if _is_blocked(manager):
+        return manager
+    form = _product_form(
+        name=name,
+        number=number,
+        description=description,
+        vault_folder=vault_folder,
+        use_hash=str(use_hash or "").strip().lower() in {"1", "on", "true", "yes"},
+    )
+    try:
+        template = ctx.products.create_product(
+            db,
+            name=name,
+            number=number or None,
+            description=description or None,
+            vault_folder=(vault_folder or "").strip() or None,
+            is_template=True,
+        )
+        db.commit()
+        # Fill it like any product: open it from the product list (templates.view / edit).
+        return RedirectResponse(f"/?product={template.uuid}", status_code=303)
+    except CreoPDMError as exc:
+        db.rollback()
+        return templates.TemplateResponse(
+            request,
+            "admin_product_form.html",
+            {
+                **_base_ctx(request, ctx, current_user=manager),
+                "error": exc.message,
+                "mode": "new",
+                "template_mode": True,
+                "form": form,
+                "delete_error": None,
+                **_lifecycle_form_ctx(),
+            },
+            status_code=400,
+        )
+
+
+@router.post("/admin/templates/{template_uuid}/delete", response_class=HTMLResponse)
+def admin_template_delete(
+    template_uuid: str,
+    request: Request,
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_template_permission(request, ctx, db, PERMISSION_TEMPLATES_DELETE)
+    if _is_blocked(manager):
+        return manager
+    try:
+        template = ctx.products.load_product_for_delete(db, template_uuid)
+        if not template.is_template:
+            raise ValidationAppError("That is not a template.")
+        ctx.products.delete_product(db, template_uuid)
+        db.commit()
+    except CreoPDMError as exc:
+        db.rollback()
+        from urllib.parse import quote
+
+        return RedirectResponse(f"/admin/templates?error={quote(exc.message)}", status_code=303)
+    return RedirectResponse("/admin/templates", status_code=303)
 
 
 def _copy_form_payload(summary: dict, **overrides) -> dict:
