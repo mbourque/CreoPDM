@@ -1222,6 +1222,19 @@ def import_from_disk(
     )
 
 
+@router.get("/api/products/{product_id}/vault-folders", response_model=list[str])
+def list_product_vault_folders(
+    product_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> list[str]:
+    """All folder paths of the product (empty ones too), so the local workspace can mirror them."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    product = load_accessible_product(request, ctx, db, product_id)
+    return ctx.workspaces.list_vault_folders(product)
+
+
 @router.post(
     "/api/products/{product_id}/folders",
     response_model=CreateFolderResponse,

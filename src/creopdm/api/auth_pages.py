@@ -2244,6 +2244,14 @@ async def admin_lifecycle_submit(
         return _render(error=str(exc), status=400)
 
 
+def _template_choices(ctx: AppContext, db: Session) -> list[dict[str, str]]:
+    """Templates a new product can start from (active ones, by name)."""
+    return [
+        {"uuid": p.uuid, "name": p.name}
+        for p in ctx.products.list_products(db, only_templates=True)
+    ]
+
+
 @router.get("/admin/products/new", response_class=HTMLResponse)
 def admin_product_new(request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)):
     manager = _require_products_manager(request, ctx, db)
@@ -2257,6 +2265,7 @@ def admin_product_new(request: Request, ctx: AppContext = Depends(get_context), 
             "error": None,
             "mode": "new",
             "form": _product_form(),
+            "template_choices": _template_choices(ctx, db),
             "delete_error": None,
             **_lifecycle_form_ctx(),
         },
@@ -2272,6 +2281,7 @@ def admin_product_create(
     vault_folder: str = Form(""),
     use_hash: str = Form(""),
     state: str = Form("IN_WORK"),
+    template_id: str = Form(""),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
@@ -2288,14 +2298,33 @@ def admin_product_create(
         use_hash=str(use_hash or "").strip().lower() in {"1", "on", "true", "yes"},
     )
     try:
-        product = ctx.products.create_product(
-            db,
-            name=name,
-            number=number or None,
-            description=description or None,
-            vault_folder=(vault_folder or "").strip() or None,
-            state=state,
-        )
+        if (template_id or "").strip():
+            template = ctx.products.load_product_for_delete(db, template_id.strip())
+            if not template.is_template or not template.active:
+                raise ValidationAppError("That template is not available.")
+            product = ctx.products.copy_product(
+                db,
+                ctx.objects,
+                template.uuid,
+                name,
+                number or None,
+                description or None,
+                None,
+                (vault_folder or "").strip() or None,
+            )
+            if state and state != product.state:
+                from creopdm.product_state import parse_product_state
+
+                product.state = parse_product_state(state)
+        else:
+            product = ctx.products.create_product(
+                db,
+                name=name,
+                number=number or None,
+                description=description or None,
+                vault_folder=(vault_folder or "").strip() or None,
+                state=state,
+            )
         ctx.user_accounts.grant_product_access(db, manager, product)
         db.commit()
         return RedirectResponse("/admin/products/edit", status_code=303)
@@ -2309,6 +2338,7 @@ def admin_product_create(
                 "error": exc.message,
                 "mode": "new",
                 "form": form,
+                "template_choices": _template_choices(ctx, db),
                 "delete_error": None,
                 **_lifecycle_form_ctx(),
             },

@@ -527,6 +527,8 @@ class OpenFolderRequest(BaseModel):
     product_id: str = ""
     vault_folder: str = ""
     folder: str = ""
+    # Product folders (also empty ones) to create locally first, so the workspace mirrors the product.
+    folders: list[str] = Field(default_factory=list)
 
 
 class OpenFolderResponse(BaseModel):
@@ -1574,6 +1576,19 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         from creopdm.utils.launch import open_windows_folder
 
         target = _product_cache_dir(payload.product_id, payload.folder, payload.vault_folder)
+        if payload.folders:
+            base = _product_cache_dir(payload.product_id, "", payload.vault_folder).resolve()
+            for folder in payload.folders:
+                clean = str(folder or "").replace("\\", "/").strip("/")
+                if not clean or any(part in {"", ".", ".."} or part.startswith(".") for part in clean.split("/")):
+                    continue
+                wanted = (base / clean).resolve()
+                try:
+                    wanted.relative_to(base)
+                except ValueError:
+                    continue
+                wanted.mkdir(parents=True, exist_ok=True)
+            target.mkdir(parents=True, exist_ok=True)
         try:
             open_windows_folder(target)
         except OSError as exc:

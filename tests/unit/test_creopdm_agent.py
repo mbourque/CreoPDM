@@ -2650,3 +2650,19 @@ def test_a_failed_toolkit_snapshot_is_logged_with_the_file_and_the_reason():
     script = (Path(__file__).resolve().parents[2] / "src" / "creopdm_agent" / "server.py").read_text(encoding="utf-8")
     snap = script.split('def toolkit_snapshot(', 1)[1][:3800]
     assert "Toolkit collect failed for %s" in snap and "Toolkit collect unusable for %s" in snap
+
+
+def test_agent_open_folder_creates_the_products_empty_folders(tmp_path, monkeypatch):
+    root = tmp_path / "cache"
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+    monkeypatch.setattr("creopdm.utils.launch.open_windows_folder", lambda path: None)
+    with TestClient(app) as client:
+        ok = client.post(
+            "/open-folder",
+            json={"product_id": "proj1", "folders": ["models/empty", "docs", "../escape", ".git", "a/b"]},
+        )
+        assert ok.status_code == 200, ok.text
+        base = root / "proj1"
+        assert (base / "models" / "empty").is_dir() and (base / "docs").is_dir() and (base / "a" / "b").is_dir()
+        assert not (root / "escape").exists() and not (base / ".git").exists()

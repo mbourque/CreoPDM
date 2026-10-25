@@ -65,6 +65,16 @@
       {% with vault_folder=form.vault_folder, use_hash=form.use_hash %}
       {% include "partials/product_vault_fields.html" %}
       {% endwith %}
+      {% if not template_mode and template_choices %}
+      <label>Start from template <span class="muted small">(optional)</span>
+        <select name="template_id">
+          <option value="">None</option>
+          {% for choice in template_choices %}
+          <option value="{{ choice.uuid }}" {% if form.template_id == choice.uuid %}selected{% endif %}>{{ choice.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      {% endif %}
       {% if not template_mode %}
       <label>Lifecycle state
         <select name="state">

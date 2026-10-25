@@ -226,6 +226,19 @@ class WorkspaceService:
         logger.info("Removed product folder %s (%s tracked path(s))", relative, len(tracked))
         return relative
 
+    def list_vault_folders(self, product: Product) -> list[str]:
+        """Every folder of the vault (empty ones included) as posix paths, for the local workspace."""
+        vault = self.vault_for(product)
+        if not vault.is_dir():
+            return []
+        skip = {".git", ".creopdm", "__pycache__"}
+        found: list[str] = []
+        for dirpath, dirnames, _filenames in os.walk(vault):
+            dirnames[:] = [name for name in dirnames if name.lower() not in skip and not name.startswith(".")]
+            for name in dirnames:
+                found.append((Path(dirpath) / name).relative_to(vault).as_posix())
+        return sorted(found, key=str.lower)
+
     def list_immediate_vault_folders(
         self,
         product: Product,

@@ -49,7 +49,8 @@ def test_a_product_can_start_from_a_template_with_folders_and_empty_folders(clie
     assert product["is_template"] is False
     listed = client.get(f"/api/products/{product['uuid']}/objects").json()
     paths = sorted(row["relative_path"] for row in listed)
-    assert [p for p in paths if not p.endswith(".gitkeep")] == ["docs/readme.txt", "models/sub/part.prt"]
+    # the .gitkeep placeholder of the empty folder is not copied as a file
+    assert paths == ["docs/readme.txt", "models/sub/part.prt"]
     vault = client.app.state.ctx.workspaces.vault_for(
         client.app.state.ctx.products.get_product(client.app.state.ctx.session_factory(), product["uuid"])
     )
@@ -97,3 +98,31 @@ def test_template_permissions_gate_creating_and_deleting_templates(auth_client, 
     deleted = auth_client.post(f"/admin/templates/{uuid}/delete", follow_redirects=False)
     assert deleted.status_code == 303
     assert "Admin Template" not in auth_client.get("/admin/templates").text
+
+
+@requires_git
+def test_admin_add_product_can_start_from_a_template(auth_client, auth_ctx):  # noqa: F811
+    _setup_admin_and_users(auth_client, auth_ctx)
+    _login(auth_client, "admin", "AdminPass1")
+    assert "Start from template" not in auth_client.get("/admin/products/new").text
+    auth_client.post("/admin/templates/new", data={"name": "Base Template", "vault_folder": ""}, follow_redirects=False)
+    template_uuid = next(p["uuid"] for p in auth_client.get("/api/products").json() if p["name"] == "Base Template")
+    form = auth_client.get("/admin/products/new")
+    assert "Start from template" in form.text and "Base Template" in form.text
+    made = auth_client.post(
+        "/admin/products/new",
+        data={"name": "From Admin", "vault_folder": "", "template_id": template_uuid, "state": "IN_WORK"},
+        follow_redirects=False,
+    )
+    assert made.status_code == 303, made.text
+    rows = {p["name"]: p for p in auth_client.get("/api/products").json()}
+    assert rows["From Admin"]["is_template"] is False and rows["Base Template"]["is_template"] is True
+
+
+@requires_git
+def test_the_product_folders_including_empty_ones_are_listed_for_the_local_workspace(client):
+    template_uuid = _make_template(client)
+    _fill(client, template_uuid)
+    folders = client.get(f"/api/products/{template_uuid}/vault-folders")
+    assert folders.status_code == 200, folders.text
+    assert folders.json() == ["docs", "models", "models/empty", "models/sub"]

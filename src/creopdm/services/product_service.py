@@ -402,8 +402,8 @@ class ProductService:
         for dirpath, dirnames, filenames in os.walk(vault):
             dirnames[:] = [name for name in dirnames if name not in skip_dirs]
             for name in filenames:
-                if name == ".gitignore":
-                    continue
+                if name in {".gitignore", ".gitkeep"}:
+                    continue  # .gitkeep only keeps an empty folder in Git; the folder is copied on its own
                 if CreoFileManager.is_ignored(name, ignore):
                     continue
                 path = Path(dirpath) / name

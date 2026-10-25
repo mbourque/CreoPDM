@@ -6955,6 +6955,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       syncToolbar();
       return;
     }
+    // The product's folders (empty ones too) are created locally so the workspace shows the structure.
+    let productFolders = [];
+    try {
+      const listed = await fetch(`/api/products/${encodeURIComponent(productId)}/vault-folders`);
+      if (listed.ok) productFolders = await listed.json();
+    } catch {
+      /* the workspace still opens without the empty folders */
+    }
     const opened = await withBusy("Opening local workspace…", async () => {
       const response = await fetch(`${agentBase()}/open-folder`, {
         method: "POST",
@@ -6963,6 +6971,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           product_id: productId,
           vault_folder: openWorkspaceBtn.dataset.vaultFolder || currentVaultFolder(),
           folder,
+          folders: Array.isArray(productFolders) ? productFolders : [],
         }),
       });
       if (!response.ok) {
