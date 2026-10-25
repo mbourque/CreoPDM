@@ -545,6 +545,23 @@ window.__creopdmModules.checkin = {
           list.appendChild(item);
         }
       }
+      // A local save made in a newer Creo than this session: Creo metadata cannot be collected for
+      // it after the check-in. Say so now, before Check In is pressed (the check-in itself still works).
+      if (!addOnly && productId && pushItems.length) {
+        try {
+          const directory = await shell.agentWorkdir(productId, shell.currentVaultFolder());
+          for (const pushed of pushItems) {
+            const full = shell.joinLocalWorkspacePath(directory, pushed.relative_path || "");
+            const tooNew = await shell.newerLocalFileMessage(full, pushed.filename);
+            if (!tooNew) continue;
+            const item = document.createElement("li");
+            item.textContent = `⚠ ${tooNew} Check in still works, but Creo metadata will not be collected.`;
+            list.appendChild(item);
+          }
+        } catch {
+          /* the warning is advisory */
+        }
+      }
       if (submitBtn) {
         submitBtn.textContent = addOnly
           ? "Add"

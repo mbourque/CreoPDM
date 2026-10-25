@@ -290,22 +290,7 @@ window.__creopdmModules.open = {
       return response.json();
     }
 
-    /** "" when the local workspace file can open in this Creo; otherwise the newer-release warning. */
-    async function newerLocalMessage(fullPath, filename) {
-      try {
-        const released = await fetch(`${agentBase()}/file-release`, {
-          method: "POST",
-          headers: agentAuthHeaders({ "Content-Type": "application/json" }),
-          signal: abortSignalAfter(10000),
-          body: JSON.stringify({ path: fullPath }),
-        });
-        if (!released.ok) return "";
-        const info = await released.json();
-        return await newerReleaseMessage(filename, info && info.creo_release);
-      } catch {
-        return "";
-      }
-    }
+    const newerLocalMessage = shell.newerLocalFileMessage;
 
     async function openLocalCacheRelative(productId, relativePath, options) {
       // New file (local) / Modified newer local — open agent workspace tip.

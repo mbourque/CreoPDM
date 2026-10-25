@@ -5217,6 +5217,24 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return (await withCreoWorkspace()).newerReleaseMessage(filename, fileRelease);
   }
 
+  /** "" when the local workspace file can open in this Creo; otherwise the newer-release warning. */
+  async function newerLocalFileMessage(fullPath, filename) {
+    if (!fullPath || !canGatherCreoMetadata()) return "";
+    try {
+      const released = await fetch(`${agentBase()}/file-release`, {
+        method: "POST",
+        headers: agentAuthHeaders({ "Content-Type": "application/json" }),
+        signal: abortSignalAfter(10000),
+        body: JSON.stringify({ path: fullPath }),
+      });
+      if (!released.ok) return "";
+      const info = await released.json();
+      return await newerReleaseMessage(filename, info && info.creo_release);
+    } catch {
+      return "";
+    }
+  }
+
   async function noteCollectFailures(failed, fromOpen) {
     if (!Array.isArray(failed) || !failed.length) return;
     return (await withCreoWorkspace()).noteCollectFailures(failed, fromOpen);
@@ -8798,6 +8816,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     noteCollectFailures,
     openBaselineVersion,
     newerReleaseMessage,
+    newerLocalFileMessage,
     agentBase,
     agentAuthHeaders,
     agentPdmAuth,
