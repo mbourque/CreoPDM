@@ -4563,6 +4563,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   /** After a bulk download inside Creo: offer to collect the Creo metadata (and AI snapshots) of those models. */
   async function offerCollectMetadataAfterDownload(ids) {
     if (!canGatherCreoMetadata() || !userCanUpdateMetadata()) return;
+    // A released (or otherwise locked) product takes no new metadata: the download is all the user asked for.
+    if ($("#metric-filters")?.dataset.allowsMutation === "0") return;
     const productId = currentProductId();
     const wanted = new Set((ids || []).map(String));
     let targets = [];

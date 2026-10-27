@@ -3131,3 +3131,5 @@ def test_bulk_download_offers_to_collect_creo_metadata_in_creo():
     assert "async function offerCollectMetadataAfterDownload(ids)" in app
     assert "await offerCollectMetadataAfterDownload(ids);" in app
     assert "if (!canGatherCreoMetadata() || !userCanUpdateMetadata()) return;" in app
+    # a released/locked product takes no new metadata, so no offer
+    assert "dataset.allowsMutation === \"0\") return;" in app.split("async function offerCollectMetadataAfterDownload")[1][:600]
