@@ -171,3 +171,13 @@ def test_collect_product_health_empty_ok(data_dir, identity: StaticUserProvider)
     assert health.issue_count == 0
     assert health.status == "ok"
     assert "No products" in health.summary
+
+
+def test_a_templates_vault_folder_is_not_reported_as_an_orphan(client):
+    from creopdm.services.utilities_service import collect_product_health
+
+    ctx = client.app.state.ctx
+    with ctx.session_factory() as db:
+        ctx.products.create_product(db, name="Starter", is_template=True)
+        report = collect_product_health(ctx, db)
+    assert not [i for i in report.issues if i.code == "orphan_vault"]

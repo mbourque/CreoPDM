@@ -1556,7 +1556,7 @@ def _issue(
 def collect_product_health(ctx: AppContext, db: Session) -> UtilitiesProductHealth:
     """Lightweight product vault / tip checks (no walks, no ensure_vault, no mutations)."""
     issues: list[UtilitiesProductIssue] = []
-    products = list(db.scalars(select(Product).where(Product.is_template.is_(False)).order_by(Product.name.asc())).all())
+    products = list(db.scalars(select(Product).order_by(Product.name.asc())).all())
     vaults_dir = ctx.config.vaults_dir
     git_exe = (ctx.git.executable or "git").strip() or "git"
     known_folders: set[str] = set()
