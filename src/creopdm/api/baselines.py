@@ -11,6 +11,7 @@ from creopdm.api.deps import (
     get_context,
     get_db,
     load_accessible_product,
+    refuse_for_template,
     require_permission,
     require_product_access,
 )
@@ -344,6 +345,7 @@ def create_baseline(
     """Capture the product's current configuration: every file's exact current version."""
     require_permission(request, ctx, PERMISSION_BASELINES_CREATE)
     product = load_accessible_product(request, ctx, db, product_id)
+    refuse_for_template(product, "baselines")
     baseline = ctx.baselines.create(
         db,
         product,

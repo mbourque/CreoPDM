@@ -277,6 +277,12 @@ def render(request: Request, name: str, context: dict) -> HTMLResponse:
         "purgeable_extensions": purgeable,
         **context,
     }
+    # A template has no baselines and no discussion, whatever the role allows.
+    page_product = payload.get("selected") or payload.get("product")
+    payload["product_is_template"] = bool(getattr(page_product, "is_template", False))
+    if payload["product_is_template"]:
+        payload["can_view_baselines"] = False
+        payload["can_create_baselines"] = False
     # Role + product lock → one toolbar/gear flag set (see product_state.product_ui_capabilities).
     if "product_ui" not in payload:
         from creopdm.product_state import product_ui_capabilities

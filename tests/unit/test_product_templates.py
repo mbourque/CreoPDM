@@ -171,3 +171,24 @@ def test_a_template_copy_keeps_the_tip_snapshot_and_ask_ai_never_invents_changes
         json={"newer_snapshot": {"identity": {"file_name": "readme.txt"}}, "newer_display_revision": "A.2"},
     )
     assert response.status_code == 400 and "cannot tell what you changed" in response.text
+
+
+@requires_git
+def test_a_template_never_has_baselines_or_discussion(client):
+    template_uuid = _make_template(client)
+    _fill(client, template_uuid)
+    page = client.get(f"/?product={template_uuid}")
+    assert page.status_code == 200
+    assert 'data-tab="baselines"' not in page.text
+    assert 'data-tab="discussion"' not in page.text
+    made = client.post(f"/api/products/{template_uuid}/baselines", json={"name": "B1"})
+    assert made.status_code == 400, made.text
+    assert "no baselines" in made.text
+    note = client.post(
+        f"/api/products/{template_uuid}/comments",
+        json={"target_type": "PRODUCT", "target": template_uuid, "body": "hi"},
+    )
+    assert note.status_code == 400, note.text
+    # a regular product still has both
+    regular = client.post("/api/products", json={"name": "Regular"}).json()
+    assert 'data-tab="baselines"' in client.get(f"/?product={regular['uuid']}").text

@@ -10,6 +10,7 @@ from creopdm.api.deps import (
     get_context,
     get_db,
     load_accessible_product,
+    refuse_for_template,
     require_permission,
     require_product_access,
 )
@@ -131,6 +132,7 @@ def create_comment(
 ) -> dict:
     require_permission(request, ctx, PERMISSION_COMMENTS_ADD)
     product = load_accessible_product(request, ctx, db, product_id)
+    refuse_for_template(product, "discussion")
     actor = build_actor(request, ctx)
     result = ctx.comments.create(
         db,
@@ -253,6 +255,7 @@ async def upload_comment_image(
     """One image as the raw request body (a paste or a picked file). Returns a draft to attach."""
     require_permission(request, ctx, PERMISSION_COMMENTS_ADD)
     product = load_accessible_product(request, ctx, db, product_id)
+    refuse_for_template(product, "discussion")
     declared = int(request.headers.get("content-length") or 0)
     if declared > MAX_IMAGE_BYTES + 1024:
         raise ValidationAppError("An image can be at most 5 MB.")

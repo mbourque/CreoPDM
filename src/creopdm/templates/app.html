@@ -114,7 +114,7 @@
       {% if can_view_baselines %}
       <button type="button" class="tab" data-tab="baselines" id="baselines-tab">{% if baseline_count|default(0) %}Baselines · {{ baseline_count }}{% else %}Baselines{% endif %}</button>
       {% endif %}
-      {% if can_view_comments %}
+      {% if can_view_comments and not product_is_template %}
       <button type="button" class="tab" data-tab="discussion">Discussion</button>
       {% endif %}
       {# "N selected." sits at the right end of the tab row: it takes no row of its own under the pills. #}
@@ -277,7 +277,7 @@
     </section>
 
     {% if can_view_baselines %}
-    {% if can_view_comments %}
+    {% if can_view_comments and not product_is_template %}
     <section class="tab-panel" id="panel-discussion" data-product="{{ selected.uuid }}" data-target-type="PRODUCT" data-target="{{ selected.uuid }}" data-feed="1" hidden>
       <p class="muted discussion-intro">Comments on <strong>{{ selected.name }}</strong>.</p>
       <div class="cm-panel-host"></div>
@@ -660,7 +660,7 @@
 </dialog>
 
 {% if can_view_baselines and selected %}
-{% if can_view_comments %}
+{% if can_view_comments and not product_is_template %}
 <dialog id="baseline-discussion-dialog" class="dialog baseline-discussion-dialog">
   <div class="dialog-head"><h2 id="baseline-discussion-title">Discussion</h2>
     <button type="button" class="btn" id="baseline-discussion-close">Close</button></div>

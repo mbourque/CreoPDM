@@ -77,6 +77,12 @@ def require_product_access(request: Request, ctx: AppContext, product: Product) 
     raise PermissionDeniedError("You do not have access to this product.")
 
 
+def refuse_for_template(product: Product, what: str) -> None:
+    """A template never has baselines or discussion: refuse here so no client can add them."""
+    if getattr(product, "is_template", False):
+        raise ValidationAppError(f"A template has no {what}.")
+
+
 def load_accessible_objects(
     request: Request,
     ctx: AppContext,

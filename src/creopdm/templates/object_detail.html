@@ -175,7 +175,7 @@
     <button type="button" class="tab" data-tab="snapshot">{{ snapshot_tab_label }}</button>
     {% endif %}
     <button type="button" class="tab" data-tab="history">History{% if workspace_pending %} · unsaved{% endif %}</button>
-    {% if can_view_comments %}
+    {% if can_view_comments and not product_is_template %}
     <button type="button" class="tab" data-tab="discussion">Discussion</button>
     {% endif %}
   </div>
@@ -742,7 +742,7 @@
   </section>
   {% endif %}
 
-  {% if can_view_comments %}
+  {% if can_view_comments and not product_is_template %}
   {# What the thread is about: a baseline's file, one exact version, or the file itself. #}
   <section class="tab-panel" id="panel-discussion" data-product="{{ product.uuid }}"
            {% if version_view and from_baseline %}data-target-type="BASELINE_MEMBER" data-target="{{ from_baseline.uuid }}/{{ object.uuid }}"
