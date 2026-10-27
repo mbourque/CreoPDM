@@ -18,6 +18,7 @@ from creopdm.api.deps import (
     get_context,
     get_db,
     load_accessible_product,
+    refuse_for_template,
     load_accessible_product_for_delete,
     require_product_delete,
     require_any_permission,
@@ -185,6 +186,7 @@ def subscribe_product_watch(
 ) -> ProductWatchResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     product = load_accessible_product(request, ctx, db, product_id)
+    refuse_for_template(product, "watch")
     auth_user = getattr(request.state, "auth_user", None)
     if auth_user is None:
         raise ValidationAppError("Sign in to watch a product.")

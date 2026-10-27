@@ -2603,6 +2603,8 @@ def admin_products_promote(
         from creopdm.product_state import configured_product_state_labels, parse_product_state
 
         product = ctx.products.get_product(db, pid)
+        if product.is_template:
+            raise ValidationAppError("A template has no lifecycle state.")
         parsed = parse_product_state(raw_state)
         label = configured_product_state_labels().get(parsed, parsed)
         if product.state == parsed:
@@ -3579,7 +3581,9 @@ def _audit_filter_choices(ctx: AppContext, db: Session) -> dict:
     from creopdm.models.product import Product
 
     products = list(
-        db.scalars(select(Product).order_by(Product.name.asc(), Product.id.asc())).all()
+        db.scalars(
+            select(Product).where(Product.is_template.is_(False)).order_by(Product.name.asc(), Product.id.asc())
+        ).all()
     )
     product_choices = [
         {

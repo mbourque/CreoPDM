@@ -9,10 +9,10 @@
     <div class="content-head">
       <div class="title-row">
         <h1{% if workspace_path %} title="{{ workspace_path }}"{% endif %}>{{ selected.name }}</h1>
-        <span class="state product-state" id="product-state-badge"
+        {% if not product_is_template %}<span class="state product-state" id="product-state-badge"
               data-state="{{ selected.state }}"
-              title="{{ product_state_description or 'Product state' }}">{{ selected.state.replace('_', ' ') | title }}</span>
-        {% if email_notifications_enabled %}
+              title="{{ product_state_description or 'Product state' }}">{{ selected.state.replace('_', ' ') | title }}</span>{% endif %}
+        {% if email_notifications_enabled and not product_is_template %}
         <button type="button" class="product-watch-btn{% if watching_product %} is-watching{% endif %}"
                 id="product-watch-btn"
                 data-product="{{ selected.uuid }}"

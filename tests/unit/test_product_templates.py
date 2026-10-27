@@ -189,6 +189,24 @@ def test_a_template_never_has_baselines_or_discussion(client):
         json={"target_type": "PRODUCT", "target": template_uuid, "body": "hi"},
     )
     assert note.status_code == 400, note.text
+    assert 'id="product-state-badge"' not in page.text
+    assert 'id="product-watch-btn"' not in page.text
+    assert client.post(f"/api/products/{template_uuid}/watch").status_code == 400
     # a regular product still has both
     regular = client.post("/api/products", json={"name": "Regular"}).json()
     assert 'data-tab="baselines"' in client.get(f"/?product={regular['uuid']}").text
+
+
+@requires_git
+def test_a_template_has_no_state_and_is_absent_from_admin_product_pickers(client):
+    import pytest
+
+    from creopdm.exceptions import ValidationAppError
+    from creopdm.services.utilities_service import list_products_for_compact
+
+    template_uuid = _make_template(client)
+    ctx = client.app.state.ctx
+    with ctx.session_factory() as db:
+        with pytest.raises(ValidationAppError):
+            ctx.products.update_product(db, template_uuid, name="Starter", state="RELEASED")
+        assert template_uuid not in {p.uuid for p in list_products_for_compact(db)}

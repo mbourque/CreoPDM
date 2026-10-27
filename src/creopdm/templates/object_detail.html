@@ -112,9 +112,9 @@
     <div class="detail-meta">
       {# Product lifecycle (same badge as Files) — not object.lifecycle_state (file tip). #}
       {% set product_label = product.state.replace('_', ' ') | title %}
-      <span class="state product-state" id="product-state-badge"
+      {% if not product_is_template %}<span class="state product-state" id="product-state-badge"
             data-state="{{ product.state }}"
-            title="{{ product_state_description or 'Product state' }}">{{ product_label }}</span>
+            title="{{ product_state_description or 'Product state' }}">{{ product_label }}</span>{% endif %}
       {# Checkout column reuses product label when locked — do not show In Work + In Review. #}
       {% set checkout_echoes_product = (object.checkout_status == product_label)
            and not object.checkout_user and not object.can_checkout %}

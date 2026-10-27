@@ -558,6 +558,8 @@ class ProductService:
         new_number = (number or "").strip() or None
         new_description = (description or "").strip() or None
         new_state = parse_product_state(state) if state is not None else None
+        if product.is_template and new_state is not None and new_state != product.state:
+            raise ValidationAppError("A template has no lifecycle state.")
         user = self._users.get_current_user()
         old_number = (product.number or "").strip() or None
         old_description = (product.description or "").strip() or None
